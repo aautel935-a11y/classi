@@ -1,0 +1,111 @@
+"use client";
+
+import { useState } from "react";
+import { useRouter } from "next/navigation";
+import { createClient } from "@/lib/supabase/client";
+import { TOWNS } from "@/lib/types";
+
+const ROLES = [
+  ["guardian", "ولي أمر"],
+  ["student", "طالب"],
+  ["teacher", "معلم"],
+  ["institute", "معهد"],
+] as const;
+
+export function LoginForm({ next }: { next: string }) {
+  const router = useRouter();
+  const [mode, setMode] = useState<"in" | "up">("in");
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [sent, setSent] = useState(false);
+
+  async function onSubmit(e: React.FormEvent<HTMLFormElement>) {
+    e.preventDefault();
+    setError(null);
+    setBusy(true);
+    const f = new FormData(e.currentTarget);
+    const supabase = createClient();
+    const email = String(f.get("email")).trim();
+    const password = String(f.get("password"));
+    if (mode === "in") {
+      const { error } = await supabase.auth.signInWithPassword({ email, password });
+      setBusy(false);
+      if (error) return setError(error.message === "Invalid login credentials" ? "البريد أو كلمة المرور غير صحيحة." : error.message);
+      router.push(next);
+      router.refresh();
+      return;
+    }
+    const role = String(f.get("role"));
+    const { data, error } = await supabase.auth.signUp({
+      email,
+      password,
+      options: {
+        data: { full_name: String(f.get("full_name")).trim() },
+        emailRedirectTo: `${window.location.origin}/auth/callback?next=${encodeURIComponent(role === "teacher" ? "/teach" : role === "institute" ? "/manage" : next)}&role=${role}`,
+      },
+    });
+    setBusy(false);
+    if (error) return setError(error.message.includes("Password") ? "كلمة المرور قصيرة، استعمل 8 أحرف على الأقل." : error.message);
+    if (data.session) {
+      await supabase.from("profiles").update({ roles: [role], active_role: role, town: String(f.get("town")) || null }).eq("id", data.user!.id);
+      router.push(role === "teacher" ? "/teach" : role === "institute" ? "/manage" : next);
+      router.refresh();
+    } else {
+      setSent(true);
+    }
+  }
+
+  if (sent)
+    return (
+      <div className="stack">
+        <h1>افحص بريدك</h1>
+        <p>أرسلنا لك رابط تفعيل. اضغط عليه لإكمال إنشاء الحساب، ثم ستعود إلى Classi تلقائياً.</p>
+      </div>
+    );
+
+  return (
+    <form className="formstack" onSubmit={onSubmit}>
+      <h1>{mode === "in" ? "تسجيل الدخول" : "حساب جديد"}</h1>
+      <div className="seg" role="group" style={{ gridTemplateColumns: "1fr 1fr" }}>
+        <button type="button" aria-pressed={mode === "in"} onClick={() => setMode("in")}>لدي حساب</button>
+        <button type="button" aria-pressed={mode === "up"} onClick={() => setMode("up")}>حساب جديد</button>
+      </div>
+      {mode === "up" && (
+        <>
+          <label className="field" htmlFor="full_name">
+            الاسم الكامل
+            <input id="full_name" name="full_name" required autoComplete="name" />
+          </label>
+          <fieldset>
+            <legend>أنا</legend>
+            <div className="filters">
+              {ROLES.map(([k, l], i) => (
+                <label key={k} className="radio-opt">
+                  <input type="radio" name="role" value={k} defaultChecked={i === 0} />
+                  {l}
+                </label>
+              ))}
+            </div>
+          </fieldset>
+          <label className="field" htmlFor="town">
+            البلد
+            <select id="town" name="town" defaultValue="باقة الغربية">
+              {TOWNS.map((t) => <option key={t}>{t}</option>)}
+            </select>
+          </label>
+        </>
+      )}
+      <label className="field" htmlFor="email">
+        البريد الإلكتروني
+        <input id="email" name="email" type="email" required autoComplete="email" dir="ltr" />
+      </label>
+      <label className="field" htmlFor="password">
+        كلمة المرور
+        <input id="password" name="password" type="password" required minLength={8} autoComplete={mode === "in" ? "current-password" : "new-password"} dir="ltr" />
+      </label>
+      {error && <p className="err">{error}</p>}
+      <button className="btn block" disabled={busy}>{busy ? "لحظة…" : mode === "in" ? "دخول" : "إنشاء الحساب"}</button>
+      {mode === "up" && <p className="small muted">بإنشاء الحساب أنت توافق على شروط الاستخدام وسياسة الخصوصية.</p>}
+    </form>
+  );
+}

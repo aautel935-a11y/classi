@@ -1,0 +1,109 @@
+import Link from "next/link";
+import { Icon } from "@/components/Icon";
+import { cancelBookingAction } from "@/app/actions";
+import { requireUser } from "@/lib/session";
+import { PAY_LABEL, PLACES, type Place } from "@/lib/types";
+import { dayNum, dayShort, monthName, time } from "@/lib/format";
+
+export const dynamic = "force-dynamic";
+
+type Row = {
+  id: string; status: string; pay_method: string; starts_at: string | null; session_id: string | null;
+  child: { name: string } | null;
+  session: { starts_at: string } | null;
+  offering: { id: string; type: string; title: string; places: Place[]; teacher: { name: string } | null; institute: { name: string } | null };
+};
+
+export default async function Schedule({ searchParams }: { searchParams: Promise<Record<string, string | undefined>> }) {
+  const sp = await searchParams;
+  const { supabase, user } = await requireUser("/schedule");
+  const { data } = await supabase
+    .from("bookings")
+    .select("id,status,pay_method,starts_at,session_id,child:children(name),session:sessions(starts_at),offering:offerings(id,type,title,places,teacher:teachers!offerings_teacher_id_fkey(name),institute:institutes(name))")
+    .eq("booked_by", user.id)
+    .in("status", ["pending", "confirmed"])
+    .order("created_at", { ascending: false });
+  const rows = (data ?? []) as unknown as Row[];
+
+  // courses: show the next meeting and whether the institute changed times
+  const courseIds = rows.filter((r) => r.offering.type === "course").map((r) => r.offering.id);
+  const { data: cs } = courseIds.length
+    ? await supabase.from("sessions").select("offering_id,starts_at,changed,room:rooms(name)").in("offering_id", courseIds).eq("cancelled", false).gt("starts_at", new Date().toISOString()).order("starts_at")
+    : { data: [] as any[] };
+  const nextOf = (oid: string) => (cs ?? []).find((s: any) => s.offering_id === oid) as any;
+  const changedOf = (oid: string) => (cs ?? []).some((s: any) => s.offering_id === oid && s.changed);
+
+  const items = rows
+    .map((r) => {
+      const n = r.offering.type === "course" ? nextOf(r.offering.id) : null;
+      const at = r.starts_at ?? r.session?.starts_at ?? n?.starts_at ?? null;
+      return { r, at, room: n?.room?.name as string | undefined, changed: r.offering.type === "course" && changedOf(r.offering.id) };
+    })
+    .sort((a, b) => (a.at ?? "9").localeCompare(b.at ?? "9"));
+
+  return (
+    <div className="wrap">
+      <div className="section">
+        <h1>جدولي</h1>
+        {sp.booked && <p className="okmsg">تم الحجز. تجد التفاصيل هنا وفي الإشعارات.</p>}
+        {sp.error && <p className="err">{sp.error}</p>}
+        <p className="small muted">كل الحصص والدورات لك ولأبنائك في مكان واحد.</p>
+        {items.length === 0 && (
+          <div className="empty">
+            لا حصص بعد. <Link className="link" href="/search">ابحث عن معلم</Link> واحجز أول حصة.
+          </div>
+        )}
+        {items.map(({ r, at, room, changed }) => (
+          <div key={r.id} className="card lesson">
+            <div className="date">
+              {at ? (
+                <>
+                  <span>{dayShort(at)}</span>
+                  <b className="num">{dayNum(at)}</b>
+                  <span>{monthName(at)}</span>
+                </>
+              ) : (
+                <Icon name="play" />
+              )}
+            </div>
+            <div className="lesson-body">
+              <b>{r.offering.title}</b>
+              <span className="small muted">{r.offering.teacher ? `أ. ${r.offering.teacher.name}` : r.offering.institute?.name}</span>
+              <div className="meta">
+                {at && (
+                  <span>
+                    <Icon name="clock" />
+                    <span className="num">{time(at)}</span>
+                  </span>
+                )}
+                <span>
+                  <Icon name="person" />
+                  {r.child?.name ?? "أنا"}
+                </span>
+                <span>
+                  <Icon name={r.offering.places.includes("online") ? "monitor" : "pin"} />
+                  {room ?? r.offering.places.map((p) => PLACES[p]).join(" أو ")}
+                </span>
+              </div>
+              <div className="row" style={{ flexWrap: "wrap" }}>
+                {r.status === "confirmed" ? (
+                  <span className="badge ok"><Icon name="check" />مؤكد</span>
+                ) : (
+                  <span className="badge">بانتظار موافقة المعلم</span>
+                )}
+                {changed && <span className="badge">غيّر المعهد الموعد</span>}
+                <span className="badge">الدفع: {PAY_LABEL[r.pay_method] ?? r.pay_method}</span>
+              </div>
+              {r.offering.type !== "recorded" && (
+                <form action={cancelBookingAction} className="inline-form">
+                  <input type="hidden" name="id" value={r.id} />
+                  <button className="link small" style={{ color: "var(--bad)" }}>إلغاء الحجز</button>
+                </form>
+              )}
+            </div>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
