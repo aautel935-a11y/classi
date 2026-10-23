@@ -254,5 +254,5 @@ details summary::-webkit-details-marker{display:none}
 
 /* offer cards carry their subject's colour */
 .offer-title{display:flex;align-items:center;gap:10px}
-.offer-title .glyph{flex:none;width:36px;height:36px;border-radius:10px;display:grid;place-items:center;background:var(--tint);color:var(--ink);font-family:var(--display);font-weight:700;font-size:12.5px;direction:ltr}
+.offer-title .glyph{flex:none;width:40px;height:36px;border-radius:10px;display:grid;place-items:center;background:var(--tint);color:var(--ink);font-family:var(--display);font-weight:700;font-size:11px;letter-spacing:-.3px;direction:ltr;white-space:nowrap}
 .card.offer{border-inline-start:1px solid var(--line)}
