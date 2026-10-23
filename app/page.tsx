@@ -1,11 +1,11 @@
 import Link from "next/link";
+import { Avatar } from "@/components/Avatar";
 import { Icon, Stars } from "@/components/Icon";
 import { OfferCard } from "@/components/OfferCard";
 import { loadCatalog } from "@/lib/catalog";
 import { createClient } from "@/lib/supabase/server";
 import { getSession } from "@/lib/session";
-import { TYPES, type OfferingType } from "@/lib/types";
-import { initials } from "@/lib/format";
+import { TYPES, subjectLook, type OfferingType } from "@/lib/types";
 
 export const dynamic = "force-dynamic";
 
@@ -13,39 +13,58 @@ export default async function Home() {
   const { profile } = await getSession();
   const supabase = await createClient();
   const town = profile?.town || "باقة الغربية";
-  const [{ offerings, taken }, { data: teachers }] = await Promise.all([
+  const [{ offerings, taken, subjects }, { data: teachers }] = await Promise.all([
     loadCatalog(),
-    supabase.from("teachers").select("id,name,town,rating,reviews_count,subject:subjects(name)").eq("town", town).order("rating", { ascending: false }).limit(8),
+    supabase
+      .from("teachers")
+      .select("id,name,town,rating,reviews_count,photo_url,subject:subjects(name)")
+      .eq("town", town)
+      .order("rating", { ascending: false })
+      .limit(8),
   ]);
   const courses = offerings.filter((o) => o.type === "course").slice(0, 3);
   const types: OfferingType[] = ["private", "group", "course", "recorded"];
+  const first = profile?.full_name?.split(" ")[0];
 
   return (
     <div className="wrap">
-      <div className="hello stack">
-        <h1>{profile?.full_name ? `مرحباً ${profile.full_name.split(" ")[0]}، عن ماذا تبحث؟` : "عن ماذا تبحث اليوم؟"}</h1>
+      <section className="board" aria-labelledby="hero-title">
+        <span className="eq" aria-hidden="true">a² + b² = c²</span>
+        <h1 id="hero-title">{first ? `أهلاً ${first}، ماذا نتعلّم اليوم؟` : "ماذا نتعلّم اليوم؟"}</h1>
+        <p>معلمون خصوصيون، مجموعات تقوية، ودورات معاهد في بلدك وأونلاين.</p>
         <Link className="searchbar" href="/search">
           <Icon name="search" />
-          <span>مادة، معلم، أو معهد</span>
+          <span>ابحث عن مادة، معلم، أو معهد</span>
         </Link>
-      </div>
+      </section>
 
       <section className="section">
-        <h2>اختر نوع التعليم</h2>
+        <h2>المواد</h2>
+        <div className="subjects">
+          {subjects.map((s) => {
+            const look = subjectLook(s.name);
+            return (
+              <Link key={s.id} className="subj" href={`/search?subject=${s.id}`} style={{ ["--ink" as string]: look.ink, ["--tint" as string]: look.tint }}>
+                <span className="g" aria-hidden="true">{look.glyph}</span>
+                {s.name}
+              </Link>
+            );
+          })}
+        </div>
+      </section>
+
+      <section className="section">
+        <h2>طريقة التعلّم</h2>
         <div className="types">
           {types.map((k) => (
             <Link key={k} className="type" href={`/search?type=${k}`}>
-              <span className="ico">
-                <Icon name={TYPES[k].icon} />
-              </span>
+              <span className="ico"><Icon name={TYPES[k].icon} /></span>
               <b>{TYPES[k].name}</b>
               <span>{TYPES[k].desc}</span>
             </Link>
           ))}
           <Link className="type wide" href="/search?place=online">
-            <span className="ico">
-              <Icon name="monitor" />
-            </span>
+            <span className="ico"><Icon name="monitor" /></span>
             <div className="stack" style={{ gap: 2 }}>
               <b>أونلاين مباشر</b>
               <span>دروس ومجموعات ودورات من البيت، والرابط يصلك عند التأكيد</span>
@@ -58,18 +77,14 @@ export default async function Home() {
         <section className="section">
           <div className="row between">
             <h2>معلمون في {town}</h2>
-            <Link className="back" href={`/search?town=${encodeURIComponent(town)}`}>
-              الكل
-            </Link>
+            <Link className="back" href={`/search?town=${encodeURIComponent(town)}`}>الكل</Link>
           </div>
           <div className="hscroll">
             {teachers.map((t: any) => (
               <Link key={t.id} className="card tcard" href={`/teacher/${t.id}`}>
-                <div className="avatar">{initials(t.name)}</div>
+                <Avatar name={t.name} url={t.photo_url} />
                 <b style={{ fontFamily: "var(--display)", fontWeight: 600 }}>{t.name}</b>
-                <span className="small muted">
-                  {t.subject?.name} · {t.town}
-                </span>
+                <span className="small muted">{t.subject?.name} · {t.town}</span>
                 <Stars rating={t.rating} count={t.reviews_count} />
               </Link>
             ))}
@@ -81,9 +96,7 @@ export default async function Home() {
         <section className="section">
           <h2>دورات تبدأ قريباً</h2>
           <div className="stack">
-            {courses.map((o) => (
-              <OfferCard key={o.id} o={o} taken={taken.get(o.id) ?? 0} />
-            ))}
+            {courses.map((o) => <OfferCard key={o.id} o={o} taken={taken.get(o.id) ?? 0} />)}
           </div>
         </section>
       )}

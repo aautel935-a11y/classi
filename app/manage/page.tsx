@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { Icon } from "@/components/Icon";
-import { addStaffAction, instituteSetupAction } from "@/app/actions";
+import { addStaffAction, instituteSetupAction, updateInstituteAction } from "@/app/actions";
+import { PhotoUpload } from "@/components/PhotoUpload";
 import { requireUser } from "@/lib/session";
 import { TOWNS } from "@/lib/types";
 import { dayLong, time } from "@/lib/format";
@@ -10,7 +11,7 @@ export const dynamic = "force-dynamic";
 export default async function Manage({ searchParams }: { searchParams: Promise<Record<string, string | undefined>> }) {
   const sp = await searchParams;
   const { supabase, user, profile } = await requireUser("/manage");
-  const { data: inst } = await supabase.from("institutes").select("id,name,town,verify").eq("owner_id", user.id).maybeSingle();
+  const { data: inst } = await supabase.from("institutes").select("id,name,town,verify,bio,logo_url").eq("owner_id", user.id).maybeSingle();
 
   if (!inst) {
     return (
@@ -65,6 +66,24 @@ export default async function Manage({ searchParams }: { searchParams: Promise<R
           <div className="stat"><b className="num">{(rooms ?? []).length}</b><span>قاعات</span></div>
         </div>
       </div>
+
+      <section className="section">
+        <h2>ملف المعهد</h2>
+        {sp.ok && <p className="okmsg">حُفظ ملف المعهد.</p>}
+        <div className="card">
+          <PhotoUpload kind="institute" name={inst.name} current={inst.logo_url} />
+          <details>
+            <summary className="link small">تعديل الاسم والنبذة</summary>
+            <form action={updateInstituteAction} className="formstack" style={{ marginTop: 12 }}>
+              <label className="field" htmlFor="i-name">اسم المعهد<input id="i-name" name="name" required defaultValue={inst.name} /></label>
+              <label className="field" htmlFor="i-town">البلد<select id="i-town" name="town" defaultValue={inst.town}>{TOWNS.map((x) => <option key={x}>{x}</option>)}</select></label>
+              <label className="field" htmlFor="i-bio">نبذة<textarea id="i-bio" name="bio" rows={3} defaultValue={inst.bio} /></label>
+              <button className="btn">حفظ</button>
+            </form>
+          </details>
+          <Link className="link small" href={`/institute/${inst.id}`}>كيف يرى الطلاب المعهد</Link>
+        </div>
+      </section>
 
       <section className="section">
         <div className="row between">

@@ -266,3 +266,58 @@ export async function saveAttendanceAction(form: FormData) {
   revalidatePath(str(form, "path"));
   redirect(`${str(form, "path")}?saved=1`);
 }
+
+// ---------- photos ----------
+export async function savePhotoAction(kind: "teacher" | "institute" | "profile", url: string): Promise<Result> {
+  const { supabase, user } = await client();
+  if (!user) return { error: "سجّل الدخول أولاً." };
+  const base = `${process.env.NEXT_PUBLIC_SUPABASE_URL}/storage/v1/object/public/avatars/${user.id}/`;
+  if (!url.startsWith(base)) return { error: "رابط الصورة غير صالح." };
+  const { error } =
+    kind === "teacher"
+      ? await supabase.from("teachers").update({ photo_url: url }).eq("user_id", user.id)
+      : kind === "institute"
+        ? await supabase.from("institutes").update({ logo_url: url }).eq("owner_id", user.id)
+        : await supabase.from("profiles").update({ avatar_url: url }).eq("id", user.id);
+  if (error) return { error: error.message };
+  revalidatePath("/", "layout");
+  return { ok: true };
+}
+
+export async function updateTeacherAction(form: FormData) {
+  const { supabase, user } = await client();
+  if (!user) redirect("/login?next=/teach");
+  await supabase
+    .from("teachers")
+    .update({
+      name: str(form, "name"),
+      town: str(form, "town"),
+      subject_id: num(form, "subject_id") || null,
+      bio: str(form, "bio"),
+      years: num(form, "years"),
+      is_school_teacher: form.get("school") === "on",
+    })
+    .eq("user_id", user.id);
+  revalidatePath("/teach");
+  redirect("/teach?ok=profile");
+}
+
+export async function updateInstituteAction(form: FormData) {
+  const { supabase, user } = await client();
+  if (!user) redirect("/login?next=/manage");
+  await supabase.from("institutes").update({ name: str(form, "name"), town: str(form, "town"), bio: str(form, "bio") }).eq("owner_id", user.id);
+  revalidatePath("/manage");
+  redirect("/manage?ok=profile");
+}
+
+// ---------- admin ----------
+export async function adminVerifyAction(form: FormData) {
+  const { supabase } = await client();
+  const { error } = await supabase.rpc("admin_verify", {
+    p_kind: str(form, "kind"),
+    p_id: str(form, "id"),
+    p_status: str(form, "status"),
+  });
+  revalidatePath("/admin");
+  if (error) redirect(`/admin?error=${encodeURIComponent(error.message)}`);
+}

@@ -58,3 +58,22 @@ set role authenticated; set request.jwt.claim.sub='00000000-0000-0000-0000-00000
 select 'teacher notification' t, body from notifications where kind='schedule_changed';
 reset role;
 select seq, to_char(starts_at at time zone 'Asia/Jerusalem','Dy DD/MM HH24:MI') at, changed from sessions s join offerings o on o.id=s.offering_id where o.title='دورة بجروت رياضيات 5 وحدات' order by seq limit 5;
+
+-- photos and admin
+update profiles set roles = '{guardian,admin}' where id='00000000-0000-0000-0000-00000000000a';
+
+set role authenticated; set request.jwt.claim.sub='00000000-0000-0000-0000-00000000000b';
+select 'upload own folder' t; insert into storage.objects (bucket_id, name) values ('avatars','00000000-0000-0000-0000-00000000000b/teacher.jpg');
+select 'upload other folder (expect error)' t; insert into storage.objects (bucket_id, name) values ('avatars','00000000-0000-0000-0000-00000000000a/x.jpg');
+select 'teacher self-verify (expect error)' t; select admin_verify('teacher', (select id from teachers where name='سامر مصاروة'), 'verified');
+reset role;
+insert into auth.users (id, email) values ('00000000-0000-0000-0000-00000000000d','new@test');
+set role authenticated; set request.jwt.claim.sub='00000000-0000-0000-0000-00000000000d';
+insert into teachers (user_id, name, town) values ('00000000-0000-0000-0000-00000000000d','معلمة جديدة','الطيرة');
+reset role;
+set role authenticated; set request.jwt.claim.sub='00000000-0000-0000-0000-00000000000a';
+select 'admin sees pending' t, name, verify from teachers where verify='pending';
+select 'admin verifies' t, admin_verify('teacher', (select id from teachers where name='معلمة جديدة'), 'verified');
+reset role;
+select 'after' t, name, verify from teachers where name='معلمة جديدة';
+select 'new teacher notified' t, body from notifications where user_id='00000000-0000-0000-0000-00000000000d';

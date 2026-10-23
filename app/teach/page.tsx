@@ -1,7 +1,8 @@
 import Link from "next/link";
 import { Icon } from "@/components/Icon";
 import { OfferCard } from "@/components/OfferCard";
-import { respondAction, teacherSetupAction, toggleOfferingAction } from "@/app/actions";
+import { respondAction, teacherSetupAction, toggleOfferingAction, updateTeacherAction } from "@/app/actions";
+import { PhotoUpload } from "@/components/PhotoUpload";
 import { requireUser } from "@/lib/session";
 import { OFFERING_SELECT, TOWNS, type Offering } from "@/lib/types";
 import { dayLong, isoDay, time } from "@/lib/format";
@@ -13,7 +14,7 @@ type BRow = { booking_id: string; offering_title: string; offering_type: string;
 export default async function Teach({ searchParams }: { searchParams: Promise<Record<string, string | undefined>> }) {
   const sp = await searchParams;
   const { supabase, user, profile } = await requireUser("/teach");
-  const { data: t } = await supabase.from("teachers").select("id,name,verify").eq("user_id", user.id).maybeSingle();
+  const { data: t } = await supabase.from("teachers").select("id,name,verify,town,bio,years,is_school_teacher,subject_id,photo_url").eq("user_id", user.id).maybeSingle();
 
   if (!t) {
     const { data: subjects } = await supabase.from("subjects").select("id,name").order("id");
@@ -37,7 +38,7 @@ export default async function Teach({ searchParams }: { searchParams: Promise<Re
     );
   }
 
-  const [{ data: bookings }, { data: offers }, { data: courseSessions }] = await Promise.all([
+  const [{ data: bookings }, { data: offers }, { data: courseSessions }, { data: subjectList }] = await Promise.all([
     supabase.rpc("owner_bookings"),
     supabase.from("offerings").select(OFFERING_SELECT).eq("teacher_id", t.id).order("created_at"),
     supabase
@@ -47,6 +48,7 @@ export default async function Teach({ searchParams }: { searchParams: Promise<Re
       .gt("starts_at", new Date().toISOString())
       .order("starts_at")
       .limit(6),
+    supabase.from("subjects").select("id,name").order("id"),
   ]);
   const rows = (bookings ?? []) as BRow[];
   const requests = rows.filter((b) => b.status === "pending");
@@ -62,7 +64,7 @@ export default async function Teach({ searchParams }: { searchParams: Promise<Re
         {t.verify !== "verified" && (
           <p className="note"><Icon name="shield" />ملفك بانتظار التوثيق. عروضك تظهر للطلاب بعد التوثيق.</p>
         )}
-        {sp.ok && <p className="okmsg">نُشر العرض.</p>}
+        {sp.ok && <p className="okmsg">{sp.ok === "profile" ? "حُفظ ملفك." : "نُشر العرض."}</p>}
         {sp.error && <p className="err">{sp.error}</p>}
         <div className="stats">
           <div className="stat hl"><b className="num">{todays.length}</b><span>حصص اليوم</span></div>
@@ -70,6 +72,28 @@ export default async function Teach({ searchParams }: { searchParams: Promise<Re
           <div className="stat"><b className="num">{new Set(rows.filter((b) => b.status === "confirmed").map((b) => b.student_name)).size}</b><span>طلاب</span></div>
         </div>
       </div>
+
+      <section className="section">
+        <h2>ملفي</h2>
+        <div className="card">
+          <PhotoUpload kind="teacher" name={t.name} current={t.photo_url} />
+          <details>
+            <summary className="link small">تعديل البيانات والنبذة</summary>
+            <form action={updateTeacherAction} className="formstack" style={{ marginTop: 12 }}>
+              <label className="field" htmlFor="e-name">الاسم<input id="e-name" name="name" required defaultValue={t.name} /></label>
+              <div className="typeform">
+                <label className="field" htmlFor="e-town">البلد<select id="e-town" name="town" defaultValue={t.town}>{TOWNS.map((x) => <option key={x}>{x}</option>)}</select></label>
+                <label className="field" htmlFor="e-subject">المادة<select id="e-subject" name="subject_id" defaultValue={t.subject_id ?? ""}>{(subjectList ?? []).map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}</select></label>
+                <label className="field" htmlFor="e-years">سنوات الخبرة<input id="e-years" name="years" type="number" min={0} defaultValue={t.years} /></label>
+              </div>
+              <label className="row"><input type="checkbox" name="school" defaultChecked={t.is_school_teacher} /> أنا معلم في مدرسة</label>
+              <label className="field" htmlFor="e-bio">عن أسلوبك في التدريس<textarea id="e-bio" name="bio" rows={4} defaultValue={t.bio} /></label>
+              <button className="btn">حفظ</button>
+            </form>
+          </details>
+          <Link className="link small" href={`/teacher/${t.id}`}>كيف يرى الطلاب ملفي</Link>
+        </div>
+      </section>
 
       <section className="section">
         <h2>طلبات حجز</h2>

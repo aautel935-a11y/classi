@@ -96,3 +96,15 @@ update institutes set verify = 'verified' where name = 'اسم المعهد';
 - التقييمات.
 - لوحة مدير لتوثيق المعلمين.
 - تعديل الأوقات المتاحة للمعلم.
+
+## تحديث: الصور ولوحة الإدارة
+
+- نفّذ `supabase/migrations/20261024010000_photos_admin.sql` في SQL Editor.
+- لجعل حسابك مديراً (مرة واحدة، غيّر البريد):
+
+```sql
+update profiles set roles = array_append(roles, 'admin')
+where id = (select id from auth.users where email = 'you@example.com');
+```
+
+ثم تظهر "لوحة الإدارة" في صفحة حسابي لتوثيق المعلمين والمعاهد.

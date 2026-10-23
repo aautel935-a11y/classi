@@ -2,7 +2,8 @@ import { Icon } from "@/components/Icon";
 import { addChildAction, removeChildAction, signOutAction, switchRoleAction, updateProfileAction } from "@/app/actions";
 import { requireUser } from "@/lib/session";
 import { TOWNS, type Role } from "@/lib/types";
-import { initials } from "@/lib/format";
+import { PhotoUpload } from "@/components/PhotoUpload";
+import Link from "next/link";
 
 export const dynamic = "force-dynamic";
 
@@ -15,13 +16,10 @@ export default async function Account() {
   return (
     <div className="wrap">
       <div className="section">
-        <div className="row" style={{ gap: 12 }}>
-          <div className="avatar lg">{initials(profile?.full_name || user.email || "؟")}</div>
-          <div className="stack" style={{ gap: 2, minWidth: 0 }}>
-            <h1 style={{ fontSize: 22 }}>{profile?.full_name || "حسابي"}</h1>
-            <span className="muted small" dir="ltr" style={{ textAlign: "right" }}>{user.email}</span>
-          </div>
-        </div>
+        <h1 style={{ fontSize: 22 }}>{profile?.full_name || "حسابي"}</h1>
+        <span className="muted small" dir="ltr" style={{ textAlign: "right" }}>{user.email}</span>
+        <PhotoUpload kind="profile" name={profile?.full_name || user.email || "؟"} current={profile?.avatar_url ?? null} />
+        {profile?.roles?.includes("admin") && <Link className="btn ghost block" href="/admin">لوحة الإدارة: توثيق المعلمين والمعاهد</Link>}
 
         <h2>الواجهة</h2>
         <div className="seg">

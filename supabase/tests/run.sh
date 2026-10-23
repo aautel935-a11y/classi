@@ -7,6 +7,7 @@ D="$P -d classi_test -v ON_ERROR_STOP=1"
 $P -d classi_test -c "drop role if exists anon" -c "drop role if exists authenticated" -c "drop role if exists service_role" 2>/dev/null || true
 $D -f "$(dirname "$0")/supabase_stub.sql"
 $D -f "$(dirname "$0")/../migrations/20261024000000_init.sql"
+$D -f "$(dirname "$0")/../migrations/20261024010000_photos_admin.sql"
 $D -f "$(dirname "$0")/../seed.sql"
 $D -f "$(dirname "$0")/grants.sql"
 $P -d classi_test -f "$(dirname "$0")/flow_test.sql"

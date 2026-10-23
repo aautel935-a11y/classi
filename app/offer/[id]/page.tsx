@@ -3,8 +3,9 @@ import { notFound } from "next/navigation";
 import { Icon, Stars } from "@/components/Icon";
 import { TypeBadge } from "@/components/OfferCard";
 import { getSession } from "@/lib/session";
-import { OFFERING_SELECT, PLACES, TYPES, ownerName, ownerOf, type Offering } from "@/lib/types";
-import { dayLong, initials, shekel, time } from "@/lib/format";
+import { OFFERING_SELECT, PLACES, TYPES, ownerName, ownerOf, ownerPhoto, type Offering } from "@/lib/types";
+import { Avatar } from "@/components/Avatar";
+import { dayLong, shekel, time } from "@/lib/format";
 import { nextDays, privateSlots } from "@/lib/dates";
 import { BookingFlow } from "./BookingFlow";
 
@@ -67,7 +68,7 @@ export default async function OfferPage({ params }: { params: Promise<{ id: stri
         </div>
         <h1>{o.title}</h1>
         <Link className="card" href={o.teacher ? `/teacher/${own.id}` : `/institute/${own.id}`} style={{ flexDirection: "row", alignItems: "center", gap: 12 }}>
-          <div className={`avatar ${o.institute ? "inst" : ""}`}>{initials(own.name)}</div>
+          <Avatar name={own.name} url={ownerPhoto(o)} inst={!!o.institute} />
           <div className="stack" style={{ gap: 2, minWidth: 0 }}>
             <b>{ownerName(o)}</b>
             <span className="small muted">{own.town}</span>

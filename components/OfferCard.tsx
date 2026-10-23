@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { Icon, Stars } from "./Icon";
-import { PLACES, TYPES, ownerName, ownerOf, type Offering } from "@/lib/types";
+import { PLACES, TYPES, ownerName, ownerOf, ownerPhoto, subjectLook, type Offering } from "@/lib/types";
+import { Avatar } from "./Avatar";
 import { shekel } from "@/lib/format";
 
 export function TypeBadge({ type }: { type: Offering["type"] }) {
@@ -15,8 +16,9 @@ export function TypeBadge({ type }: { type: Offering["type"] }) {
 export function OfferCard({ o, taken, showOwner = true }: { o: Offering; taken?: number; showOwner?: boolean }) {
   const own = ownerOf(o);
   const full = o.seats != null && taken != null && taken >= o.seats;
+  const look = subjectLook(o.subject?.name);
   return (
-    <Link className="card offer" href={`/offer/${o.id}`}>
+    <Link className="card offer" href={`/offer/${o.id}`} style={{ ["--ink" as string]: look.ink, ["--tint" as string]: look.tint }}>
       <div className="top">
         <div className="row" style={{ flexWrap: "wrap" }}>
           <TypeBadge type={o.type} />
@@ -26,9 +28,13 @@ export function OfferCard({ o, taken, showOwner = true }: { o: Offering; taken?:
           {shekel(o.price)} <small>{TYPES[o.type].unit}</small>
         </div>
       </div>
-      <h3>{o.title}</h3>
+      <div className="offer-title">
+        <span className="glyph" aria-hidden="true">{look.glyph}</span>
+        <h3>{o.title}</h3>
+      </div>
       {showOwner && (
-        <div className="row small">
+        <div className="row small owner-line">
+          <Avatar name={own.name} url={ownerPhoto(o)} size="sm" inst={!!o.institute} />
           <span>{ownerName(o)}</span>
           <span className="verified" title="موثّق">
             <Icon name="shield" />

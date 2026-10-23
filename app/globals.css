@@ -3,24 +3,14 @@
   --bg:#FBF8F2; --card:#FFFFFF; --ink:#18204A; --muted:#5A6080;
   --primary:#1E2F6E; --on-primary:#FFFFFF; --accent:#D4962A; --soft:#F5E6C6;
   --line:#E5DFD2; --ok:#2E7D5B; --ok-soft:#DDEFE5; --bad:#B3261E; --bad-soft:#F7DEDB;
-  --scrim:rgba(24,32,74,.45);
+  --scrim:rgba(24,32,74,.45); --board:#24433B; --board-ink:#F4F1E6; --wood:#9B6B3D; --rule:rgba(30,47,110,.055); --shadow:0 1px 0 rgba(24,32,74,.04),0 8px 20px -14px rgba(24,32,74,.35);
+  --chalk:"Aref Ruqaa","Readex Pro",serif; color-scheme:light;
   --display:"Readex Pro","IBM Plex Sans Arabic",system-ui,sans-serif;
   --text:"IBM Plex Sans Arabic",system-ui,sans-serif;
   --r-sm:8px; --r-lg:14px; --r-pill:999px;
 }
-@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){
-  --bg:#121630; --card:#1B2142; --ink:#EEF0F8; --muted:#A9AECB;
-  --primary:#8EA2EE; --on-primary:#121630; --accent:#F0B84E; --soft:#3B3220;
-  --line:#2B3258; --ok:#72C9A0; --ok-soft:#1C3A30; --bad:#F0A39B; --bad-soft:#4A2422;
-  --scrim:rgba(5,7,20,.6); color-scheme:dark}}
-:root[data-theme="dark"]{
-  --bg:#121630; --card:#1B2142; --ink:#EEF0F8; --muted:#A9AECB;
-  --primary:#8EA2EE; --on-primary:#121630; --accent:#F0B84E; --soft:#3B3220;
-  --line:#2B3258; --ok:#72C9A0; --ok-soft:#1C3A30; --bad:#F0A39B; --bad-soft:#4A2422;
-  --scrim:rgba(5,7,20,.6); color-scheme:dark}
-
 *{box-sizing:border-box}
-body{background:var(--bg);color:var(--ink);font-family:var(--text);font-size:15px;line-height:1.6;-webkit-font-smoothing:antialiased}
+body{background-color:var(--bg);background-image:repeating-linear-gradient(to bottom,transparent 0 31px,var(--rule) 31px 32px);color:var(--ink);font-family:var(--text);font-size:15px;line-height:1.6;-webkit-font-smoothing:antialiased}
 body::before{content:"";position:fixed;inset:0 0 auto;height:env(safe-area-inset-top,0px);z-index:30;background:var(--bg)}
 button,input,select,textarea{font:inherit;color:inherit}
 button{cursor:pointer}
@@ -236,3 +226,33 @@ nav.bar a.navitem[aria-current="page"]{color:var(--primary);font-weight:600}
 .toggle2.radios input{accent-color:var(--primary)}
 .toggle2.radios label:has(input[value="p"]:checked){background:var(--ok-soft);border-color:var(--ok);color:var(--ok)}
 .toggle2.radios label:has(input[value="a"]:checked){background:var(--bad-soft);border-color:var(--bad);color:var(--bad)}
+
+/* ---------- educational look ---------- */
+header.top{background:var(--card);box-shadow:var(--shadow)}
+body::before{background:var(--card)}
+.card{box-shadow:var(--shadow)}
+.avatar.photo{object-fit:cover;background:var(--soft)}
+.avatar.sm{width:28px;height:28px;font-size:11px}
+.owner-line{gap:6px}
+.photo-up{display:flex;align-items:center;gap:14px}
+details summary{cursor:pointer;list-style:none}
+details summary::-webkit-details-marker{display:none}
+
+/* chalkboard hero */
+.board{position:relative;margin-top:18px;border-radius:var(--r-lg);background:var(--board);color:var(--board-ink);padding:22px 18px 18px;border:8px solid var(--wood);box-shadow:inset 0 0 40px rgba(0,0,0,.35),var(--shadow);overflow:hidden}
+.board::after{content:"";position:absolute;inset-inline:18px;bottom:6px;height:5px;border-radius:3px;background:linear-gradient(90deg,#e8e2d0 0 14%,transparent 14% 20%,#f2c9c9 20% 26%,transparent 26%)}
+.board h1{font-family:var(--chalk);font-weight:700;font-size:34px;line-height:1.35;color:var(--board-ink);text-shadow:0 0 1px rgba(244,241,230,.6)}
+.board p{color:var(--board-ink);opacity:.82;font-size:14px;margin-top:4px}
+.board .searchbar{margin-top:14px;background:rgba(244,241,230,.95);border:0;color:var(--muted)}
+.board .eq{position:absolute;inset-inline-start:14px;top:10px;font-family:var(--chalk);font-size:15px;opacity:.28;direction:ltr;pointer-events:none}
+
+/* subject tiles */
+.subjects{display:grid;grid-template-columns:repeat(3,1fr);gap:8px}
+.subj{display:flex;flex-direction:column;align-items:center;gap:6px;background:var(--card);border:1px solid var(--line);border-radius:var(--r-lg);padding:12px 6px;box-shadow:var(--shadow);font-size:13.5px;font-weight:500}
+.subj .g{width:46px;height:46px;border-radius:12px;display:grid;place-items:center;background:var(--tint);color:var(--ink);font-family:var(--display);font-weight:700;font-size:15px;direction:ltr}
+.type .ico{background:var(--soft)}
+
+/* offer cards carry their subject's colour */
+.offer-title{display:flex;align-items:center;gap:10px}
+.offer-title .glyph{flex:none;width:36px;height:36px;border-radius:10px;display:grid;place-items:center;background:var(--tint);color:var(--ink);font-family:var(--display);font-weight:700;font-size:12.5px;direction:ltr}
+.card.offer{border-inline-start:1px solid var(--line)}

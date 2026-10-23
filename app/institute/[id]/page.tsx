@@ -3,7 +3,7 @@ import { Icon } from "@/components/Icon";
 import { OfferCard } from "@/components/OfferCard";
 import { createClient } from "@/lib/supabase/server";
 import { OFFERING_SELECT, type Offering } from "@/lib/types";
-import { initials } from "@/lib/format";
+import { Avatar } from "@/components/Avatar";
 
 export const dynamic = "force-dynamic";
 
@@ -11,7 +11,7 @@ export default async function InstitutePage({ params }: { params: Promise<{ id: 
   const { id } = await params;
   const supabase = await createClient();
   const [{ data: ins }, { data: offers }, { count: staff }, { data: seats }] = await Promise.all([
-    supabase.from("institutes").select("id,name,town,bio,rating,reviews_count,verify").eq("id", id).maybeSingle(),
+    supabase.from("institutes").select("id,name,town,bio,rating,reviews_count,verify,logo_url").eq("id", id).maybeSingle(),
     supabase.from("offerings").select(OFFERING_SELECT).eq("institute_id", id).eq("active", true),
     supabase.from("institute_teachers").select("teacher_id", { count: "exact", head: true }).eq("institute_id", id),
     supabase.rpc("seats_overview"),
@@ -23,7 +23,7 @@ export default async function InstitutePage({ params }: { params: Promise<{ id: 
   return (
     <div className="wrap">
       <div className="profile-head">
-        <div className="avatar lg inst">{initials(ins.name)}</div>
+        <Avatar name={ins.name} url={ins.logo_url} size="lg" inst />
         <div className="stack" style={{ gap: 4, minWidth: 0 }}>
           <h1 style={{ fontSize: 22 }}>{ins.name}</h1>
           <div className="row" style={{ flexWrap: "wrap" }}>
