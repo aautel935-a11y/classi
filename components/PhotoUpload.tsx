@@ -10,7 +10,13 @@ type Kind = "teacher" | "institute" | "profile";
 
 /** Shrinks the picture in the browser (max 512px, JPEG) before uploading it. */
 async function shrink(file: File): Promise<Blob> {
-  const bitmap = await createImageBitmap(file);
+  const bitmap = await createImageBitmap(file).catch(async () => {
+    // Some phones (HEIC photos) need the <img> decoder instead.
+    const img = new Image();
+    img.src = URL.createObjectURL(file);
+    await img.decode();
+    return img as unknown as ImageBitmap;
+  });
   const scale = Math.min(1, 512 / Math.max(bitmap.width, bitmap.height));
   const canvas = document.createElement("canvas");
   canvas.width = Math.round(bitmap.width * scale);
@@ -30,7 +36,7 @@ export function PhotoUpload({ kind, name, current }: { kind: Kind; name: string;
     const file = e.target.files?.[0];
     if (!file) return;
     setError(null);
-    if (!file.type.startsWith("image/")) return setError("اختر صورة (JPG أو PNG).");
+    if (!file.type.startsWith("image/") && !/\.(heic|heif)$/i.test(file.name)) return setError("اختر صورة (JPG أو PNG).");
     setBusy(true);
     try {
       const blob = await shrink(file);
@@ -39,7 +45,7 @@ export function PhotoUpload({ kind, name, current }: { kind: Kind; name: string;
       if (!user) throw new Error("سجّل الدخول أولاً.");
       const path = `${user.id}/${kind}.jpg`;
       const { error: upErr } = await supabase.storage.from("avatars").upload(path, blob, { upsert: true, contentType: "image/jpeg" });
-      if (upErr) throw upErr;
+      if (upErr) throw new Error(`تعذّر رفع الصورة: ${upErr.message}`);
       const url = `${supabase.storage.from("avatars").getPublicUrl(path).data.publicUrl}?v=${Date.now()}`;
       const r = await savePhotoAction(kind, url);
       if (r.error) throw new Error(r.error);

@@ -189,10 +189,24 @@ export async function newOfferingAction(form: FormData) {
   redirect("/teach?ok=published");
 }
 
+export async function deleteOfferingAction(form: FormData) {
+  const { supabase } = await client();
+  const id = str(form, "id");
+  const back = str(form, "path") || "/teach";
+  const { count } = await supabase.from("bookings").select("id", { count: "exact", head: true }).eq("offering_id", id);
+  if ((count ?? 0) > 0) redirect(`${back}?error=${encodeURIComponent("لا يمكن حذف عرض عليه حجوزات. أخفِه بدلاً من ذلك.")}`);
+  const { error } = await supabase.from("offerings").delete().eq("id", id);
+  revalidatePath(back);
+  redirect(`${back}?${error ? `error=${encodeURIComponent(error.message)}` : "ok=deleted"}`);
+}
+
 export async function toggleOfferingAction(form: FormData) {
   const { supabase } = await client();
-  await supabase.from("offerings").update({ active: str(form, "active") === "1" }).eq("id", str(form, "id"));
-  revalidatePath(str(form, "path") || "/teach");
+  const back = str(form, "path") || "/teach";
+  const active = str(form, "active") === "1";
+  const { error } = await supabase.from("offerings").update({ active }).eq("id", str(form, "id"));
+  revalidatePath(back);
+  redirect(`${back}?${error ? `error=${encodeURIComponent(error.message)}` : active ? "ok=shown" : "ok=hidden"}`);
 }
 
 // ---------- institute ----------
@@ -276,8 +290,15 @@ export async function saveAttendanceAction(form: FormData) {
 export async function savePhotoAction(kind: "teacher" | "institute" | "profile", url: string): Promise<Result> {
   const { supabase, user } = await client();
   if (!user) return { error: "سجّل الدخول أولاً." };
-  const base = `${process.env.NEXT_PUBLIC_SUPABASE_URL}/storage/v1/object/public/avatars/${user.id}/`;
-  if (!url.startsWith(base)) return { error: "رابط الصورة غير صالح." };
+  let ok = false;
+  try {
+    const u = new URL(url);
+    const host = new URL((process.env.NEXT_PUBLIC_SUPABASE_URL ?? "").trim()).hostname;
+    ok = u.protocol === "https:" && u.hostname === host && u.pathname.startsWith(`/storage/v1/object/public/avatars/${user.id}/`);
+  } catch {
+    ok = false;
+  }
+  if (!ok) return { error: "تعذّر حفظ الصورة: الرابط لا يطابق حسابك." };
   const { error } =
     kind === "teacher"
       ? await supabase.from("teachers").update({ photo_url: url }).eq("user_id", user.id)

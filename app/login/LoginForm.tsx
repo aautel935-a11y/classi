@@ -32,7 +32,7 @@ export function LoginForm({ next, initial = "in" }: { next: string; initial?: "i
         redirectTo: `${window.location.origin}/auth/callback?next=${encodeURIComponent("/account/password")}`,
       });
       setBusy(false);
-      if (error) return setError(error.message);
+      if (error) return setError(/rate|limit|seconds/i.test(error.message) ? "أُرسلت رسائل كثيرة خلال وقت قصير. انتظر قليلاً ثم حاول مرة أخرى." : error.message);
       setSent(true);
       return;
     }

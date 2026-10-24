@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { Icon } from "@/components/Icon";
 import { OfferCard } from "@/components/OfferCard";
-import { respondAction, saveAvailabilityAction, teacherSetupAction, toggleOfferingAction, updateTeacherAction } from "@/app/actions";
+import { deleteOfferingAction, respondAction, saveAvailabilityAction, teacherSetupAction, toggleOfferingAction, updateTeacherAction } from "@/app/actions";
 import { PhotoUpload } from "@/components/PhotoUpload";
 import { requireUser } from "@/lib/session";
 import { OFFERING_SELECT, TOWNS, type Offering } from "@/lib/types";
@@ -72,7 +72,11 @@ export default async function Teach({ searchParams }: { searchParams: Promise<Re
         {t.verify !== "verified" && (
           <p className="note"><Icon name="shield" />ملفك بانتظار التوثيق. عروضك تظهر للطلاب بعد التوثيق.</p>
         )}
-        {sp.ok && <p className="okmsg">{sp.ok === "profile" ? "حُفظ ملفك." : sp.ok === "hours" ? "حُفظت أوقاتك المتاحة." : "نُشر العرض."}</p>}
+        {sp.ok && (
+          <p className="okmsg">
+            {({ profile: "حُفظ ملفك.", hours: "حُفظت أوقاتك المتاحة.", hidden: "أُخفي العرض. لم يعد يظهر للطلاب.", shown: "العرض ظاهر الآن للطلاب.", deleted: "حُذف العرض." } as Record<string, string>)[sp.ok] ?? "نُشر العرض."}
+          </p>
+        )}
         {sp.error && <p className="err">{sp.error}</p>}
         <div className="stats">
           <div className="stat hl"><b className="num">{todays.length}</b><span>حصص اليوم</span></div>
@@ -177,7 +181,8 @@ export default async function Teach({ searchParams }: { searchParams: Promise<Re
         </div>
         {mine.length === 0 && <div className="empty">لم تنشر أي عرض بعد. ابدأ بدرس خصوصي.</div>}
         {mine.map((o) => (
-          <div key={o.id} className="stack" style={{ gap: 6 }}>
+          <div key={o.id} className="stack" style={{ gap: 6, opacity: o.active === false ? 0.6 : 1 }}>
+            {o.active === false && <span className="badge bad" style={{ alignSelf: "flex-start" }}>مخفي عن الطلاب</span>}
             <OfferCard o={o} showOwner={false} />
             {(o.type === "recorded" || o.places.includes("online")) && !hasLink.has(o.id) && (
               <p className="err small">لم تضف رابط {o.type === "recorded" ? "المحتوى" : "زوم"} بعد. الطلاب لن يعرفوا أين يدخلون.</p>
@@ -189,6 +194,15 @@ export default async function Teach({ searchParams }: { searchParams: Promise<Re
               <input type="hidden" name="active" value={o.active === false ? "1" : "0"} />
               <button className="link small">{o.active === false ? "إظهار العرض" : "إخفاء العرض"}</button>
             </form>
+            <details>
+              <summary className="link small" style={{ color: "var(--bad)" }}>حذف العرض نهائياً</summary>
+              <form action={deleteOfferingAction} className="row" style={{ marginTop: 8, flexWrap: "wrap" }}>
+                <input type="hidden" name="id" value={o.id} />
+                <input type="hidden" name="path" value="/teach" />
+                <span className="small">متأكد؟ لا يمكن التراجع.</span>
+                <button className="btn sm badb">نعم، احذف</button>
+              </form>
+            </details>
           </div>
         ))}
       </section>
