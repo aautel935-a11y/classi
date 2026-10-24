@@ -122,6 +122,11 @@ export default async function Teach({ searchParams }: { searchParams: Promise<Re
         </div>
       </section>
 
+      <Link className="card cal-cta" href="/teach/calendar">
+        <span className="row" style={{ gap: 10 }}><Icon name="cal" /><b>جدولي وإدارة الساعات</b></span>
+        <span className="small muted">أغلق ساعات، أضف طالباً لساعة فارغة، أو غيّر موعد أي حصة.</span>
+      </Link>
+
       <section className="section">
         <h2>طلبات حجز</h2>
         {requests.length === 0 && <div className="empty">لا طلبات جديدة.</div>}
@@ -149,13 +154,13 @@ export default async function Teach({ searchParams }: { searchParams: Promise<Re
         <h2>الحصص القادمة</h2>
         {upcoming.length === 0 && <div className="empty">لا حصص مؤكدة قادمة.</div>}
         {upcoming.map((b) => (
-          <div key={b.booking_id} className="card" style={{ flexDirection: "row", alignItems: "center", gap: 12 }}>
+          <Link key={b.booking_id} className="card" href={`/teach/calendar?day=${isoDay(b.starts_at!)}`} style={{ flexDirection: "row", alignItems: "center", gap: 12, color: "inherit", textDecoration: "none" }}>
             <div className="stack" style={{ gap: 2, flex: 1, minWidth: 0 }}>
               <b>{b.student_name}{b.series_id ? " · أسبوعي" : ""}</b>
               <span className="small muted">{b.offering_title}{b.mode ? ` · ${modeLabel(b.mode)}` : ""}</span>
             </div>
             <span className="small num">{dayLong(b.starts_at!)} · {time(b.starts_at!)}</span>
-          </div>
+          </Link>
         ))}
       </section>
 
@@ -175,7 +180,7 @@ export default async function Teach({ searchParams }: { searchParams: Promise<Re
         </section>
       )}
 
-      <section className="section">
+      <section className="section" id="hours">
         <h2>أوقاتي المتاحة للدروس الخصوصية</h2>
         <form action={saveAvailabilityAction} className="card formstack">
           <div className="weekdays">

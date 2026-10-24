@@ -618,3 +618,76 @@ export async function setEmailRemindersAction(form: FormData) {
   revalidatePath("/notifications");
   redirect("/notifications");
 }
+
+// ---------- teacher calendar ----------
+function calBack(form: FormData, q: Record<string, string>) {
+  const day = str(form, "day");
+  const p = new URLSearchParams({ ...(day ? { day } : {}), ...q });
+  return `/teach/calendar?${p}`;
+}
+function formInstant(form: FormData, dayKey = "date", timeKey = "time") {
+  const d = str(form, dayKey);
+  const t = str(form, timeKey);
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(d) || !/^\d{2}:\d{2}$/.test(t)) return null;
+  return fromLocal(d, t).toISOString();
+}
+
+export async function teacherBlockAction(form: FormData) {
+  const { supabase, user } = await client();
+  if (!user) redirect("/login?next=/teach/calendar");
+  const at = formInstant(form);
+  if (!at) redirect(calBack(form, { error: "اختر اليوم والساعة." }));
+  const { data, error } = await supabase.rpc("teacher_block", {
+    p_starts_at: at, p_minutes: Math.min(Math.max(num(form, "minutes") || 60, 15), 600), p_note: str(form, "note") || null, p_weeks: str(form, "weekly") === "1" ? 8 : 1,
+  });
+  revalidateTag("catalog");
+  if (error) redirect(calBack(form, { error: error.message }));
+  redirect(calBack(form, { ok: Number(data) > 1 ? `blocked:${data}` : "blocked" }));
+}
+
+export async function teacherUnblockAction(form: FormData) {
+  const { supabase, user } = await client();
+  if (!user) redirect("/login?next=/teach/calendar");
+  const { error } = await supabase.rpc("teacher_unblock", { p_block: str(form, "id"), p_all: str(form, "all") === "1" });
+  revalidateTag("catalog");
+  redirect(calBack(form, error ? { error: error.message } : { ok: "opened" }));
+}
+
+export async function teacherAddBookingAction(form: FormData) {
+  const { supabase, user } = await client();
+  if (!user) redirect("/login?next=/teach/calendar");
+  const at = formInstant(form);
+  const [student, child] = str(form, "student").split("|");
+  if (!at || !student) redirect(calBack(form, { error: "اختر الطالب والموعد." }));
+  const { data, error } = await supabase.rpc("teacher_add_booking", {
+    p_offering: str(form, "offering_id"), p_student: student, p_child: child || null, p_starts_at: at, p_weekly: str(form, "weekly") === "1",
+  });
+  revalidateTag("catalog");
+  if (error) redirect(calBack(form, { error: error.message }));
+  const r = data as { created: number; skipped: string[] };
+  redirect(calBack(form, { ok: "added", n: String(r.created), ...(r.skipped?.length ? { skipped: r.skipped.join("، ") } : {}) }));
+}
+
+export async function teacherMoveBookingAction(form: FormData) {
+  const { supabase, user } = await client();
+  if (!user) redirect("/login?next=/teach/calendar");
+  const at = formInstant(form);
+  if (!at) redirect(calBack(form, { error: "اختر اليوم والساعة الجديدين." }));
+  const { error } = await supabase.rpc("teacher_move_booking", {
+    p_booking: str(form, "id"), p_new_start: at, p_scope: str(form, "scope") === "following" ? "following" : "one", p_note: str(form, "note") || null,
+  });
+  revalidateTag("catalog");
+  if (error) redirect(calBack(form, { error: error.message }));
+  redirect(calBack(form, { ok: "moved", day: str(form, "date") }));
+}
+
+export async function teacherCancelBookingAction(form: FormData) {
+  const { supabase, user } = await client();
+  if (!user) redirect("/login?next=/teach/calendar");
+  const { error } = await supabase.rpc("teacher_cancel_booking", {
+    p_booking: str(form, "id"), p_scope: str(form, "scope") === "series" ? "series" : "one", p_reason: str(form, "reason") || null,
+  });
+  revalidateTag("catalog");
+  revalidatePath("/teach");
+  redirect(calBack(form, error ? { error: error.message } : { ok: "cancelled" }));
+}
