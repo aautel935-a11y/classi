@@ -26,6 +26,7 @@ const OK: Record<string, string> = {
   added: "أُضيف الطالب ووصله إشعار.",
   moved: "تغيّر الموعد ووصل الطالب إشعار. يمكنه الإلغاء مجاناً إن لم يناسبه.",
   cancelled: "أُلغي الحجز ووصل الطالب إشعار بالسبب.",
+  report: "أُرسل التقرير ووصل ولي الأمر إشعار.",
 };
 
 /** The teacher's day by day: free hours, bookings, meetings and closed hours, each with its actions. */
@@ -135,11 +136,14 @@ export default async function TeacherCalendar({ searchParams }: { searchParams: 
           }
           if (it.kind === "session") {
             return (
-              <Link key={it.id} className="card cal-row" href={`/manage/course/${it.offering_id}`}>
+              <div key={it.id} className="stack" style={{ gap: 4 }}>
+              <Link className="card cal-row" href={`/manage/course/${it.offering_id}`}>
                 <div className="row between"><b className="num">{time(r.at)}–{time(r.end)}</b><span className="badge">{it.status === "institute" ? "دورة معهد" : "مجموعة"}</span></div>
                 <span>{it.title} · {it.who} مسجّلين</span>
                 <span className="link small">{it.status === "institute" ? "الطلاب والحضور" : "تغيير موعد اللقاء والطلاب"}</span>
               </Link>
+              {past && <Link className="link small" href={`/teach/report?session=${it.id}&back=/teach/calendar?day=${day}`}>اكتب تقرير اللقاء</Link>}
+              </div>
             );
           }
           return (
@@ -152,6 +156,7 @@ export default async function TeacherCalendar({ searchParams }: { searchParams: 
               <span className="small muted">
                 {it.title}{it.mode === "online" ? " · أونلاين" : it.mode === "home" ? " · حضوري" : ""}{it.series_id ? " · أسبوعي" : ""}{it.changed ? " · غيّرتَ موعدها" : ""}
               </span>
+              {past && it.status === "confirmed" && <Link className="link small" href={`/teach/report?booking=${it.id}&back=/teach/calendar?day=${day}`}>كتابة تقرير الحصة لولي الأمر</Link>}
               {!past && (
                 <div className="row" style={{ flexWrap: "wrap", gap: 16 }}>
                   <details>

@@ -9,9 +9,15 @@ export const dynamic = "force-dynamic";
 
 const ROLES: [Role, string][] = [["guardian", "ولي أمر / طالب"], ["teacher", "معلم"], ["institute", "معهد"]];
 
-export default async function Account() {
+export default async function Account({ searchParams }: { searchParams: Promise<Record<string, string | undefined>> }) {
+  const sp = await searchParams;
   const { supabase, user, profile } = await requireUser("/account");
-  const { data: kids } = await supabase.from("children").select("id,name,grade").order("created_at");
+  const [{ data: kids }, { data: me }] = await Promise.all([
+    supabase.from("children").select("id,name,grade").order("created_at"),
+    supabase.from("profiles").select("phone,sms_ok").eq("id", user.id).maybeSingle(),
+  ]);
+  const phoneLocal = me?.phone ? String(me.phone).replace(/^\+972/, "0") : "";
+  const smsOk = me?.sms_ok !== false;
   const active = profile?.active_role === "student" ? "guardian" : profile?.active_role ?? "guardian";
   return (
     <div className="wrap">
@@ -59,8 +65,14 @@ export default async function Account() {
         )}
 
         <h2>بياناتي</h2>
+        {sp.error && <p className="err">{sp.error}</p>}
         <form action={updateProfileAction} className="card formstack">
           <label className="field" htmlFor="full_name">الاسم<input id="full_name" name="full_name" defaultValue={profile?.full_name ?? ""} /></label>
+          <label className="field" htmlFor="phone">
+            رقم الجوال (اختياري)
+            <input id="phone" name="phone" type="tel" dir="ltr" inputMode="tel" placeholder="050-1234567" defaultValue={phoneLocal} />
+          </label>
+          <label className="row small"><input type="checkbox" name="sms_ok" defaultChecked={smsOk} /> أوافق على استلام تذكيرات الحصص برسالة SMS أو واتساب</label>
           <label className="field" htmlFor="town">
             البلد
             <select id="town" name="town" defaultValue={profile?.town ?? ""}>

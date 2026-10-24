@@ -15,6 +15,7 @@ const ROLES = [
 export function LoginForm({ next, initial = "in" }: { next: string; initial?: "in" | "up" }) {
   const router = useRouter();
   const [mode, setMode] = useState<"in" | "up" | "reset">(initial);
+  const [role, setRole] = useState<string>("guardian");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [sent, setSent] = useState(false);
@@ -49,7 +50,7 @@ export function LoginForm({ next, initial = "in" }: { next: string; initial?: "i
       email,
       password,
       options: {
-        data: { full_name: String(f.get("full_name")).trim(), role, town: String(f.get("town") || ""), terms_accepted_at: new Date().toISOString() },
+        data: { full_name: String(f.get("full_name")).trim(), role, town: String(f.get("town") || ""), phone: String(f.get("phone") || "").trim(), terms_accepted_at: new Date().toISOString(), ...(role === "student" ? { guardian_consent_at: new Date().toISOString() } : {}) },
         emailRedirectTo: `${window.location.origin}/auth/callback?next=${encodeURIComponent(role === "teacher" ? "/teach" : role === "institute" ? "/manage" : next)}&role=${role}`,
       },
     });
@@ -91,12 +92,17 @@ export function LoginForm({ next, initial = "in" }: { next: string; initial?: "i
             <div className="filters">
               {ROLES.map(([k, l], i) => (
                 <label key={k} className="radio-opt">
-                  <input type="radio" name="role" value={k} defaultChecked={i === 0} />
+                  <input type="radio" name="role" value={k} defaultChecked={i === 0} onChange={() => setRole(k)} />
                   {l}
                 </label>
               ))}
             </div>
           </fieldset>
+          <label className="field" htmlFor="phone">
+            رقم الجوال (اختياري)
+            <input id="phone" name="phone" type="tel" dir="ltr" inputMode="tel" placeholder="050-1234567" autoComplete="tel" />
+            <span className="small muted">لتذكيرات الحصص برسالة نصية أو واتساب.</span>
+          </label>
           <label className="field" htmlFor="town">
             البلد
             <select id="town" name="town" defaultValue="باقة الغربية">
@@ -121,11 +127,19 @@ export function LoginForm({ next, initial = "in" }: { next: string; initial?: "i
       {mode === "reset" && (
         <button type="button" className="link small" style={{ alignSelf: "flex-start" }} onClick={() => { setMode("in"); setError(null); }}>العودة لتسجيل الدخول</button>
       )}
+      {mode === "up" && role === "student" && (
+        <label className="row small consent" style={{ alignItems: "flex-start" }}>
+          <input type="checkbox" name="guardian_ok" required style={{ marginTop: 3 }} />
+          <span>
+            أقرّ بأن عمري 18 سنة أو أكثر، <b>أو</b> أنني أستعمل Classi بإذن من أهلي وبمعرفتهم، ويوجد معي شخص بالغ مسؤول عني يتابع حجوزاتي.
+          </span>
+        </label>
+      )}
       {mode === "up" && (
         <label className="row small" style={{ alignItems: "flex-start" }}>
           <input type="checkbox" name="terms" required style={{ marginTop: 3 }} />
           <span>
-            قرأت وأوافق على <a className="link" href="/terms" target="_blank">شروط الاستخدام</a> و<a className="link" href="/privacy" target="_blank">سياسة الخصوصية</a>. إذا كان الطالب دون 18، يُنشئ الحساب ولي أمره.
+            قرأت وأوافق على <a className="link" href="/terms" target="_blank">شروط الاستخدام</a> و<a className="link" href="/privacy" target="_blank">سياسة الخصوصية</a>.
           </span>
         </label>
       )}

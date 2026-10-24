@@ -13,7 +13,7 @@ export function Legal({ title, children }: { title: string; children: React.Reac
         <p className="small muted">آخر تحديث: {LEGAL_UPDATED}</p>
         {children}
         <p className="small muted">
-          <Link className="link" href="/terms">شروط الاستخدام</Link> · <Link className="link" href="/privacy">سياسة الخصوصية</Link>
+          <Link className="link" href="/terms">شروط الاستخدام</Link> · <Link className="link" href="/privacy">سياسة الخصوصية</Link> · <a className="link" href="mailto:classi@torix.click" dir="ltr">classi@torix.click</a>
         </p>
       </article>
     </div>

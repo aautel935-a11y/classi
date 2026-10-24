@@ -76,3 +76,6 @@ export const SUBJECT_LOOK: Record<string, { glyph: string; ink: string; tint: st
   "بسيخومتري": { glyph: "800", ink: "#5B2A86", tint: "#ECE1F5" },
 };
 export const subjectLook = (name?: string | null) => SUBJECT_LOOK[name ?? ""] ?? { glyph: "✎", ink: "#1E2F6E", tint: "#E3E8F7" };
+
+/** Report scale, 1–5. */
+export const LEVELS = ["", "ضعيف", "مقبول", "جيد", "جيد جداً", "ممتاز"];

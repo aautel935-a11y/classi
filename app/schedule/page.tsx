@@ -25,10 +25,12 @@ export default async function Schedule({ searchParams }: { searchParams: Promise
     .in("status", ["pending", "confirmed"])
     .order("created_at", { ascending: false });
   const rows = ((data ?? []) as unknown as Row[]).filter((r) => r.offering);
-  const [{ data: links }, { data: wl }] = await Promise.all([
+  const [{ data: links }, { data: wl }, { count: unreadReports0 }] = await Promise.all([
     supabase.from("offering_links").select("offering_id,url,note"),
     supabase.rpc("my_waitlist"),
+    supabase.from("lesson_reports").select("id", { count: "exact", head: true }).eq("student_user", user.id).is("read_at", null),
   ]);
+  const unreadReports = unreadReports0 ?? 0;
   const waits = (wl ?? []) as { id: string; offering_id: string; offering_title: string; owner_name: string; child_name: string | null; status: string; reply: string | null; pos: number | null }[];
   const linkOf = (oid: string) => (links ?? []).find((l) => l.offering_id === oid);
 
@@ -74,7 +76,10 @@ export default async function Schedule({ searchParams }: { searchParams: Promise
         )}
         {sp.cancelled_series && <p className="okmsg">أُلغي الموعد الأسبوعي ({sp.cancelled_series} حصص قادمة).</p>}
         {sp.error && <p className="err">{sp.error}</p>}
-        <p className="small muted">كل الحصص والدورات لك ولأبنائك في مكان واحد.</p>
+        <div className="row between">
+          <p className="small muted">كل الحصص والدورات لك ولأبنائك في مكان واحد.</p>
+          <Link className="btn sm ghost" href="/reports"><Icon name="check" />تقارير الحصص{unreadReports > 0 ? ` (${unreadReports})` : ""}</Link>
+        </div>
         {sp.left && <p className="okmsg">خرجت من قائمة الانتظار.</p>}
         <PushToggle compact />
         {waits.length > 0 && (

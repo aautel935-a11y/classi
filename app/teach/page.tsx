@@ -42,7 +42,7 @@ export default async function Teach({ searchParams }: { searchParams: Promise<Re
     );
   }
 
-  const [{ data: bookings }, { data: offers }, { data: courseSessions }, { data: subjectList }, { data: hours }, { data: links }, { data: wl }] = await Promise.all([
+  const [{ data: bookings }, { data: offers }, { data: courseSessions }, { data: subjectList }, { data: hours }, { data: links }, { data: wl }, { data: pend }] = await Promise.all([
     supabase.rpc("owner_bookings"),
     supabase.from("offerings").select(OFFERING_SELECT).eq("teacher_id", t.id).order("created_at"),
     supabase
@@ -56,6 +56,7 @@ export default async function Teach({ searchParams }: { searchParams: Promise<Re
     supabase.from("availability").select("weekday,start_time,end_time").eq("teacher_id", t.id),
     supabase.from("offering_links").select("offering_id"),
     supabase.rpc("owner_waitlist"),
+    supabase.rpc("pending_reports"),
   ]);
   const hasLink = new Set((links ?? []).map((l) => l.offering_id));
   const hourDays = new Set((hours ?? []).map((h) => h.weekday));
@@ -87,7 +88,7 @@ export default async function Teach({ searchParams }: { searchParams: Promise<Re
         )}
         {sp.ok && (
           <p className="okmsg">
-            {({ profile: "حُفظ ملفك.", hours: "حُفظت أوقاتك المتاحة.", hidden: "أُخفي العرض. لم يعد يظهر للطلاب.", shown: "العرض ظاهر الآن للطلاب.", deleted: "حُذف العرض." } as Record<string, string>)[sp.ok] ?? "نُشر العرض."}
+            {({ profile: "حُفظ ملفك.", hours: "حُفظت أوقاتك المتاحة.", hidden: "أُخفي العرض. لم يعد يظهر للطلاب.", shown: "العرض ظاهر الآن للطلاب.", deleted: "حُذف العرض.", report: "أُرسل التقرير ووصل ولي الأمر إشعار." } as Record<string, string>)[sp.ok] ?? "نُشر العرض."}
           </p>
         )}
         {sp.error && <p className="err">{sp.error}</p>}
@@ -95,6 +96,7 @@ export default async function Teach({ searchParams }: { searchParams: Promise<Re
         <div className="stats">
           <div className="stat hl"><b className="num">{todays.length}</b><span>حصص اليوم</span></div>
           <div className="stat"><b className="num">{requests.length}</b><span>طلبات جديدة</span></div>
+          {((pend ?? []) as any[]).length > 0 && <a className="stat" href="#reports"><b className="num">{(pend as any[]).length}</b><span>تقارير ناقصة</span></a>}
           {waitlist.length > 0 && <a className="stat" href="#waitlist"><b className="num">{waitlist.length}</b><span>في الانتظار</span></a>}
           <div className="stat"><b className="num">{new Set(rows.filter((b) => b.status === "confirmed").map((b) => b.student_name)).size}</b><span>طلاب</span></div>
         </div>
@@ -152,6 +154,22 @@ export default async function Teach({ searchParams }: { searchParams: Promise<Re
           </div>
         ))}
       </section>
+
+      {((pend ?? []) as any[]).length > 0 && (
+        <section className="section" id="reports">
+          <h2>تقارير بانتظارك <span className="badge num">{(pend as any[]).length}</span></h2>
+          <p className="small muted">دقيقة واحدة بعد كل حصة: ماذا تعلّم الطالب، الواجب، ومستواه. يصل ولي الأمر فوراً.</p>
+          {((pend ?? []) as { booking_id: string | null; session_id: string | null; title: string; who: string | null; lesson_at: string; kind: string; students: number }[]).map((p) => (
+            <Link key={p.booking_id ?? p.session_id!} className="card" href={p.booking_id ? `/teach/report?booking=${p.booking_id}` : `/teach/report?session=${p.session_id}`} style={{ flexDirection: "row", alignItems: "center", gap: 12, color: "inherit", textDecoration: "none" }}>
+              <div className="stack" style={{ gap: 2, flex: 1, minWidth: 0 }}>
+                <b>{p.who ?? `${p.title} (${p.students} طلاب)`}</b>
+                <span className="small muted">{p.who ? `${p.title} · ` : ""}{dayLong(p.lesson_at)} {time(p.lesson_at)}</span>
+              </div>
+              <span className="btn sm">اكتب التقرير</span>
+            </Link>
+          ))}
+        </section>
+      )}
 
       <WaitlistOwner rows={waitlist} back="/teach" flash={sp.wl} />
 

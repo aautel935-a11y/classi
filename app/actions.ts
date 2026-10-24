@@ -137,7 +137,10 @@ export async function switchRoleAction(form: FormData) {
 export async function updateProfileAction(form: FormData) {
   const { supabase, user } = await client();
   if (!user) redirect("/login");
-  await supabase.from("profiles").update({ full_name: str(form, "full_name"), town: str(form, "town") || null }).eq("id", user.id);
+  const rawPhone = str(form, "phone").replace(/[^0-9+]/g, "");
+  const phone = rawPhone ? (/^(\+?972|0)5\d{8}$/.test(rawPhone) ? rawPhone.replace(/^(\+?972|0)/, "+972") : "bad") : null;
+  if (phone === "bad") redirect(`/account?error=${encodeURIComponent("رقم الهاتف غير صحيح. اكتب رقم جوال مثل 0501234567.")}`);
+  await supabase.from("profiles").update({ full_name: str(form, "full_name"), town: str(form, "town") || null, phone, sms_ok: form.get("sms_ok") === "on" }).eq("id", user.id);
   revalidatePath("/account");
 }
 
@@ -739,4 +742,51 @@ export async function cancelPackageAction(form: FormData) {
   const { error } = await supabase.rpc("cancel_package", { p_package: str(form, "id") });
   revalidatePath(back);
   redirect(`${back}?${error ? `error=${encodeURIComponent(error.message)}` : "saved=package"}`);
+}
+
+// ---------- lesson reports ----------
+const rating = (form: FormData, k: string) => {
+  const n = num(form, k);
+  return n >= 1 && n <= 5 ? n : null;
+};
+
+export async function writeReportAction(form: FormData) {
+  const { supabase, user } = await client();
+  if (!user) redirect("/login?next=/teach");
+  const booking = str(form, "booking_id");
+  const back = str(form, "back") || "/teach";
+  const { error } = await supabase.rpc("write_lesson_report", {
+    p_booking: booking,
+    p_session: str(form, "session_id") || null,
+    p_summary: str(form, "summary") || null,
+    p_homework: str(form, "homework") || null,
+    p_understanding: rating(form, "understanding"),
+    p_participation: rating(form, "participation"),
+    p_note: str(form, "note") || null,
+    p_present: str(form, "absent") !== "on",
+  });
+  if (error) redirect(`/teach/report?booking=${booking}&error=${encodeURIComponent(error.message)}`);
+  revalidatePath("/teach");
+  redirect(`${back}${back.includes("?") ? "&" : "?"}ok=report`);
+}
+
+export async function writeSessionReportsAction(form: FormData) {
+  const { supabase, user } = await client();
+  if (!user) redirect("/login?next=/teach");
+  const session = str(form, "session_id");
+  const back = str(form, "back") || "/teach";
+  const n = Math.min(num(form, "count"), 200);
+  const items = Array.from({ length: n }, (_, i) => ({
+    booking_id: str(form, `b_${i}`),
+    present: str(form, `absent_${i}`) !== "on",
+    understanding: rating(form, `u_${i}`),
+    participation: rating(form, `p_${i}`),
+    note: str(form, `n_${i}`) || null,
+  })).filter((x) => x.booking_id);
+  const { error } = await supabase.rpc("write_session_reports", {
+    p_session: session, p_summary: str(form, "summary"), p_homework: str(form, "homework") || null, p_items: items,
+  });
+  if (error) redirect(`/teach/report?session=${session}&error=${encodeURIComponent(error.message)}`);
+  revalidatePath("/teach");
+  redirect(`${back}${back.includes("?") ? "&" : "?"}ok=report`);
 }
