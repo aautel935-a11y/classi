@@ -5,6 +5,7 @@ import { TypeBadge } from "@/components/OfferCard";
 import { getSession } from "@/lib/session";
 import { OFFERING_SELECT, PLACES, TYPES, ownerName, ownerOf, ownerPhoto, type Offering } from "@/lib/types";
 import { Avatar } from "@/components/Avatar";
+import { MessageButton } from "@/components/MessageButton";
 import { dayLong, shekel, time } from "@/lib/format";
 import { nextDays, privateSlots } from "@/lib/dates";
 import { BookingFlow } from "./BookingFlow";
@@ -21,6 +22,10 @@ export default async function OfferPage({ params }: { params: Promise<{ id: stri
   const own = ownerOf(o);
   if (!own) notFound();
   const { data: mine } = user ? await supabase.rpc("is_offering_owner", { p_offering: o.id }) : { data: false };
+  const { data: ownerAccount } = o.teacher
+    ? await supabase.from("teachers").select("user_id").eq("id", o.teacher.id).maybeSingle()
+    : await supabase.from("institutes").select("owner_id").eq("id", o.institute!.id).maybeSingle();
+  const canMessage = !mine && !!((ownerAccount as any)?.user_id ?? (ownerAccount as any)?.owner_id);
 
   // what the booking sheet needs
   let slots: ReturnType<typeof privateSlots> = [];
@@ -111,6 +116,14 @@ export default async function OfferPage({ params }: { params: Promise<{ id: stri
             رابط زوم أو ميت يظهر في جدولك بعد تأكيد الحجز.
           </p>
         ) : null}
+        {canMessage && (
+          <MessageButton
+            teacherId={o.teacher?.id}
+            instituteId={o.teacher ? undefined : o.institute?.id}
+            back={`/offer/${o.id}`}
+            label={o.teacher ? "اسأل المعلم قبل الحجز" : "اسأل المعهد قبل التسجيل"}
+          />
+        )}
         {mine ? (
           <Link className="btn ghost block" href={`/manage/course/${o.id}`}>هذا عرضك: إدارة العرض</Link>
         ) : user ? (

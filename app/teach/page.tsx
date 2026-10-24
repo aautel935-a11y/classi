@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { Icon } from "@/components/Icon";
 import { OfferCard } from "@/components/OfferCard";
-import { deleteOfferingAction, respondAction, saveAvailabilityAction, teacherSetupAction, toggleOfferingAction, updateTeacherAction } from "@/app/actions";
+import { deleteOfferingAction, respondAction, startBookingConversationAction, saveAvailabilityAction, teacherSetupAction, toggleOfferingAction, updateTeacherAction } from "@/app/actions";
 import { PhotoUpload } from "@/components/PhotoUpload";
 import { requireUser } from "@/lib/session";
 import { OFFERING_SELECT, TOWNS, type Offering } from "@/lib/types";
@@ -122,6 +122,7 @@ export default async function Teach({ searchParams }: { searchParams: Promise<Re
             <div className="row">
               <form action={respondAction}><input type="hidden" name="id" value={r.booking_id} /><input type="hidden" name="accept" value="1" /><button className="btn sm okb">قبول</button></form>
               <form action={respondAction}><input type="hidden" name="id" value={r.booking_id} /><input type="hidden" name="accept" value="0" /><button className="btn sm badb">رفض</button></form>
+              <form action={startBookingConversationAction}><input type="hidden" name="booking_id" value={r.booking_id} /><button className="btn sm ghost"><Icon name="chat" />راسل</button></form>
             </div>
           </div>
         ))}
@@ -188,6 +189,7 @@ export default async function Teach({ searchParams }: { searchParams: Promise<Re
               <p className="err small">لم تضف رابط {o.type === "recorded" ? "المحتوى" : "زوم"} بعد. الطلاب لن يعرفوا أين يدخلون.</p>
             )}
             <form action={toggleOfferingAction} className="row" style={{ gap: 16 }}>
+              <Link className="link small" href={`/manage/course/${o.id}?edit=1`}>تعديل السعر والتفاصيل</Link>
               <Link className="link small" href={`/manage/course/${o.id}`}>إدارة العرض{o.type === "recorded" || o.places.includes("online") ? " والرابط" : ""}</Link>
               <input type="hidden" name="id" value={o.id} />
               <input type="hidden" name="path" value="/teach" />

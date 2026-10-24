@@ -4,6 +4,7 @@ import { OfferCard } from "@/components/OfferCard";
 import { createClient } from "@/lib/supabase/server";
 import { OFFERING_SELECT, type Offering } from "@/lib/types";
 import { Avatar } from "@/components/Avatar";
+import { MessageButton } from "@/components/MessageButton";
 
 export const dynamic = "force-dynamic";
 
@@ -11,7 +12,7 @@ export default async function InstitutePage({ params }: { params: Promise<{ id: 
   const { id } = await params;
   const supabase = await createClient();
   const [{ data: ins }, { data: offers }, { count: staff }, { data: seats }] = await Promise.all([
-    supabase.from("institutes").select("id,name,town,bio,rating,reviews_count,verify,logo_url").eq("id", id).maybeSingle(),
+    supabase.from("institutes").select("id,owner_id,name,town,bio,rating,reviews_count,verify,logo_url").eq("id", id).maybeSingle(),
     supabase.from("offerings").select(OFFERING_SELECT).eq("institute_id", id).eq("active", true),
     supabase.from("institute_teachers").select("teacher_id", { count: "exact", head: true }).eq("institute_id", id),
     supabase.rpc("seats_overview"),
@@ -32,7 +33,8 @@ export default async function InstitutePage({ params }: { params: Promise<{ id: 
           </div>
         </div>
       </div>
-      <div className="facts">
+      {ins.owner_id && <MessageButton instituteId={ins.id} back={`/institute/${ins.id}`} label="راسل المعهد" />}
+      <div className="facts" style={{ marginTop: 12 }}>
         <div className="fact"><b className="num">{Number(ins.rating).toFixed(1)}</b><span>التقييم</span></div>
         <div className="fact"><b className="num">{staff ?? 0}</b><span>معلمين</span></div>
         <div className="fact"><b className="num">{list.length}</b><span>دورات</span></div>

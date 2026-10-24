@@ -137,7 +137,7 @@ export function BookingFlow({ offering: o, slots, groupSessions, kids }: Props) 
                       <span className="dot" />
                       <span>
                         {p === "online" ? "أونلاين (زوم أو ميت)" : p === "home" ? "حضوري" : PLACES[p]}
-                        {p === "home" && o.type === "private" && <span className="muted small"> · نتفق على المكان في الرسائل</span>}
+                        {p === "home" && o.type === "private" && <span className="muted small"> · تتفقان على المكان في الرسائل</span>}
                       </span>
                     </button>
                   ))}

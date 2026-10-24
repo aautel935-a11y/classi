@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { Avatar } from "@/components/Avatar";
-import { adminVerifyAction } from "@/app/actions";
+import { adminVerifyAction, resolveReportAction } from "@/app/actions";
 import { requireUser } from "@/lib/session";
 import { dayLong } from "@/lib/format";
 
@@ -14,11 +14,12 @@ export default async function Admin({ searchParams }: { searchParams: Promise<Re
       <div className="wrap"><div className="empty stack"><h1>هذه الصفحة للمدير فقط</h1><Link className="btn" href="/">الرئيسية</Link></div></div>
     );
   }
-  const [{ data: teachers }, { data: institutes }, { count: users }, { count: bookings }] = await Promise.all([
+  const [{ data: teachers }, { data: institutes }, { count: users }, { count: bookings }, { data: reports }] = await Promise.all([
     supabase.from("teachers").select("id,name,town,bio,years,is_school_teacher,photo_url,created_at,verify,subject:subjects(name)").neq("verify", "verified").order("created_at"),
     supabase.from("institutes").select("id,name,town,bio,logo_url,created_at,verify").neq("verify", "verified").order("created_at"),
     supabase.from("profiles").select("id", { count: "exact", head: true }),
     supabase.from("bookings").select("id", { count: "exact", head: true }),
+    supabase.from("conversation_reports").select("id,conversation_id,reason,created_at").eq("resolved", false).order("created_at"),
   ]);
   const Buttons = ({ kind, id }: { kind: string; id: string }) => (
     <div className="row">
@@ -38,6 +39,21 @@ export default async function Admin({ searchParams }: { searchParams: Promise<Re
         </div>
         <p className="note">قبل التوثيق: تأكد من الهوية والشهادات، وإذن العمل مع القاصرين لمن يدرّس طلاباً تحت 18.</p>
       </div>
+      <section className="section">
+        <h2>بلاغات عن محادثات</h2>
+        {(reports ?? []).length === 0 && <div className="empty">لا بلاغات مفتوحة.</div>}
+        {(reports ?? []).map((r) => (
+          <div key={r.id} className="card">
+            <p className="small">{r.reason || "بدون سبب مكتوب"}</p>
+            <span className="small muted">{dayLong(r.created_at)}</span>
+            <div className="row">
+              <Link className="btn sm ghost" href={`/messages/${r.conversation_id}`}>قراءة المحادثة</Link>
+              <form action={resolveReportAction}><input type="hidden" name="id" value={r.id} /><button className="btn sm okb">تمت المعالجة</button></form>
+            </div>
+          </div>
+        ))}
+      </section>
+
       <section className="section">
         <h2>معلمون</h2>
         {(teachers ?? []).length === 0 && <div className="empty">لا معلمين بانتظار التوثيق.</div>}

@@ -4,6 +4,7 @@ import { OfferCard } from "@/components/OfferCard";
 import { createClient } from "@/lib/supabase/server";
 import { OFFERING_SELECT, type Offering } from "@/lib/types";
 import { Avatar } from "@/components/Avatar";
+import { MessageButton } from "@/components/MessageButton";
 
 export const dynamic = "force-dynamic";
 
@@ -11,7 +12,7 @@ export default async function TeacherPage({ params }: { params: Promise<{ id: st
   const { id } = await params;
   const supabase = await createClient();
   const [{ data: t }, { data: offers }] = await Promise.all([
-    supabase.from("teachers").select("id,name,town,bio,years,is_school_teacher,rating,reviews_count,verify,photo_url,subject:subjects(name)").eq("id", id).maybeSingle(),
+    supabase.from("teachers").select("id,user_id,name,town,bio,years,is_school_teacher,rating,reviews_count,verify,photo_url,subject:subjects(name)").eq("id", id).maybeSingle(),
     supabase.from("offerings").select(OFFERING_SELECT).eq("teacher_id", id).eq("active", true),
   ]);
   if (!t) notFound();
@@ -33,7 +34,8 @@ export default async function TeacherPage({ params }: { params: Promise<{ id: st
           </div>
         </div>
       </div>
-      <div className="facts">
+      {teacher.user_id && <MessageButton teacherId={teacher.id} back={`/teacher/${teacher.id}`} label="راسل المعلم" />}
+      <div className="facts" style={{ marginTop: 12 }}>
         <div className="fact"><b className="num">{Number(teacher.rating).toFixed(1)}</b><span>التقييم</span></div>
         <div className="fact"><b className="num">{teacher.reviews_count}</b><span>تقييماً</span></div>
         <div className="fact"><b className="num">{teacher.years}</b><span>سنوات خبرة</span></div>

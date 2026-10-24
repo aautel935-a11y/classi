@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { Icon } from "@/components/Icon";
-import { saveLinkAction } from "@/app/actions";
+import { saveLinkAction, startBookingConversationAction, updateOfferingAction } from "@/app/actions";
 import { requireUser } from "@/lib/session";
 import { PAY_LABEL, PLACES, TYPES, type OfferingType, type Place } from "@/lib/types";
 import { dayLong, isoDay, time } from "@/lib/format";
@@ -18,7 +18,7 @@ export default async function ManageOffer({ params, searchParams }: { params: Pr
   const { supabase } = await requireUser(path);
   const { data: o } = await supabase
     .from("offerings")
-    .select("id,type,title,seats,places,institute_id,teacher_id,course_teacher:teachers!offerings_course_teacher_id_fkey(name)")
+    .select("id,type,title,price,seats,places,lessons_count,subject_id,level_id,course_teacher_id,institute_id,teacher_id,course_teacher:teachers!offerings_course_teacher_id_fkey(name)")
     .eq("id", id)
     .maybeSingle();
   if (!o) notFound();
@@ -27,12 +27,16 @@ export default async function ManageOffer({ params, searchParams }: { params: Pr
     supabase.rpc("is_offering_owner", { p_offering: id }),
   ]);
   if (!staff) notFound();
-  const [{ data: sessions }, { data: rooms }, { data: roster }, { data: link }] = await Promise.all([
+  const [{ data: sessions }, { data: rooms }, { data: roster }, { data: link }, { data: subjects }, { data: levels }, { data: staffList }] = await Promise.all([
     supabase.from("sessions").select("id,seq,starts_at,changed,cancelled,room_id,room:rooms(name)").eq("offering_id", id).order("seq"),
     o.institute_id ? supabase.from("rooms").select("id,name").eq("institute_id", o.institute_id).order("name") : Promise.resolve({ data: [] as { id: string; name: string }[] }),
     supabase.rpc("owner_bookings", { p_offering: id }),
     supabase.from("offering_links").select("url,note").eq("offering_id", id).maybeSingle(),
+    supabase.from("subjects").select("id,name").order("id"),
+    supabase.from("levels").select("id,name").order("sort"),
+    o.institute_id ? supabase.from("institute_teachers").select("teacher:teachers(id,name)").eq("institute_id", o.institute_id) : Promise.resolve({ data: [] as any[] }),
   ]);
+  const placeNow = (o.places as string[]).includes("home") && (o.places as string[]).includes("online") ? "both" : (o.places as string[])[0];
   const type = o.type as OfferingType;
   const places = o.places as Place[];
   const list = ((roster ?? []) as any[]).filter((b) => b.status === "confirmed" || b.status === "pending");
@@ -51,9 +55,58 @@ export default async function ManageOffer({ params, searchParams }: { params: Pr
           {list.length} {type === "private" ? "حجز" : "طالباً"}
           {(sessions ?? []).length ? ` · ${(sessions ?? []).length} لقاء` : ""}
         </p>
-        {sp.saved && <p className="okmsg">حُفظ الرابط. يراه الطلاب المؤكَّدون في جدولهم.</p>}
+        {sp.saved === "link" && <p className="okmsg">حُفظ الرابط. يراه الطلاب المؤكَّدون في جدولهم.</p>}
+        {sp.saved === "offer" && <p className="okmsg">حُفظت التعديلات. السعر الجديد يسري على الحجوزات القادمة فقط.</p>}
         {sp.error && <p className="err">{sp.error}</p>}
       </div>
+
+      {owner && (
+        <section className="section">
+          <details className="card" open={sp.edit === "1"}>
+            <summary className="row between" style={{ cursor: "pointer" }}><b>تعديل العرض</b><span className="link small">السعر والتفاصيل</span></summary>
+            <form action={updateOfferingAction} className="formstack" style={{ marginTop: 12 }}>
+              <input type="hidden" name="id" value={id} />
+              <label className="field" htmlFor="ed-title">العنوان<input id="ed-title" name="title" required minLength={3} defaultValue={o.title} /></label>
+              <div className="typeform">
+                <label className="field" htmlFor="ed-price">
+                  السعر (₪) {TYPES[type].unit}
+                  <input id="ed-price" name="price" type="number" min={0} required defaultValue={o.price} />
+                </label>
+                <label className="field" htmlFor="ed-subject">المادة<select id="ed-subject" name="subject_id" defaultValue={o.subject_id ?? ""}>{(subjects ?? []).map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}</select></label>
+                <label className="field" htmlFor="ed-level">المرحلة<select id="ed-level" name="level_id" defaultValue={o.level_id ?? ""}>{(levels ?? []).map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}</select></label>
+                {(type === "private" || type === "group") && (
+                  <label className="field" htmlFor="ed-place">
+                    المكان
+                    <select id="ed-place" name="place" defaultValue={placeNow}>
+                      <option value="home">حضوري</option>
+                      <option value="online">أونلاين</option>
+                      {type === "private" && <option value="both">الاثنان</option>}
+                    </select>
+                  </label>
+                )}
+                {(type === "group" || type === "course") && (
+                  <label className="field" htmlFor="ed-seats">عدد المقاعد<input id="ed-seats" name="seats" type="number" min={1} defaultValue={o.seats ?? ""} /></label>
+                )}
+                {type === "recorded" && (
+                  <label className="field" htmlFor="ed-lessons">عدد الدروس<input id="ed-lessons" name="lessons" type="number" min={1} defaultValue={o.lessons_count ?? ""} /></label>
+                )}
+                {type === "course" && (
+                  <label className="field" htmlFor="ed-teacher">
+                    المعلم
+                    <select id="ed-teacher" name="teacher_id" defaultValue={o.course_teacher_id ?? ""}>
+                      <option value="">بدون</option>
+                      {(staffList ?? []).map((s: any) => s.teacher && <option key={s.teacher.id} value={s.teacher.id}>{s.teacher.name}</option>)}
+                    </select>
+                  </label>
+                )}
+              </div>
+              {type === "course" && <label className="row"><input type="checkbox" name="online" defaultChecked={places.includes("online")} /> يمكن الحضور أونلاين أيضاً</label>}
+              <p className="note"><Icon name="check" />من حجز قبل التعديل يبقى على السعر الذي حجز به.</p>
+              <button className="btn">حفظ التعديلات</button>
+            </form>
+          </details>
+        </section>
+      )}
 
       {needsLink && (
         <section className="section">
@@ -122,6 +175,12 @@ export default async function ManageOffer({ params, searchParams }: { params: Pr
             <div className="stack" style={{ gap: 4, alignItems: "flex-end" }}>
               <span className={`badge ${b.status === "confirmed" ? "ok" : ""}`}>{b.status === "confirmed" ? "مؤكد" : "بانتظار ردّك"}</span>
               <span className="small muted">{PAY_LABEL[b.pay_method] ?? b.pay_method}</span>
+              {owner && (
+                <form action={startBookingConversationAction}>
+                  <input type="hidden" name="booking_id" value={b.booking_id} />
+                  <button className="link small"><Icon name="chat" /> راسل</button>
+                </form>
+              )}
             </div>
           </div>
         ))}

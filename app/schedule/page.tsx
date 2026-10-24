@@ -8,7 +8,7 @@ import { dayNum, dayShort, monthName, time } from "@/lib/format";
 export const dynamic = "force-dynamic";
 
 type Row = {
-  id: string; status: string; pay_method: string; starts_at: string | null; session_id: string | null; mode: Place | null;
+  id: string; status: string; pay_method: string; starts_at: string | null; session_id: string | null; mode: Place | null; price: number | null;
   child: { name: string } | null;
   session: { starts_at: string } | null;
   offering: { id: string; type: string; title: string; places: Place[]; teacher: { name: string } | null; institute: { name: string } | null };
@@ -19,7 +19,7 @@ export default async function Schedule({ searchParams }: { searchParams: Promise
   const { supabase, user } = await requireUser("/schedule");
   const { data } = await supabase
     .from("bookings")
-    .select("id,status,pay_method,starts_at,session_id,mode,child:children(name),session:sessions(starts_at),offering:offerings(id,type,title,places,teacher:teachers!offerings_teacher_id_fkey(name),institute:institutes(name))")
+    .select("id,status,pay_method,starts_at,session_id,mode,price,child:children(name),session:sessions(starts_at),offering:offerings(id,type,title,places,teacher:teachers!offerings_teacher_id_fkey(name),institute:institutes(name))")
     .eq("booked_by", user.id)
     .in("status", ["pending", "confirmed"])
     .order("created_at", { ascending: false });
@@ -96,7 +96,7 @@ export default async function Schedule({ searchParams }: { searchParams: Promise
                   <span className="badge">بانتظار موافقة المعلم</span>
                 )}
                 {changed && <span className="badge">غيّر المعهد الموعد</span>}
-                <span className="badge">الدفع: {PAY_LABEL[r.pay_method] ?? r.pay_method}</span>
+                <span className="badge">الدفع: {PAY_LABEL[r.pay_method] ?? r.pay_method}{r.price != null ? ` · ${r.price} ₪` : ""}</span>
               </div>
               {(() => {
                 const l = linkOf(r.offering.id);

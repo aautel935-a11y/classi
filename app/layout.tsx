@@ -2,7 +2,7 @@ import type { Metadata, Viewport } from "next";
 import Link from "next/link";
 import "./globals.css";
 import { BottomNav } from "@/components/BottomNav";
-import { Logo } from "@/components/Icon";
+import { Icon, Logo } from "@/components/Icon";
 import { isConfigured } from "@/lib/supabase/server";
 import { getSession } from "@/lib/session";
 import { navFor } from "@/lib/types";
@@ -33,9 +33,14 @@ export default async function RootLayout({ children }: { children: React.ReactNo
 async function Shell({ children }: { children: React.ReactNode }) {
   const { supabase, user, profile } = await getSession();
   let unread = 0;
+  let unreadMessages = 0;
   if (user) {
-    const { count } = await supabase.from("notifications").select("id", { count: "exact", head: true }).is("read_at", null);
+    const [{ count }, { data: convs }] = await Promise.all([
+      supabase.from("notifications").select("id", { count: "exact", head: true }).is("read_at", null).neq("kind", "message"),
+      supabase.rpc("my_conversations"),
+    ]);
     unread = count ?? 0;
+    unreadMessages = ((convs ?? []) as { unread: number }[]).reduce((a, c) => a + (c.unread || 0), 0);
   }
   const kind = navFor(profile?.active_role ?? "guardian");
   return (
@@ -48,6 +53,12 @@ async function Shell({ children }: { children: React.ReactNode }) {
               <span>Classi</span>
             </Link>
             <span className="spacer" />
+            {user && (
+              <Link href="/notifications" className="hdr-bell" aria-label={unread ? `الإشعارات، ${unread} جديدة` : "الإشعارات"}>
+                <Icon name="bell" />
+                {unread > 0 && <i className="num">{unread}</i>}
+              </Link>
+            )}
             {!user && (
               <Link className="btn sm" href="/login">
                 تسجيل الدخول
@@ -57,7 +68,7 @@ async function Shell({ children }: { children: React.ReactNode }) {
         </header>
         <main>{children}</main>
       </div>
-      <BottomNav kind={kind} unread={unread} />
+      <BottomNav kind={kind} unread={unreadMessages} />
     </>
   );
 }

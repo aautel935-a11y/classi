@@ -381,3 +381,83 @@ export async function saveAvailabilityAction(form: FormData) {
   revalidatePath("/teach");
   redirect("/teach?ok=hours");
 }
+
+// ---------- editing an offer ----------
+export async function updateOfferingAction(form: FormData) {
+  const { supabase, user } = await client();
+  if (!user) redirect("/login");
+  const id = str(form, "id");
+  const path = `/manage/course/${id}`;
+  const { data: o } = await supabase.from("offerings").select("type,places").eq("id", id).maybeSingle();
+  if (!o) redirect(path);
+  const title = str(form, "title");
+  const price = num(form, "price");
+  if (title.length < 3) redirect(`${path}?error=${encodeURIComponent("العنوان قصير جداً.")}`);
+  if (!(price >= 0)) redirect(`${path}?error=${encodeURIComponent("السعر غير صالح.")}`);
+  const row: Record<string, unknown> = {
+    title,
+    price,
+    subject_id: num(form, "subject_id") || null,
+    level_id: num(form, "level_id") || null,
+  };
+  const placeSel = str(form, "place");
+  if (o.type === "private" || o.type === "group") {
+    row.places = placeSel === "both" ? ["home", "online"] : [(placeSel || "home") as Place];
+  }
+  if (o.type === "course") {
+    row.places = form.get("online") === "on" ? ["center", "online"] : ["center"];
+    row.course_teacher_id = str(form, "teacher_id") || null;
+  }
+  if (o.type === "group" || o.type === "course") row.seats = num(form, "seats") || null;
+  if (o.type === "recorded") row.lessons_count = num(form, "lessons") || null;
+  const { error } = await supabase.from("offerings").update(row).eq("id", id);
+  revalidatePath(path);
+  revalidatePath(`/offer/${id}`);
+  redirect(`${path}?${error ? `error=${encodeURIComponent(error.message)}` : "saved=offer"}`);
+}
+
+// ---------- messages ----------
+export async function startConversationAction(form: FormData) {
+  const { supabase, user } = await client();
+  const back = str(form, "back") || "/";
+  if (!user) redirect(`/login?next=${encodeURIComponent(back)}`);
+  const { data, error } = await supabase.rpc("start_conversation", {
+    p_teacher: str(form, "teacher_id") || null,
+    p_institute: str(form, "institute_id") || null,
+  });
+  if (error || !data) redirect(`/messages?error=${encodeURIComponent(error?.message ?? "تعذّر فتح المحادثة")}`);
+  redirect(`/messages/${data}`);
+}
+
+export async function startBookingConversationAction(form: FormData) {
+  const { supabase, user } = await client();
+  if (!user) redirect("/login");
+  const { data, error } = await supabase.rpc("start_conversation_for_booking", { p_booking: str(form, "booking_id") });
+  if (error || !data) redirect(`/messages?error=${encodeURIComponent(error?.message ?? "تعذّر فتح المحادثة")}`);
+  redirect(`/messages/${data}`);
+}
+
+export async function sendMessageAction(conversationId: string, body: string): Promise<Result> {
+  const { supabase, user } = await client();
+  if (!user) return { error: "سجّل الدخول أولاً." };
+  const text = body.trim();
+  if (!text) return { error: "اكتب رسالة." };
+  if (text.length > 2000) return { error: "الرسالة طويلة جداً." };
+  const { error } = await supabase.from("messages").insert({ conversation_id: conversationId, body: text });
+  if (error) return { error: "تعذّر الإرسال، حاول مرة أخرى." };
+  return { ok: true };
+}
+
+export async function reportConversationAction(form: FormData) {
+  const { supabase, user } = await client();
+  if (!user) redirect("/login");
+  const id = str(form, "conversation_id");
+  await supabase.from("conversation_reports").insert({ conversation_id: id, reason: str(form, "reason") || null });
+  redirect(`/messages/${id}?reported=1`);
+}
+
+export async function resolveReportAction(form: FormData) {
+  const { supabase } = await client();
+  await supabase.from("conversation_reports").update({ resolved: true }).eq("id", str(form, "id"));
+  revalidatePath("/admin");
+}

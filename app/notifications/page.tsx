@@ -6,8 +6,9 @@ import { dayLong, time } from "@/lib/format";
 
 export const dynamic = "force-dynamic";
 
-const ICON: Record<string, "cal" | "check" | "bell" | "users"> = {
+const ICON: Record<string, "cal" | "check" | "bell" | "users" | "chat" | "monitor" | "shield"> = {
   schedule_changed: "cal", booking_answer: "check", booking_request: "users", booking_new: "users", booking_cancelled: "bell",
+  message: "chat", link: "monitor", verify: "shield", report: "shield",
 };
 
 export default async function Notifications() {
