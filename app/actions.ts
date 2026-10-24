@@ -408,6 +408,8 @@ export async function saveAvailabilityAction(form: FormData) {
   await supabase.from("teachers").update({ buffer_minutes: buffer }).eq("id", t.id);
   await supabase.from("availability").delete().eq("teacher_id", t.id);
   if (days.length) await supabase.from("availability").insert(days.map((w) => ({ teacher_id: t.id, weekday: w, start_time: from, end_time: to })));
+  // People waiting for this teacher's private lessons hear about the new hours.
+  if (days.length) await supabase.rpc("waitlist_hours_opened");
   revalidatePath("/teach");
   redirect("/teach?ok=hours");
 }
@@ -555,4 +557,41 @@ export async function cancelSeriesAction(form: FormData) {
   const { data, error } = await supabase.rpc("cancel_series", { p_series: str(form, "id") });
   revalidatePath(back);
   redirect(`${back}?${error ? `error=${encodeURIComponent(error.message)}` : `cancelled_series=${data}`}`);
+}
+
+// ---------- waiting list ----------
+export async function joinWaitlistAction(input: { offeringId: string; childId?: string | null; note?: string }): Promise<Result> {
+  const { supabase, user } = await client();
+  if (!user) return { error: "سجّل الدخول أولاً." };
+  const { data, error } = await supabase.rpc("join_waitlist", {
+    p_offering: input.offeringId,
+    p_child: input.childId || null,
+    p_note: (input.note ?? "").slice(0, 300) || null,
+  });
+  if (error) return { error: error.message };
+  revalidatePath(`/offer/${input.offeringId}`);
+  revalidatePath("/schedule");
+  return { ok: true, count: Number(data) };
+}
+
+export async function leaveWaitlistAction(form: FormData) {
+  const { supabase, user } = await client();
+  if (!user) redirect("/login");
+  const back = str(form, "back") || "/schedule";
+  const { error } = await supabase.rpc("leave_waitlist", { p_id: str(form, "id") });
+  revalidatePath(back);
+  redirect(`${back}${back.includes("?") ? "&" : "?"}${error ? `error=${encodeURIComponent(error.message)}` : "left=1"}`);
+}
+
+export async function respondWaitlistAction(form: FormData) {
+  const { supabase, user } = await client();
+  if (!user) redirect("/login");
+  const back = str(form, "back") || "/teach";
+  const accept = str(form, "accept") === "1";
+  const { data, error } = await supabase.rpc("respond_waitlist", { p_id: str(form, "id"), p_accept: accept, p_reply: str(form, "reply") || null });
+  revalidateTag("catalog");
+  revalidatePath(back);
+  if (error) redirect(`${back}?error=${encodeURIComponent(error.message)}#waitlist`);
+  if (data) redirect(`/messages/${data}`);
+  redirect(`${back}?wl=${accept ? "accepted" : "declined"}#waitlist`);
 }

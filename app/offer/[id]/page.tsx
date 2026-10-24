@@ -11,6 +11,8 @@ import { AdminQuick } from "@/components/AdminQuick";
 import { dayLong, shekel, time } from "@/lib/format";
 import { nextDays, privateSlots } from "@/lib/dates";
 import { BookingFlow } from "./BookingFlow";
+import { WaitlistJoin } from "./WaitlistJoin";
+import { leaveWaitlistAction } from "@/app/actions";
 
 export const dynamic = "force-dynamic";
 
@@ -28,7 +30,7 @@ export default async function OfferPage({ params, searchParams }: { params: Prom
   // Everything else the page needs, fetched at the same time.
   const empty = Promise.resolve({ data: null as any });
   const now = new Date().toISOString();
-  const [mineR, ownerR, avR, busyR, ssR, seatsR, kidsR, bufR] = await Promise.all([
+  const [mineR, ownerR, avR, busyR, ssR, seatsR, kidsR, bufR, wlR] = await Promise.all([
     user ? supabase.rpc("is_offering_owner", { p_offering: o.id }) : empty,
     o.teacher
       ? supabase.from("teachers").select("user_id").eq("id", o.teacher.id).maybeSingle()
@@ -43,6 +45,7 @@ export default async function OfferPage({ params, searchParams }: { params: Prom
     o.type === "group" || o.type === "course" ? supabase.rpc("seats_overview") : empty,
     user ? supabase.from("children").select("id,name,grade").order("created_at") : empty,
     o.type === "private" && o.teacher_id ? supabase.rpc("teacher_buffer", { p_teacher: o.teacher_id }) : empty,
+    user ? supabase.rpc("my_waitlist") : empty,
   ]);
   const mine = mineR.data;
   const ownerAccount = ownerR.data as any;
@@ -56,6 +59,15 @@ export default async function OfferPage({ params, searchParams }: { params: Prom
   const children = kidsR.data;
 
   const full = o.type === "course" && o.seats != null && courseTaken >= o.seats;
+  // Nothing left to book: full course, every upcoming group meeting full, or no free private hours.
+  const noRoom =
+    full ||
+    (o.type === "group" && o.seats != null && groupSessions.length > 0 && groupSessions.every((g) => g.taken >= o.seats!)) ||
+    (o.type === "private" && slots.every((s) => s.busy));
+  const myWait = ((wlR.data ?? []) as { id: string; offering_id: string; status: string; pos: number | null; child_name: string | null }[]).filter((w) => w.offering_id === o.id && w.status !== "declined");
+  const notified = myWait.find((w) => w.status === "notified");
+  // Still in line: waiting, answered, or told of a seat that someone else took first.
+  const waiting = myWait.find((w) => w.status === "waiting" || w.status === "accepted") ?? (noRoom ? notified : undefined);
   const facts: [string, string][] = [
     ["النوع", TYPES[o.type].name],
     ["المادة", o.subject?.name ?? "—"],
@@ -76,7 +88,7 @@ export default async function OfferPage({ params, searchParams }: { params: Prom
           <TypeBadge type={o.type} />
           {o.type === "private" && o.auto_confirm && <span className="badge ok"><Icon name="check" />تأكيد فوري</span>}
           {o.allow_weekly && (o.type === "private" || o.type === "group") && <span className="badge"><Icon name="cal" />يمكن الحجز أسبوعياً</span>}
-          {full && <span className="badge bad">ممتلئ</span>}
+          {noRoom && o.type !== "private" && <span className="badge bad">ممتلئ</span>}
         </div>
         <h1>{o.title}</h1>
         <Link className="card" href={o.teacher ? `/teacher/${own.id}` : `/institute/${own.id}`} style={{ flexDirection: "row", alignItems: "center", gap: 12 }}>
@@ -103,6 +115,8 @@ export default async function OfferPage({ params, searchParams }: { params: Prom
             </span>
           </div>
         </div>
+        {sp.waiting && <p className="okmsg">أُضفت لقائمة الانتظار (رقم {sp.waiting}). نخبرك فور توفّر مكان.</p>}
+        {sp.left && <p className="okmsg">خرجت من قائمة الانتظار.</p>}
         {o.type === "private" && (
           <p className="note">
             <Icon name="clock" />
@@ -131,13 +145,36 @@ export default async function OfferPage({ params, searchParams }: { params: Prom
         )}
         {mine ? (
           <Link className="btn ghost block" href={`/manage/course/${o.id}`}>هذا عرضك: إدارة العرض</Link>
+        ) : user && waiting ? (
+          <div className="card">
+            <b><Icon name="clock" /> {waiting.status === "accepted" ? "ردّ المعلم على طلبك" : `أنت رقم ${waiting.pos} في قائمة الانتظار`}</b>
+            <span className="small muted">
+              {waiting.status === "accepted"
+                ? "تابع معه في الرسائل لتتفقا على موعد."
+                : `${waiting.status === "notified" ? "المكان الذي تحرّر حُجز قبلك، وما زلت في القائمة. " : ""}${waiting.child_name ? `لـ${waiting.child_name}. ` : ""}نرسل لك إشعاراً فور توفّر مكان أو عند ردّ ${o.institute ? "المعهد" : "المعلم"}.`}
+            </span>
+            {waiting.status === "accepted" ? (
+              <Link className="btn sm" href="/messages">الرسائل</Link>
+            ) : (
+              <form action={leaveWaitlistAction}>
+                <input type="hidden" name="id" value={waiting.id} />
+                <input type="hidden" name="back" value={`/offer/${o.id}`} />
+                <button className="link small" style={{ color: "var(--bad)" }}>الخروج من القائمة</button>
+              </form>
+            )}
+          </div>
+        ) : user && noRoom ? (
+          <WaitlistJoin offering={{ id: o.id, type: o.type }} kids={(children ?? []) as { id: string; name: string }[]} owner={o.institute ? "institute" : "teacher"} />
         ) : user ? (
+          <>
+          {notified && <p className="okmsg">تحرّر مكان لك من قائمة الانتظار. احجز الآن قبل غيرك.</p>}
           <BookingFlow
             offering={{ id: o.id, type: o.type, title: o.title, price: o.price, seats: o.seats, full, places: o.places, autoConfirm: !!o.auto_confirm, allowWeekly: !!o.allow_weekly }}
             slots={slots}
             groupSessions={groupSessions}
             kids={(children ?? []) as { id: string; name: string; grade: string | null }[]}
           />
+          </>
         ) : (
           <Link className="btn block" href={`/login?next=/offer/${o.id}`}>
             سجّل الدخول للحجز

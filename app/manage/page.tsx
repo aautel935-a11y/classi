@@ -2,6 +2,7 @@ import Link from "next/link";
 import { Icon } from "@/components/Icon";
 import { addStaffAction, instituteSetupAction, updateInstituteAction } from "@/app/actions";
 import { PhotoUpload } from "@/components/PhotoUpload";
+import { WaitlistOwner, type WRow } from "@/components/WaitlistOwner";
 import { requireUser } from "@/lib/session";
 import { TOWNS } from "@/lib/types";
 import { dayLong, time } from "@/lib/format";
@@ -32,13 +33,14 @@ export default async function Manage({ searchParams }: { searchParams: Promise<R
     );
   }
 
-  const [{ data: courses }, { data: seats }, { data: rooms }, { data: staff }, { data: allTeachers }, { data: log }] = await Promise.all([
+  const [{ data: courses }, { data: seats }, { data: rooms }, { data: staff }, { data: allTeachers }, { data: log }, { data: wl }] = await Promise.all([
     supabase.from("offerings").select("id,title,seats,schedule_note,course_teacher:teachers!offerings_course_teacher_id_fkey(name)").eq("institute_id", inst.id).eq("type", "course").order("created_at"),
     supabase.rpc("seats_overview"),
     supabase.from("rooms").select("id,name").eq("institute_id", inst.id).order("name"),
     supabase.from("institute_teachers").select("teacher:teachers(id,name)").eq("institute_id", inst.id),
     supabase.from("teachers").select("id,name,town").order("name"),
     supabase.from("change_log").select("id,body,notified_count,created_at").order("created_at", { ascending: false }).limit(5),
+    supabase.rpc("owner_waitlist"),
   ]);
   const ids = (courses ?? []).map((c) => c.id);
   const { data: todaySessions } = ids.length
@@ -53,6 +55,7 @@ export default async function Manage({ searchParams }: { searchParams: Promise<R
     : { data: [] as any[] };
   const taken = (oid: string) =>
     ((seats ?? []) as { offering_id: string; session_id: string | null; taken: number }[]).filter((r) => r.offering_id === oid && !r.session_id).reduce((a, r) => a + r.taken, 0);
+  const waitlist = ((wl ?? []) as WRow[]).filter((w) => ids.includes(w.offering_id));
   const staffIds = new Set((staff ?? []).map((s: any) => s.teacher?.id));
 
   return (
@@ -64,8 +67,11 @@ export default async function Manage({ searchParams }: { searchParams: Promise<R
           <div className="stat hl"><b className="num">{ids.reduce((a, id) => a + taken(id), 0)}</b><span>طالباً مسجّلاً</span></div>
           <div className="stat"><b className="num">{ids.length}</b><span>دورات</span></div>
           <div className="stat"><b className="num">{(rooms ?? []).length}</b><span>قاعات</span></div>
+          {waitlist.length > 0 && <a className="stat" href="#waitlist"><b className="num">{waitlist.length}</b><span>في الانتظار</span></a>}
         </div>
       </div>
+
+      <WaitlistOwner rows={waitlist} back="/manage" flash={sp.wl} error={sp.error} />
 
       <section className="section">
         <h2>ملف المعهد</h2>

@@ -6,6 +6,7 @@ import { requireUser } from "@/lib/session";
 import { PAY_LABEL, PLACES, TYPES, type OfferingType, type Place } from "@/lib/types";
 import { dayLong, isoDay, time } from "@/lib/format";
 import { EditSession } from "./EditSession";
+import { WaitlistOwner, type WRow } from "@/components/WaitlistOwner";
 
 export const dynamic = "force-dynamic";
 
@@ -27,7 +28,7 @@ export default async function ManageOffer({ params, searchParams }: { params: Pr
     supabase.rpc("is_offering_owner", { p_offering: id }),
   ]);
   if (!staff) notFound();
-  const [{ data: sessions }, { data: rooms }, { data: roster }, { data: link }, { data: subjects }, { data: levels }, { data: staffList }] = await Promise.all([
+  const [{ data: sessions }, { data: rooms }, { data: roster }, { data: link }, { data: subjects }, { data: levels }, { data: staffList }, { data: wl }] = await Promise.all([
     supabase.from("sessions").select("id,seq,starts_at,changed,cancelled,room_id,room:rooms(name)").eq("offering_id", id).order("seq"),
     o.institute_id ? supabase.from("rooms").select("id,name").eq("institute_id", o.institute_id).order("name") : Promise.resolve({ data: [] as { id: string; name: string }[] }),
     supabase.rpc("owner_bookings", { p_offering: id }),
@@ -35,6 +36,7 @@ export default async function ManageOffer({ params, searchParams }: { params: Pr
     supabase.from("subjects").select("id,name").order("id"),
     supabase.from("levels").select("id,name").order("sort"),
     o.institute_id ? supabase.from("institute_teachers").select("teacher:teachers(id,name)").eq("institute_id", o.institute_id) : Promise.resolve({ data: [] as any[] }),
+    supabase.rpc("owner_waitlist", { p_offering: id }),
   ]);
   const placeNow = (o.places as string[]).includes("home") && (o.places as string[]).includes("online") ? "both" : (o.places as string[])[0];
   const type = o.type as OfferingType;
@@ -170,6 +172,8 @@ export default async function ManageOffer({ params, searchParams }: { params: Pr
           ))}
         </section>
       )}
+
+      {type !== "recorded" && <WaitlistOwner rows={(wl ?? []) as WRow[]} back={path} showTitle={false} canAnswer={!!owner} flash={sp.wl} />}
 
       <section className="section">
         <h2>{type === "private" ? "الحجوزات" : "الطلاب"}</h2>

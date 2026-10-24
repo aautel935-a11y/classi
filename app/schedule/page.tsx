@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { Icon } from "@/components/Icon";
-import { cancelBookingAction, cancelSeriesAction } from "@/app/actions";
+import { cancelBookingAction, cancelSeriesAction, leaveWaitlistAction } from "@/app/actions";
 import { requireUser } from "@/lib/session";
 import { PAY_LABEL, PLACES, type Place } from "@/lib/types";
 import { dayNum, dayShort, monthName, time } from "@/lib/format";
@@ -24,7 +24,11 @@ export default async function Schedule({ searchParams }: { searchParams: Promise
     .in("status", ["pending", "confirmed"])
     .order("created_at", { ascending: false });
   const rows = ((data ?? []) as unknown as Row[]).filter((r) => r.offering);
-  const { data: links } = await supabase.from("offering_links").select("offering_id,url,note");
+  const [{ data: links }, { data: wl }] = await Promise.all([
+    supabase.from("offering_links").select("offering_id,url,note"),
+    supabase.rpc("my_waitlist"),
+  ]);
+  const waits = (wl ?? []) as { id: string; offering_id: string; offering_title: string; owner_name: string; child_name: string | null; status: string; reply: string | null; pos: number | null }[];
   const linkOf = (oid: string) => (links ?? []).find((l) => l.offering_id === oid);
 
   // courses: show the next meeting and whether the institute changed times
@@ -70,6 +74,33 @@ export default async function Schedule({ searchParams }: { searchParams: Promise
         {sp.cancelled_series && <p className="okmsg">أُلغي الموعد الأسبوعي ({sp.cancelled_series} حصص قادمة).</p>}
         {sp.error && <p className="err">{sp.error}</p>}
         <p className="small muted">كل الحصص والدورات لك ولأبنائك في مكان واحد.</p>
+        {sp.left && <p className="okmsg">خرجت من قائمة الانتظار.</p>}
+        {waits.length > 0 && (
+          <div className="stack" style={{ gap: 8 }}>
+            <h2>قوائم الانتظار</h2>
+            {waits.map((w) => (
+              <div key={w.id} className="card">
+                <div className="row between">
+                  <Link href={`/offer/${w.offering_id}`}><b>{w.offering_title}</b></Link>
+                  <span className={`badge ${w.status === "notified" ? "ok" : w.status === "declined" ? "bad" : ""}`}>
+                    {w.status === "notified" ? "تحرّر مكان" : w.status === "accepted" ? "ردّ المعلم" : w.status === "declined" ? "اعتذار" : `رقم ${w.pos}`}
+                  </span>
+                </div>
+                <span className="small muted">{w.owner_name} · {w.child_name ?? "أنا"}</span>
+                {w.status === "notified" && <Link className="btn sm" href={`/offer/${w.offering_id}`}>احجز الآن</Link>}
+                {w.status === "accepted" && <Link className="link small" href="/messages">تابع في الرسائل</Link>}
+                {w.reply && <span className="small">«{w.reply}»</span>}
+                {(w.status === "waiting" || w.status === "notified") && (
+                  <form action={leaveWaitlistAction}>
+                    <input type="hidden" name="id" value={w.id} />
+                    <input type="hidden" name="back" value="/schedule" />
+                    <button className="link small" style={{ color: "var(--bad)" }}>الخروج من القائمة</button>
+                  </form>
+                )}
+              </div>
+            ))}
+          </div>
+        )}
         {visible.length === 0 && (
           <div className="empty">
             لا حصص بعد. <Link className="link" href="/search">ابحث عن معلم</Link> واحجز أول حصة.

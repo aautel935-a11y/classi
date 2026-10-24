@@ -7,7 +7,7 @@ import { dayLong, time } from "@/lib/format";
 export const dynamic = "force-dynamic";
 
 const ICON: Record<string, "cal" | "check" | "bell" | "users" | "chat" | "monitor" | "shield"> = {
-  schedule_changed: "cal", booking_answer: "check", booking_request: "users", booking_new: "users", booking_cancelled: "bell",
+  schedule_changed: "cal", booking_answer: "check", booking_request: "users", booking_new: "users", booking_cancelled: "bell", waitlist_join: "users", waitlist_open: "check", waitlist_answer: "chat",
   message: "chat", link: "monitor", verify: "shield", report: "shield",
 };
 

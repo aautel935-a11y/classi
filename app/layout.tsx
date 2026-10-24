@@ -7,6 +7,7 @@ import { isConfigured } from "@/lib/supabase/server";
 import { getSession, isBlocked } from "@/lib/session";
 import { signOutAction } from "@/app/actions";
 import { navFor } from "@/lib/types";
+import { Splash, splashScript } from "@/components/Splash";
 
 export const metadata: Metadata = {
   title: "Classi",
@@ -17,8 +18,9 @@ export const viewport: Viewport = { width: "device-width", initialScale: 1, view
 
 export default async function RootLayout({ children }: { children: React.ReactNode }) {
   return (
-    <html lang="ar" dir="rtl">
+    <html lang="ar" dir="rtl" suppressHydrationWarning>
       <head>
+        <script dangerouslySetInnerHTML={{ __html: splashScript }} />
         <link rel="preconnect" href="https://fonts.googleapis.com" />
         <link rel="preconnect" href="https://fonts.gstatic.com" crossOrigin="" />
         <link
@@ -26,7 +28,10 @@ export default async function RootLayout({ children }: { children: React.ReactNo
           href="https://fonts.googleapis.com/css2?family=Aref+Ruqaa:wght@700&family=IBM+Plex+Sans+Arabic:wght@400;500;600&family=Readex+Pro:wght@500;600;700&display=swap"
         />
       </head>
-      <body>{isConfigured() ? <Shell>{children}</Shell> : <SetupNotice />}</body>
+      <body>
+        <Splash />
+        {isConfigured() ? <Shell>{children}</Shell> : <SetupNotice />}
+      </body>
     </html>
   );
 }

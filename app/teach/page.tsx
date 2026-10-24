@@ -3,6 +3,7 @@ import { Icon } from "@/components/Icon";
 import { OfferCard } from "@/components/OfferCard";
 import { deleteOfferingAction, respondAction, startBookingConversationAction, saveAvailabilityAction, teacherSetupAction, toggleOfferingAction, updateTeacherAction } from "@/app/actions";
 import { PhotoUpload } from "@/components/PhotoUpload";
+import { WaitlistOwner, type WRow } from "@/components/WaitlistOwner";
 import { requireUser } from "@/lib/session";
 import { OFFERING_SELECT, TOWNS, type Offering } from "@/lib/types";
 import { dayLong, isoDay, time } from "@/lib/format";
@@ -40,7 +41,7 @@ export default async function Teach({ searchParams }: { searchParams: Promise<Re
     );
   }
 
-  const [{ data: bookings }, { data: offers }, { data: courseSessions }, { data: subjectList }, { data: hours }, { data: links }] = await Promise.all([
+  const [{ data: bookings }, { data: offers }, { data: courseSessions }, { data: subjectList }, { data: hours }, { data: links }, { data: wl }] = await Promise.all([
     supabase.rpc("owner_bookings"),
     supabase.from("offerings").select(OFFERING_SELECT).eq("teacher_id", t.id).order("created_at"),
     supabase
@@ -53,6 +54,7 @@ export default async function Teach({ searchParams }: { searchParams: Promise<Re
     supabase.from("subjects").select("id,name").order("id"),
     supabase.from("availability").select("weekday,start_time,end_time").eq("teacher_id", t.id),
     supabase.from("offering_links").select("offering_id"),
+    supabase.rpc("owner_waitlist"),
   ]);
   const hasLink = new Set((links ?? []).map((l) => l.offering_id));
   const hourDays = new Set((hours ?? []).map((h) => h.weekday));
@@ -72,6 +74,8 @@ export default async function Teach({ searchParams }: { searchParams: Promise<Re
   const todays = rows.filter((b) => b.status === "confirmed" && b.starts_at && isoDay(b.starts_at) === today);
   const upcoming = rows.filter((b) => b.status === "confirmed" && b.starts_at && b.starts_at > new Date().toISOString()).slice(0, 6);
   const mine = (offers ?? []) as unknown as Offering[];
+  const myIds = new Set(mine.map((o) => o.id));
+  const waitlist = ((wl ?? []) as WRow[]).filter((w) => myIds.has(w.offering_id));
 
   return (
     <div className="wrap">
@@ -89,6 +93,7 @@ export default async function Teach({ searchParams }: { searchParams: Promise<Re
         <div className="stats">
           <div className="stat hl"><b className="num">{todays.length}</b><span>حصص اليوم</span></div>
           <div className="stat"><b className="num">{requests.length}</b><span>طلبات جديدة</span></div>
+          {waitlist.length > 0 && <a className="stat" href="#waitlist"><b className="num">{waitlist.length}</b><span>في الانتظار</span></a>}
           <div className="stat"><b className="num">{new Set(rows.filter((b) => b.status === "confirmed").map((b) => b.student_name)).size}</b><span>طلاب</span></div>
         </div>
       </div>
@@ -135,6 +140,8 @@ export default async function Teach({ searchParams }: { searchParams: Promise<Re
           </div>
         ))}
       </section>
+
+      <WaitlistOwner rows={waitlist} back="/teach" flash={sp.wl} />
 
       <section className="section">
         <h2>الحصص القادمة</h2>
