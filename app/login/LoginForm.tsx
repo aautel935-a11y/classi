@@ -49,7 +49,7 @@ export function LoginForm({ next, initial = "in" }: { next: string; initial?: "i
       email,
       password,
       options: {
-        data: { full_name: String(f.get("full_name")).trim(), role, town: String(f.get("town") || "") },
+        data: { full_name: String(f.get("full_name")).trim(), role, town: String(f.get("town") || ""), terms_accepted_at: new Date().toISOString() },
         emailRedirectTo: `${window.location.origin}/auth/callback?next=${encodeURIComponent(role === "teacher" ? "/teach" : role === "institute" ? "/manage" : next)}&role=${role}`,
       },
     });
@@ -121,9 +121,17 @@ export function LoginForm({ next, initial = "in" }: { next: string; initial?: "i
       {mode === "reset" && (
         <button type="button" className="link small" style={{ alignSelf: "flex-start" }} onClick={() => { setMode("in"); setError(null); }}>العودة لتسجيل الدخول</button>
       )}
+      {mode === "up" && (
+        <label className="row small" style={{ alignItems: "flex-start" }}>
+          <input type="checkbox" name="terms" required style={{ marginTop: 3 }} />
+          <span>
+            قرأت وأوافق على <a className="link" href="/terms" target="_blank">شروط الاستخدام</a> و<a className="link" href="/privacy" target="_blank">سياسة الخصوصية</a>. إذا كان الطالب دون 18، يُنشئ الحساب ولي أمره.
+          </span>
+        </label>
+      )}
       {error && <p className="err">{error}</p>}
       <button className="btn block" disabled={busy}>{busy ? "لحظة…" : mode === "in" ? "دخول" : mode === "up" ? "إنشاء الحساب" : "أرسل رابط التعيين"}</button>
-      {mode === "up" && <p className="small muted">بإنشاء الحساب أنت توافق على شروط الاستخدام وسياسة الخصوصية.</p>}
+
     </form>
   );
 }

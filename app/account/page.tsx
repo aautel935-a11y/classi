@@ -74,6 +74,9 @@ export default async function Account() {
         <form action={signOutAction}>
           <button className="btn ghost block"><Icon name="logout" />تسجيل الخروج</button>
         </form>
+        <p className="small muted" style={{ textAlign: "center" }}>
+          <Link className="link" href="/terms">شروط الاستخدام</Link> · <Link className="link" href="/privacy">سياسة الخصوصية</Link>
+        </p>
       </div>
     </div>
   );

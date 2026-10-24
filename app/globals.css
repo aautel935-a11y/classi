@@ -339,3 +339,6 @@ a.day{text-decoration:none;color:inherit}
 .cal-row.blocked{border-inline-start:4px solid var(--bad);background:var(--bad-soft)}
 a.cal-row{color:inherit;text-decoration:none;border-inline-start:4px solid var(--accent)}
 .cal-cta{color:inherit;text-decoration:none;border-color:var(--accent);background:var(--soft)}
+.legal h2{margin-top:18px}
+.legal p,.legal li{line-height:1.8}
+.legal ul{padding-inline-start:20px;display:flex;flex-direction:column;gap:6px}
