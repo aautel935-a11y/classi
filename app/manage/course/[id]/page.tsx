@@ -7,6 +7,7 @@ import { PAY_LABEL, PLACES, TYPES, type OfferingType, type Place } from "@/lib/t
 import { dayLong, isoDay, time } from "@/lib/format";
 import { EditSession } from "./EditSession";
 import { OfferExtras } from "@/components/OfferExtras";
+import { ConfirmPay, PayBadge } from "@/components/Pay";
 import { WaitlistOwner, type WRow } from "@/components/WaitlistOwner";
 
 export const dynamic = "force-dynamic";
@@ -60,6 +61,7 @@ export default async function ManageOffer({ params, searchParams }: { params: Pr
           {(sessions ?? []).length ? ` · ${(sessions ?? []).length} لقاء` : ""}
         </p>
         {sp.saved === "link" && <p className="okmsg">حُفظ الرابط. يراه الطلاب المؤكَّدون في جدولهم.</p>}
+        {sp.ok === "payment" && <p className="okmsg">حُدّثت حالة الدفع.</p>}
         {sp.saved === "package" && <p className="okmsg">أُلغيت الرزمة ووصل ولي الأمر إشعار. الحصص القادمة بقيت محجوزة بالسعر العادي.</p>}
         {sp.saved === "offer" && <p className="okmsg">حُفظت التعديلات. السعر الجديد يسري على الحجوزات القادمة فقط.</p>}
         {sp.error && <p className="err">{sp.error}</p>}
@@ -182,7 +184,7 @@ export default async function ManageOffer({ params, searchParams }: { params: Pr
       {((pk ?? []) as any[]).length > 0 && (
         <section className="section">
           <h2>رزم الحصص</h2>
-          {((pk ?? []) as { id: string; student_name: string; size: number; remaining: number; price: number; pay_method: string; status: string; created_at: string }[]).map((p) => (
+          {((pk ?? []) as { id: string; student_name: string; size: number; remaining: number; price: number; pay_method: string; status: string; created_at: string; pay_status: string }[]).map((p) => (
             <div key={p.id} className="card" style={{ flexDirection: "row", alignItems: "center", gap: 12 }}>
               <div className="stack" style={{ gap: 2, flex: 1, minWidth: 0 }}>
                 <b>{p.student_name}</b>
@@ -190,6 +192,8 @@ export default async function ManageOffer({ params, searchParams }: { params: Pr
               </div>
               <div className="stack" style={{ gap: 4, alignItems: "flex-end" }}>
                 <span className={`badge ${p.status === "active" ? "ok" : p.status === "cancelled" ? "bad" : ""}`}>{p.status === "active" ? "فعّالة" : p.status === "used" ? "انتهت" : "ملغاة"}</span>
+                {p.status !== "cancelled" && <PayBadge status={p.pay_status} method={p.pay_method} teacherView />}
+                {owner && p.status !== "cancelled" && <ConfirmPay packageId={p.id} status={p.pay_status} back={path} />}
                 {owner && p.status === "active" && (
                   <details>
                     <summary className="link small" style={{ color: "var(--bad)" }}>إلغاء</summary>
@@ -221,7 +225,8 @@ export default async function ManageOffer({ params, searchParams }: { params: Pr
             </div>
             <div className="stack" style={{ gap: 4, alignItems: "flex-end" }}>
               <span className={`badge ${b.status === "confirmed" ? "ok" : ""}`}>{b.status === "confirmed" ? "مؤكد" : "بانتظار ردّك"}</span>
-              <span className="small muted">{PAY_LABEL[b.pay_method] ?? b.pay_method}</span>
+              {b.status === "confirmed" && b.pay_status && <PayBadge status={b.pay_status} method={b.pay_method} teacherView />}
+              {owner && b.status === "confirmed" && <ConfirmPay bookingId={b.booking_id} status={b.pay_status} back={path} />}
               {owner && (
                 <form action={startBookingConversationAction}>
                   <input type="hidden" name="booking_id" value={b.booking_id} />

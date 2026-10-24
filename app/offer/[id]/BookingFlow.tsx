@@ -51,7 +51,7 @@ export function BookingFlow({ offering: o, slots, groupSessions, kids, trialFor 
   const pkg = packages.find((p) => p.who === who && p.remaining > 0);
   const canTrial = o.type === "private" && trialPrice != null && !!who && trialFor.includes(who) && !weekly;
   const useTrial = canTrial && trial;
-  const pays = pkg && !useTrial ? [["package", `من الرزمة (بقي ${pkg.remaining} من ${pkg.size})`]] : o.type === "course" ? [["bit", "Bit"], ["installments", "3 دفعات"], ["cash", "نقداً في المعهد"]] : o.type === "recorded" ? [["bit", "Bit"], ["card", "بطاقة ائتمان"]] : [["bit", "Bit"], ["cash", "نقداً للمعلم"]];
+  const pays = pkg && !useTrial ? [["package", `من الرزمة (بقي ${pkg.remaining} من ${pkg.size})`]] : o.type === "course" ? [["bit", "تحويل عبر Bit"], ["cash", "نقداً في المعهد"], ["installments", "3 دفعات (يُتفق عليها مع المعهد)"]] : o.type === "recorded" ? [["bit", "تحويل عبر Bit"]] : [["bit", "تحويل عبر Bit"], ["cash", "نقداً للمعلم عند الحصة"]];
   const ready = (st === "slot" && slot) || (st === "session" && session) || st === "freq" || (st === "mode" && mode) || (st === "who" && who) || (st === "pay" && pay);
   const instant = o.type !== "private" || o.autoConfirm;
   const dayName = (iso: string) => dayShort(iso).replace(/^ال/, "");
@@ -251,10 +251,11 @@ export function BookingFlow({ offering: o, slots, groupSessions, kids, trialFor 
                   </div>
                   <p className="note">
                     {o.type === "private" && !o.autoConfirm
-                      ? "يصل الطلب للمعلم، وتصلك رسالة عند موافقته. الدفع للمعلم مباشرة في هذه المرحلة."
+                      ? "يصل الطلب للمعلم، وتصلك رسالة عند موافقته. "
                       : o.type === "private"
-                        ? "يُثبَّت الموعد فوراً دون انتظار، ويظهر رابط اللقاء أونلاين في جدولك إن وُجد."
-                        : "يصلك تأكيد في الإشعارات. الدفع الإلكتروني يُضاف في المرحلة القادمة."}
+                        ? "يُثبَّت الموعد فوراً دون انتظار، ويظهر رابط اللقاء أونلاين في جدولك إن وُجد. "
+                        : "يصلك تأكيد في الإشعارات. "}
+                    {pay === "bit" && !useTrial ? "بعد الحجز يظهر لك رقم Bit في «جدولي»: تحوّل المبلغ ثم تضغط «حوّلت المبلغ»." : pay === "cash" ? "تدفع نقداً مباشرة، والمعلم يؤكد الاستلام." : pay === "package" ? "تُخصم الحصة من رزمتك، دون دفع إضافي." : ""}
                   </p>
                 </>
               )}

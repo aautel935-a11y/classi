@@ -3,6 +3,7 @@ import { Icon } from "@/components/Icon";
 import { addStaffAction, instituteSetupAction, updateInstituteAction } from "@/app/actions";
 import { PhotoUpload } from "@/components/PhotoUpload";
 import { WaitlistOwner, type WRow } from "@/components/WaitlistOwner";
+import { PaymentsOwner, type MoneySummary, type PayRow } from "@/components/PaymentsOwner";
 import { requireUser } from "@/lib/session";
 import { TOWNS } from "@/lib/types";
 import { dayLong, time } from "@/lib/format";
@@ -33,7 +34,7 @@ export default async function Manage({ searchParams }: { searchParams: Promise<R
     );
   }
 
-  const [{ data: courses }, { data: seats }, { data: rooms }, { data: staff }, { data: allTeachers }, { data: log }, { data: wl }] = await Promise.all([
+  const [{ data: courses }, { data: seats }, { data: rooms }, { data: staff }, { data: allTeachers }, { data: log }, { data: wl }, { data: pays }, { data: money }, { data: bitRow }] = await Promise.all([
     supabase.from("offerings").select("id,title,seats,schedule_note,course_teacher:teachers!offerings_course_teacher_id_fkey(name)").eq("institute_id", inst.id).eq("type", "course").order("created_at"),
     supabase.rpc("seats_overview"),
     supabase.from("rooms").select("id,name").eq("institute_id", inst.id).order("name"),
@@ -41,7 +42,11 @@ export default async function Manage({ searchParams }: { searchParams: Promise<R
     supabase.from("teachers").select("id,name,town").order("name"),
     supabase.from("change_log").select("id,body,notified_count,created_at").order("created_at", { ascending: false }).limit(5),
     supabase.rpc("owner_waitlist"),
+    supabase.rpc("owner_payments"),
+    supabase.rpc("owner_money_summary"),
+    supabase.from("pay_numbers").select("bit_phone").eq("institute_id", inst.id).maybeSingle(),
   ]);
+  const bitLocal = bitRow?.bit_phone ? String(bitRow.bit_phone).replace(/^\+972/, "0") : "";
   const ids = (courses ?? []).map((c) => c.id);
   const { data: todaySessions } = ids.length
     ? await supabase
@@ -71,11 +76,13 @@ export default async function Manage({ searchParams }: { searchParams: Promise<R
         </div>
       </div>
 
+      <PaymentsOwner rows={(pays ?? []) as PayRow[]} summary={((Array.isArray(money) ? money[0] : money) ?? null) as MoneySummary | null} back="/manage#payments" hasBit={!!bitLocal} flash={sp.ok} />
+
       <WaitlistOwner rows={waitlist} back="/manage" flash={sp.wl} error={sp.error} />
 
       <section className="section">
         <h2>ملف المعهد</h2>
-        {sp.ok && <p className="okmsg">حُفظ ملف المعهد.</p>}
+        {sp.ok === "profile" && <p className="okmsg">حُفظ ملف المعهد.</p>}
         <div className="card">
           <PhotoUpload kind="institute" name={inst.name} current={inst.logo_url} />
           <details>
@@ -84,6 +91,7 @@ export default async function Manage({ searchParams }: { searchParams: Promise<R
               <label className="field" htmlFor="i-name">اسم المعهد<input id="i-name" name="name" required defaultValue={inst.name} /></label>
               <label className="field" htmlFor="i-town">البلد<select id="i-town" name="town" defaultValue={inst.town}>{TOWNS.map((x) => <option key={x}>{x}</option>)}</select></label>
               <label className="field" htmlFor="i-bio">نبذة<textarea id="i-bio" name="bio" rows={3} defaultValue={inst.bio} /></label>
+              <label className="field" htmlFor="i-bit">رقم Bit لاستلام الدفعات<input id="i-bit" name="bit_phone" type="tel" dir="ltr" inputMode="tel" placeholder="050-1234567" defaultValue={bitLocal} /><span className="small muted">يظهر فقط لمن سجّل عندكم.</span></label>
               <button className="btn">حفظ</button>
             </form>
           </details>

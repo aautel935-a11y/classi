@@ -4,6 +4,7 @@ import { OfferCard } from "@/components/OfferCard";
 import { deleteOfferingAction, respondAction, startBookingConversationAction, saveAvailabilityAction, teacherSetupAction, toggleOfferingAction, updateTeacherAction } from "@/app/actions";
 import { PhotoUpload } from "@/components/PhotoUpload";
 import { PushToggle } from "@/components/PushToggle";
+import { PaymentsOwner, type MoneySummary, type PayRow } from "@/components/PaymentsOwner";
 import { WaitlistOwner, type WRow } from "@/components/WaitlistOwner";
 import { requireUser } from "@/lib/session";
 import { OFFERING_SELECT, TOWNS, type Offering } from "@/lib/types";
@@ -42,7 +43,7 @@ export default async function Teach({ searchParams }: { searchParams: Promise<Re
     );
   }
 
-  const [{ data: bookings }, { data: offers }, { data: courseSessions }, { data: subjectList }, { data: hours }, { data: links }, { data: wl }, { data: pend }] = await Promise.all([
+  const [{ data: bookings }, { data: offers }, { data: courseSessions }, { data: subjectList }, { data: hours }, { data: links }, { data: wl }, { data: pend }, { data: pays }, { data: money }, { data: bitRow }] = await Promise.all([
     supabase.rpc("owner_bookings"),
     supabase.from("offerings").select(OFFERING_SELECT).eq("teacher_id", t.id).order("created_at"),
     supabase
@@ -57,7 +58,11 @@ export default async function Teach({ searchParams }: { searchParams: Promise<Re
     supabase.from("offering_links").select("offering_id"),
     supabase.rpc("owner_waitlist"),
     supabase.rpc("pending_reports"),
+    supabase.rpc("owner_payments"),
+    supabase.rpc("owner_money_summary"),
+    supabase.from("pay_numbers").select("bit_phone").eq("teacher_id", t.id).maybeSingle(),
   ]);
+  const bitLocal = bitRow?.bit_phone ? String(bitRow.bit_phone).replace(/^\+972/, "0") : "";
   const hasLink = new Set((links ?? []).map((l) => l.offering_id));
   const hourDays = new Set((hours ?? []).map((h) => h.weekday));
   const hourFrom = (hours ?? [])[0]?.start_time?.slice(0, 5) ?? "15:00";
@@ -88,7 +93,7 @@ export default async function Teach({ searchParams }: { searchParams: Promise<Re
         )}
         {sp.ok && (
           <p className="okmsg">
-            {({ profile: "حُفظ ملفك.", hours: "حُفظت أوقاتك المتاحة.", hidden: "أُخفي العرض. لم يعد يظهر للطلاب.", shown: "العرض ظاهر الآن للطلاب.", deleted: "حُذف العرض.", report: "أُرسل التقرير ووصل ولي الأمر إشعار." } as Record<string, string>)[sp.ok] ?? "نُشر العرض."}
+            {({ profile: "حُفظ ملفك.", hours: "حُفظت أوقاتك المتاحة.", hidden: "أُخفي العرض. لم يعد يظهر للطلاب.", shown: "العرض ظاهر الآن للطلاب.", deleted: "حُذف العرض.", report: "أُرسل التقرير ووصل ولي الأمر إشعار.", payment: "حُدّثت حالة الدفع." } as Record<string, string>)[sp.ok] ?? "نُشر العرض."}
           </p>
         )}
         {sp.error && <p className="err">{sp.error}</p>}
@@ -96,6 +101,7 @@ export default async function Teach({ searchParams }: { searchParams: Promise<Re
         <div className="stats">
           <div className="stat hl"><b className="num">{todays.length}</b><span>حصص اليوم</span></div>
           <div className="stat"><b className="num">{requests.length}</b><span>طلبات جديدة</span></div>
+          {((pays ?? []) as any[]).some((x) => x.pay_status === "reported") && <a className="stat" href="#payments"><b className="num">{((pays ?? []) as any[]).filter((x) => x.pay_status === "reported").length}</b><span>تحويلات للتأكيد</span></a>}
           {((pend ?? []) as any[]).length > 0 && <a className="stat" href="#reports"><b className="num">{(pend as any[]).length}</b><span>تقارير ناقصة</span></a>}
           {waitlist.length > 0 && <a className="stat" href="#waitlist"><b className="num">{waitlist.length}</b><span>في الانتظار</span></a>}
           <div className="stat"><b className="num">{new Set(rows.filter((b) => b.status === "confirmed").map((b) => b.student_name)).size}</b><span>طلاب</span></div>
@@ -117,6 +123,11 @@ export default async function Teach({ searchParams }: { searchParams: Promise<Re
               </div>
               <label className="row"><input type="checkbox" name="school" defaultChecked={t.is_school_teacher} /> أنا معلم في مدرسة</label>
               <label className="field" htmlFor="e-bio">عن أسلوبك في التدريس<textarea id="e-bio" name="bio" rows={4} defaultValue={t.bio} /></label>
+              <label className="field" htmlFor="e-bit">
+                رقم Bit لاستلام الدفعات
+                <input id="e-bit" name="bit_phone" type="tel" dir="ltr" inputMode="tel" placeholder="050-1234567" defaultValue={bitLocal} />
+                <span className="small muted">يظهر فقط لمن حجز عندك، ليحوّل لك ثمن الحصة.</span>
+              </label>
               <label className="field" htmlFor="e-video">
                 فيديو تعريفي قصير (اختياري)
                 <input id="e-video" name="intro_video" type="url" dir="ltr" placeholder="https://youtu.be/…" defaultValue={t.intro_video_url ?? ""} />
@@ -170,6 +181,8 @@ export default async function Teach({ searchParams }: { searchParams: Promise<Re
           ))}
         </section>
       )}
+
+      <PaymentsOwner rows={(pays ?? []) as PayRow[]} summary={((Array.isArray(money) ? money[0] : money) ?? null) as MoneySummary | null} back="/teach#payments" hasBit={!!bitLocal} />
 
       <WaitlistOwner rows={waitlist} back="/teach" flash={sp.wl} />
 

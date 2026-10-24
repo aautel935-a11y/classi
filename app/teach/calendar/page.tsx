@@ -4,6 +4,7 @@ import {
   teacherAddBookingAction, teacherBlockAction, teacherCancelBookingAction, teacherMoveBookingAction, teacherUnblockAction,
 } from "@/app/actions";
 import { requireUser } from "@/lib/session";
+import { ConfirmPay, PayBadge } from "@/components/Pay";
 import { dayNum, dayShort, dayLong, fromLocal, isoDay, monthName, time } from "@/lib/format";
 
 export const dynamic = "force-dynamic";
@@ -11,6 +12,7 @@ export const dynamic = "force-dynamic";
 type Item = {
   kind: "booking" | "session" | "block"; id: string; starts_at: string; minutes: number; title: string | null; who: string | null;
   status: string | null; series_id: string | null; mode: string | null; note: string | null; offering_id: string | null; changed: boolean;
+  pay_status: string | null; pay_method: string | null; price: number | null;
 };
 type Student = { user_id: string; child_id: string | null; name: string; guardian: string | null };
 type Row = { at: string; end: string; free?: boolean; item?: Item };
@@ -27,6 +29,7 @@ const OK: Record<string, string> = {
   moved: "تغيّر الموعد ووصل الطالب إشعار. يمكنه الإلغاء مجاناً إن لم يناسبه.",
   cancelled: "أُلغي الحجز ووصل الطالب إشعار بالسبب.",
   report: "أُرسل التقرير ووصل ولي الأمر إشعار.",
+  payment: "حُدّثت حالة الدفع.",
 };
 
 /** The teacher's day by day: free hours, bookings, meetings and closed hours, each with its actions. */
@@ -156,6 +159,12 @@ export default async function TeacherCalendar({ searchParams }: { searchParams: 
               <span className="small muted">
                 {it.title}{it.mode === "online" ? " · أونلاين" : it.mode === "home" ? " · حضوري" : ""}{it.series_id ? " · أسبوعي" : ""}{it.changed ? " · غيّرتَ موعدها" : ""}
               </span>
+              {it.status === "confirmed" && it.pay_status && (
+                <div className="row between" style={{ flexWrap: "wrap", gap: 8 }}>
+                  <span className="row" style={{ gap: 6 }}><PayBadge status={it.pay_status} method={it.pay_method} teacherView />{it.price ? <span className="small num">{it.price} ₪</span> : null}</span>
+                  <ConfirmPay bookingId={it.id} status={it.pay_status} back={`/teach/calendar?day=${day}`} />
+                </div>
+              )}
               {past && it.status === "confirmed" && <Link className="link small" href={`/teach/report?booking=${it.id}&back=/teach/calendar?day=${day}`}>كتابة تقرير الحصة لولي الأمر</Link>}
               {!past && (
                 <div className="row" style={{ flexWrap: "wrap", gap: 16 }}>

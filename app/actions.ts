@@ -380,6 +380,10 @@ export async function updateTeacherAction(form: FormData) {
     })
     .eq("user_id", user.id);
   if (str(form, "intro_video") && !/^https:\/\//.test(str(form, "intro_video"))) redirect(`/teach?error=${encodeURIComponent("رابط الفيديو يجب أن يبدأ بـ https://")}`);
+  if (form.has("bit_phone")) {
+    const { error: bitErr } = await supabase.rpc("set_bit_phone", { p_phone: str(form, "bit_phone"), p_institute: false });
+    if (bitErr) redirect(`/teach?error=${encodeURIComponent(bitErr.message)}`);
+  }
   revalidatePath("/teach");
   redirect("/teach?ok=profile");
 }
@@ -389,6 +393,10 @@ export async function updateInstituteAction(form: FormData) {
   const { supabase, user } = await client();
   if (!user) redirect("/login?next=/manage");
   await supabase.from("institutes").update({ name: str(form, "name"), town: str(form, "town"), bio: str(form, "bio") }).eq("owner_id", user.id);
+  if (form.has("bit_phone")) {
+    const { error: bitErr } = await supabase.rpc("set_bit_phone", { p_phone: str(form, "bit_phone"), p_institute: true });
+    if (bitErr) redirect(`/manage?error=${encodeURIComponent(bitErr.message)}`);
+  }
   revalidatePath("/manage");
   redirect("/manage?ok=profile");
 }
@@ -789,4 +797,34 @@ export async function writeSessionReportsAction(form: FormData) {
   if (error) redirect(`/teach/report?session=${session}&error=${encodeURIComponent(error.message)}`);
   revalidatePath("/teach");
   redirect(`${back}${back.includes("?") ? "&" : "?"}ok=report`);
+}
+
+// ---------- payments (cash / Bit, no gateway) ----------
+function backTo(form: FormData, fallback: string) {
+  const b = str(form, "back");
+  return b.startsWith("/") ? b : fallback;
+}
+const withQ = (url: string, q: string) => {
+  const [path, hash] = url.split("#");
+  return `${path}${path.includes("?") ? "&" : "?"}${q}${hash ? `#${hash}` : ""}`;
+};
+
+export async function reportPaymentAction(form: FormData) {
+  const { supabase, user } = await client();
+  if (!user) redirect("/login");
+  const back = backTo(form, "/schedule");
+  const { error } = await supabase.rpc("report_payment", { p_booking: str(form, "booking_id") || null, p_package: str(form, "package_id") || null });
+  revalidatePath(back.split("?")[0]);
+  redirect(withQ(back, error ? `error=${encodeURIComponent(error.message)}` : "paid_reported=1"));
+}
+
+export async function confirmPaymentAction(form: FormData) {
+  const { supabase, user } = await client();
+  if (!user) redirect("/login");
+  const back = backTo(form, "/teach#payments");
+  const { error } = await supabase.rpc("confirm_payment", {
+    p_booking: str(form, "booking_id") || null, p_package: str(form, "package_id") || null, p_received: str(form, "received") !== "0",
+  });
+  revalidatePath(back.split(/[?#]/)[0]);
+  redirect(withQ(back, error ? `error=${encodeURIComponent(error.message)}` : "ok=payment"));
 }

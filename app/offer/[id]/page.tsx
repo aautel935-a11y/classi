@@ -14,6 +14,7 @@ import { BookingFlow } from "./BookingFlow";
 import { WaitlistJoin } from "./WaitlistJoin";
 import { buyPackageAction, leaveWaitlistAction } from "@/app/actions";
 import { IntroVideo } from "@/components/IntroVideo";
+import { PayBadge, PayForStudent } from "@/components/Pay";
 
 export const dynamic = "force-dynamic";
 
@@ -47,7 +48,7 @@ export default async function OfferPage({ params, searchParams }: { params: Prom
     user ? supabase.from("children").select("id,name,grade").order("created_at") : empty,
     o.type === "private" && o.teacher_id ? supabase.rpc("teacher_buffer", { p_teacher: o.teacher_id }) : empty,
     user ? supabase.rpc("my_waitlist") : empty,
-    user && o.package_enabled ? supabase.from("lesson_packages").select("id,child_id,remaining,size").eq("offering_id", o.id).eq("status", "active").eq("user_id", user.id) : empty,
+    user && o.package_enabled ? supabase.from("lesson_packages").select("id,child_id,remaining,size,price,pay_status,pay_method").eq("offering_id", o.id).neq("status", "cancelled").eq("user_id", user.id) : empty,
   ]);
   const mine = mineR.data;
   const ownerAccount = ownerR.data as any;
@@ -67,7 +68,11 @@ export default async function OfferPage({ params, searchParams }: { params: Prom
     const res = await Promise.all(who.map((c) => supabase.rpc("trial_available", { p_offering: o.id, p_child: c })));
     res.forEach((r, i) => { if (r.data) trialFor.push(who[i] ?? "self"); });
   }
-  const myPackages = ((pkR.data ?? []) as { id: string; child_id: string | null; remaining: number; size: number }[]).map((p) => ({ who: p.child_id ?? "self", remaining: p.remaining, size: p.size }));
+  const pkRows = (pkR.data ?? []) as { id: string; child_id: string | null; remaining: number; size: number; price: number; pay_status: string; pay_method: string }[];
+  const myPackages = pkRows.filter((p) => p.remaining > 0).map((p) => ({ who: p.child_id ?? "self", remaining: p.remaining, size: p.size }));
+  const unpaidPkgs = pkRows.filter((p) => p.pay_status !== "paid");
+  const { data: payNums } = unpaidPkgs.length ? await supabase.rpc("my_pay_numbers") : { data: null };
+  const payNum = ((payNums ?? []) as { offering_id: string; owner_name: string; bit_phone: string | null }[]).find((x) => x.offering_id === o.id);
   const pkgOn = !!(o.package_enabled && o.package_size && o.package_price && (o.type === "private" || o.type === "group"));
   const pkgSave = pkgOn ? o.package_size! * o.price - o.package_price! : 0;
 
@@ -165,6 +170,13 @@ export default async function OfferPage({ params, searchParams }: { params: Prom
                 رزمتك{p.who !== "self" ? ` لـ${kidList.find((k) => k.id === p.who)?.name ?? ""}` : ""}: بقي {p.remaining} من {p.size}
               </span>
             ))}
+            {unpaidPkgs.map((p) => (
+              <div key={p.id} className="stack" style={{ gap: 6 }}>
+                <span className="row small" style={{ gap: 6 }}>دفع الرزمة: <PayBadge status={p.pay_status} method={p.pay_method} /></span>
+                <PayForStudent packageId={p.id} status={p.pay_status} method={p.pay_method} amount={p.price} bit={payNum?.bit_phone} owner={payNum?.owner_name} back={`/offer/${o.id}`} />
+              </div>
+            ))}
+            {sp.paid_reported && <p className="okmsg">أبلغنا المعلم بالتحويل.</p>}
             {user ? (
               <details>
                 <summary className="link small">شراء رزمة</summary>

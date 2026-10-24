@@ -3,13 +3,14 @@ import { Icon } from "@/components/Icon";
 import { cancelBookingAction, cancelSeriesAction, leaveWaitlistAction } from "@/app/actions";
 import { requireUser } from "@/lib/session";
 import { PushToggle } from "@/components/PushToggle";
+import { PayBadge, PayForStudent } from "@/components/Pay";
 import { PAY_LABEL, PLACES, type Place } from "@/lib/types";
 import { dayNum, dayShort, monthName, time } from "@/lib/format";
 
 export const dynamic = "force-dynamic";
 
 type Row = {
-  id: string; status: string; pay_method: string; starts_at: string | null; session_id: string | null; mode: Place | null; price: number | null; series_id: string | null;
+  id: string; status: string; pay_method: string; starts_at: string | null; session_id: string | null; mode: Place | null; price: number | null; series_id: string | null; pay_status: string;
   child: { name: string } | null;
   session: { starts_at: string } | null;
   offering: { id: string; type: string; title: string; places: Place[]; teacher: { name: string } | null; institute: { name: string } | null };
@@ -20,16 +21,18 @@ export default async function Schedule({ searchParams }: { searchParams: Promise
   const { supabase, user } = await requireUser("/schedule");
   const { data } = await supabase
     .from("bookings")
-    .select("id,status,pay_method,starts_at,session_id,mode,price,series_id,child:children(name),session:sessions(starts_at),offering:offerings(id,type,title,places,teacher:teachers!offerings_teacher_id_fkey(name),institute:institutes(name))")
+    .select("id,status,pay_method,starts_at,session_id,mode,price,series_id,pay_status,child:children(name),session:sessions(starts_at),offering:offerings(id,type,title,places,teacher:teachers!offerings_teacher_id_fkey(name),institute:institutes(name))")
     .eq("booked_by", user.id)
     .in("status", ["pending", "confirmed"])
     .order("created_at", { ascending: false });
   const rows = ((data ?? []) as unknown as Row[]).filter((r) => r.offering);
-  const [{ data: links }, { data: wl }, { count: unreadReports0 }] = await Promise.all([
+  const [{ data: links }, { data: wl }, { count: unreadReports0 }, { data: payNums }] = await Promise.all([
     supabase.from("offering_links").select("offering_id,url,note"),
     supabase.rpc("my_waitlist"),
     supabase.from("lesson_reports").select("id", { count: "exact", head: true }).eq("student_user", user.id).is("read_at", null),
+    supabase.rpc("my_pay_numbers"),
   ]);
+  const payOf = (oid: string) => ((payNums ?? []) as { offering_id: string; owner_name: string; bit_phone: string | null }[]).find((p) => p.offering_id === oid);
   const unreadReports = unreadReports0 ?? 0;
   const waits = (wl ?? []) as { id: string; offering_id: string; offering_title: string; owner_name: string; child_name: string | null; status: string; reply: string | null; pos: number | null }[];
   const linkOf = (oid: string) => (links ?? []).find((l) => l.offering_id === oid);
@@ -81,6 +84,7 @@ export default async function Schedule({ searchParams }: { searchParams: Promise
           <Link className="btn sm ghost" href="/reports"><Icon name="check" />تقارير الحصص{unreadReports > 0 ? ` (${unreadReports})` : ""}</Link>
         </div>
         {sp.left && <p className="okmsg">خرجت من قائمة الانتظار.</p>}
+        {sp.paid_reported && <p className="okmsg">أبلغنا المعلم بالتحويل. تصلك رسالة عندما يؤكد الاستلام.</p>}
         <PushToggle compact />
         {waits.length > 0 && (
           <div className="stack" style={{ gap: 8 }}>
@@ -155,8 +159,12 @@ export default async function Schedule({ searchParams }: { searchParams: Promise
                 )}
                 {changed && <span className="badge">غيّر المعهد الموعد</span>}
                 {r.series_id && <span className="badge"><Icon name="cal" />أسبوعي · {seriesCount.get(r.series_id) ?? 0} حصص قادمة</span>}
-                <span className="badge">الدفع: {PAY_LABEL[r.pay_method] ?? r.pay_method}{r.price != null ? ` · ${r.price} ₪` : ""}</span>
+                <PayBadge status={r.pay_status} method={r.pay_method} />
+                {r.price != null && r.price > 0 && <span className="badge num">{r.price} ₪</span>}
               </div>
+              {r.status === "confirmed" && (
+                <PayForStudent bookingId={r.id} status={r.pay_status} method={r.pay_method} amount={r.price} bit={payOf(r.offering.id)?.bit_phone} owner={payOf(r.offering.id)?.owner_name} back="/schedule" />
+              )}
               {(() => {
                 const l = linkOf(r.offering.id);
                 const wantsLink = r.offering.type === "recorded" || (r.mode ?? r.offering.places[0]) === "online" || (r.offering.type !== "private" && r.offering.places.includes("online"));
