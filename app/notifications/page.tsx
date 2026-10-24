@@ -1,18 +1,21 @@
 import Link from "next/link";
 import { Icon } from "@/components/Icon";
-import { markAllReadAction } from "@/app/actions";
+import { markAllReadAction, setEmailRemindersAction } from "@/app/actions";
+import { PushToggle } from "@/components/PushToggle";
 import { requireUser } from "@/lib/session";
 import { dayLong, time } from "@/lib/format";
 
 export const dynamic = "force-dynamic";
 
-const ICON: Record<string, "cal" | "check" | "bell" | "users" | "chat" | "monitor" | "shield"> = {
+const ICON: Record<string, "cal" | "check" | "bell" | "users" | "chat" | "monitor" | "shield" | "clock"> = {
+  reminder: "clock", reminder_soon: "clock",
   schedule_changed: "cal", booking_answer: "check", booking_request: "users", booking_new: "users", booking_cancelled: "bell", waitlist_join: "users", waitlist_open: "check", waitlist_answer: "chat",
   message: "chat", link: "monitor", verify: "shield", report: "shield",
 };
 
 export default async function Notifications() {
-  const { supabase } = await requireUser("/notifications");
+  const { supabase, profile } = await requireUser("/notifications");
+  const emailOn = profile?.email_reminders !== false;
   const { data } = await supabase.from("notifications").select("id,kind,body,link,read_at,created_at").order("created_at", { ascending: false }).limit(60);
   const list = data ?? [];
   const unread = list.some((n) => !n.read_at);
@@ -27,6 +30,12 @@ export default async function Notifications() {
             </form>
           )}
         </div>
+        <PushToggle />
+        <form action={setEmailRemindersAction} className="row between small">
+          <span className="muted">تذكير بالبريد قبل الحصة بيوم: {emailOn ? "مفعّل" : "متوقف"}</span>
+          <input type="hidden" name="on" value={emailOn ? "0" : "1"} />
+          <button className="link small">{emailOn ? "إيقاف" : "تفعيل"}</button>
+        </form>
         {list.length === 0 && <div className="empty">لا إشعارات بعد. أي حجز أو تغيير في المواعيد يظهر هنا.</div>}
         {list.map((n) => (
           <Link key={n.id} href={n.link ?? "#"} className={`card notice ${n.read_at ? "" : "unread"}`}>

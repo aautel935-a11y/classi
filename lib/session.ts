@@ -5,7 +5,7 @@ import type { Role } from "./types";
 
 export type Profile = {
   id: string; full_name: string; town: string | null; roles: Role[]; active_role: Role; avatar_url: string | null;
-  status: "active" | "suspended" | "banned"; suspended_until: string | null; status_reason: string | null;
+  status: "active" | "suspended" | "banned"; suspended_until: string | null; status_reason: string | null; email_reminders?: boolean;
 };
 
 /** Suspended (until a date) or banned accounts can't use the app. */
@@ -18,7 +18,7 @@ export const getSession = cache(async () => {
   // Ask for the user and their own profile at the same time (row security returns only their row).
   const [{ data: { user } }, { data: profile }] = await Promise.all([
     supabase.auth.getUser(),
-    supabase.from("profiles").select("id,full_name,town,roles,active_role,avatar_url,status,suspended_until,status_reason").maybeSingle(),
+    supabase.from("profiles").select("id,full_name,town,roles,active_role,avatar_url,status,suspended_until,status_reason,email_reminders").maybeSingle(),
   ]);
   if (!user) return { supabase, user: null, profile: null as Profile | null };
   return { supabase, user, profile: profile as Profile | null };

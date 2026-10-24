@@ -13,6 +13,7 @@ export const metadata: Metadata = {
   title: "Classi",
   description: "معلمون خصوصيون، مجموعات تقوية، دورات معاهد وتعليم أونلاين في مكان واحد.",
   appleWebApp: { capable: true, title: "Classi", statusBarStyle: "default" },
+  icons: { apple: "/apple-touch-icon.png" },
 };
 export const viewport: Viewport = { width: "device-width", initialScale: 1, viewportFit: "cover", themeColor: "#FFFFFF", colorScheme: "light" };
 

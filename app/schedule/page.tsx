@@ -2,6 +2,7 @@ import Link from "next/link";
 import { Icon } from "@/components/Icon";
 import { cancelBookingAction, cancelSeriesAction, leaveWaitlistAction } from "@/app/actions";
 import { requireUser } from "@/lib/session";
+import { PushToggle } from "@/components/PushToggle";
 import { PAY_LABEL, PLACES, type Place } from "@/lib/types";
 import { dayNum, dayShort, monthName, time } from "@/lib/format";
 
@@ -75,6 +76,7 @@ export default async function Schedule({ searchParams }: { searchParams: Promise
         {sp.error && <p className="err">{sp.error}</p>}
         <p className="small muted">كل الحصص والدورات لك ولأبنائك في مكان واحد.</p>
         {sp.left && <p className="okmsg">خرجت من قائمة الانتظار.</p>}
+        <PushToggle compact />
         {waits.length > 0 && (
           <div className="stack" style={{ gap: 8 }}>
             <h2>قوائم الانتظار</h2>

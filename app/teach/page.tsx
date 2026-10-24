@@ -3,6 +3,7 @@ import { Icon } from "@/components/Icon";
 import { OfferCard } from "@/components/OfferCard";
 import { deleteOfferingAction, respondAction, startBookingConversationAction, saveAvailabilityAction, teacherSetupAction, toggleOfferingAction, updateTeacherAction } from "@/app/actions";
 import { PhotoUpload } from "@/components/PhotoUpload";
+import { PushToggle } from "@/components/PushToggle";
 import { WaitlistOwner, type WRow } from "@/components/WaitlistOwner";
 import { requireUser } from "@/lib/session";
 import { OFFERING_SELECT, TOWNS, type Offering } from "@/lib/types";
@@ -90,6 +91,7 @@ export default async function Teach({ searchParams }: { searchParams: Promise<Re
           </p>
         )}
         {sp.error && <p className="err">{sp.error}</p>}
+        <PushToggle compact />
         <div className="stats">
           <div className="stat hl"><b className="num">{todays.length}</b><span>حصص اليوم</span></div>
           <div className="stat"><b className="num">{requests.length}</b><span>طلبات جديدة</span></div>

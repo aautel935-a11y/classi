@@ -595,3 +595,26 @@ export async function respondWaitlistAction(form: FormData) {
   if (data) redirect(`/messages/${data}`);
   redirect(`${back}?wl=${accept ? "accepted" : "declined"}#waitlist`);
 }
+
+// ---------- phone notifications & reminders ----------
+export async function savePushSubscriptionAction(sub: { endpoint: string; p256dh: string; auth: string }): Promise<Result> {
+  const { supabase, user } = await client();
+  if (!user) return { error: "سجّل الدخول أولاً." };
+  const { error } = await supabase.rpc("save_push_subscription", { p_endpoint: sub.endpoint, p_p256dh: sub.p256dh, p_auth: sub.auth });
+  return error ? { error: error.message } : { ok: true };
+}
+
+export async function removePushSubscriptionAction(endpoint: string): Promise<Result> {
+  const { supabase, user } = await client();
+  if (!user) return { error: "سجّل الدخول أولاً." };
+  await supabase.rpc("remove_push_subscription", { p_endpoint: endpoint });
+  return { ok: true };
+}
+
+export async function setEmailRemindersAction(form: FormData) {
+  const { supabase, user } = await client();
+  if (!user) redirect("/login");
+  await supabase.from("profiles").update({ email_reminders: str(form, "on") === "1" }).eq("id", user.id);
+  revalidatePath("/notifications");
+  redirect("/notifications");
+}

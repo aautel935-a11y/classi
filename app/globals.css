@@ -329,3 +329,5 @@ details summary::-webkit-details-marker{display:none}
   .sp-ring{display:none}
 }
 .inline-input{background:var(--card);border:1px solid var(--line);border-radius:var(--r-sm);padding:8px 10px;color:var(--ink)}
+.push-card .ico{width:36px;height:36px;border-radius:var(--r-pill);background:var(--soft);display:grid;place-items:center;flex:none;color:var(--primary)}
+.push-card .ico svg{width:20px;height:20px}
