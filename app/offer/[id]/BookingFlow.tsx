@@ -12,13 +12,16 @@ type Props = {
   slots: Slot[];
   groupSessions: { id: string; starts_at: string; taken: number }[];
   kids: { id: string; name: string; grade: string | null }[];
+  trialFor?: string[]; // "self" or child ids who can still take the trial lesson
+  trialPrice?: number | null;
+  packages?: { who: string; remaining: number; size: number }[];
 };
 
 const ACTION: Record<OfferingType, string> = { private: "اختر موعداً", group: "احجز مقعداً", course: "سجّل في الدورة", recorded: "اشترِ المحتوى" };
 const DONE: Record<OfferingType, string> = { private: "إرسال طلب الحجز", group: "تأكيد الحجز", course: "تأكيد التسجيل", recorded: "إتمام الشراء" };
 const WEEKS = 8;
 
-export function BookingFlow({ offering: o, slots, groupSessions, kids }: Props) {
+export function BookingFlow({ offering: o, slots, groupSessions, kids, trialFor = [], trialPrice = null, packages = [] }: Props) {
   const router = useRouter();
   const [open, setOpen] = useState(false);
   const [step, setStep] = useState(0);
@@ -30,6 +33,7 @@ export function BookingFlow({ offering: o, slots, groupSessions, kids }: Props) 
   const [weekly, setWeekly] = useState(false);
   const [mode, setMode] = useState<Place | null>(o.places.length === 1 ? o.places[0] : null);
   const [error, setError] = useState<string | null>(null);
+  const [trial, setTrial] = useState(true);
   const [pending, start] = useTransition();
 
   const chooseMode = o.type !== "recorded" && o.places.length > 1;
@@ -44,7 +48,10 @@ export function BookingFlow({ offering: o, slots, groupSessions, kids }: Props) 
   const st = steps[step];
   const days = useMemo(() => Array.from(new Set(slots.map((s) => s.day))), [slots]);
   const curDay = day ?? days[0];
-  const pays = o.type === "course" ? [["bit", "Bit"], ["installments", "3 دفعات"], ["cash", "نقداً في المعهد"]] : o.type === "recorded" ? [["bit", "Bit"], ["card", "بطاقة ائتمان"]] : [["bit", "Bit"], ["cash", "نقداً للمعلم"]];
+  const pkg = packages.find((p) => p.who === who && p.remaining > 0);
+  const canTrial = o.type === "private" && trialPrice != null && !!who && trialFor.includes(who) && !weekly;
+  const useTrial = canTrial && trial;
+  const pays = pkg && !useTrial ? [["package", `من الرزمة (بقي ${pkg.remaining} من ${pkg.size})`]] : o.type === "course" ? [["bit", "Bit"], ["installments", "3 دفعات"], ["cash", "نقداً في المعهد"]] : o.type === "recorded" ? [["bit", "Bit"], ["card", "بطاقة ائتمان"]] : [["bit", "Bit"], ["cash", "نقداً للمعلم"]];
   const ready = (st === "slot" && slot) || (st === "session" && session) || st === "freq" || (st === "mode" && mode) || (st === "who" && who) || (st === "pay" && pay);
   const instant = o.type !== "private" || o.autoConfirm;
   const dayName = (iso: string) => dayShort(iso).replace(/^ال/, "");
@@ -62,6 +69,7 @@ export function BookingFlow({ offering: o, slots, groupSessions, kids }: Props) 
         pay: pay!,
         weekly,
         mode,
+        trial: useTrial,
       });
       if (r.error) return setError(r.error);
       setOpen(false);
@@ -195,6 +203,12 @@ export function BookingFlow({ offering: o, slots, groupSessions, kids }: Props) 
               {st === "pay" && (
                 <>
                   <h2>الدفع</h2>
+                  {canTrial && (
+                    <label className="switch-row">
+                      <input type="checkbox" checked={trial} onChange={(e) => { setTrial(e.target.checked); setPay(null); }} />
+                      <span><b>احجزها كحصة تجريبية</b><span className="small muted">{trialPrice === 0 ? "مجانية" : `بسعر ${trialPrice} ₪`}، مرة واحدة مع هذا المعلم.</span></span>
+                    </label>
+                  )}
                   {pays.map(([k, label]) => (
                     <button key={k} className="opt" aria-pressed={pay === k} onClick={() => setPay(k)}>
                       <span className="dot" />
@@ -232,7 +246,7 @@ export function BookingFlow({ offering: o, slots, groupSessions, kids }: Props) 
                     )}
                     <div className="total">
                       <span>{weekly ? "لكل حصة" : "المجموع"}</span>
-                      <span className="num">{o.price} ₪</span>
+                      <span className="num">{useTrial ? (trialPrice === 0 ? "مجانية" : `${trialPrice} ₪`) : pkg ? "من الرزمة" : `${o.price} ₪`}</span>
                     </div>
                   </div>
                   <p className="note">

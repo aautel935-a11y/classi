@@ -24,6 +24,8 @@ export function OfferCard({ o, taken, showOwner = true }: { o: Offering; taken?:
           <TypeBadge type={o.type} />
           {o.type === "private" && o.auto_confirm && <span className="badge ok"><Icon name="check" />تأكيد فوري</span>}
           {o.allow_weekly && (o.type === "private" || o.type === "group") && <span className="badge"><Icon name="cal" />أسبوعي</span>}
+          {o.type === "private" && o.trial_price != null && <span className="badge ok">{o.trial_price === 0 ? "حصة تجريبية مجانية" : `تجربة بـ ${o.trial_price} ₪`}</span>}
+          {o.package_enabled && o.package_size && <span className="badge">رزمة {o.package_size} حصص</span>}
           {full && <span className="badge bad">ممتلئ</span>}
         </div>
         <div className="price num">

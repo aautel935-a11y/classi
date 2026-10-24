@@ -1,3 +1,4 @@
+import { IntroVideo } from "@/components/IntroVideo";
 import { notFound } from "next/navigation";
 import { Icon } from "@/components/Icon";
 import { OfferCard } from "@/components/OfferCard";
@@ -17,7 +18,7 @@ export default async function TeacherPage({ params, searchParams }: { params: Pr
   const { supabase, user, profile } = await getSession();
   const isAdmin = !!profile?.roles?.includes("admin");
   const [{ data: t }, { data: offers }] = await Promise.all([
-    supabase.from("teachers").select("id,user_id,name,town,bio,years,is_school_teacher,rating,reviews_count,verify,photo_url,moderation_hidden,subject:subjects(name)").eq("id", id).maybeSingle(),
+    supabase.from("teachers").select("id,user_id,name,town,bio,years,is_school_teacher,rating,reviews_count,verify,photo_url,moderation_hidden,intro_video_url,subject:subjects(name)").eq("id", id).maybeSingle(),
     supabase.from("offerings").select(OFFERING_SELECT).eq("teacher_id", id).eq("active", true),
   ]);
   if (!t) notFound();
@@ -46,10 +47,11 @@ export default async function TeacherPage({ params, searchParams }: { params: Pr
         <div className="fact"><b className="num">{teacher.reviews_count}</b><span>تقييماً</span></div>
         <div className="fact"><b className="num">{teacher.years}</b><span>سنوات خبرة</span></div>
       </div>
-      {teacher.bio && (
+      {(teacher.bio || teacher.intro_video_url) && (
         <section className="section">
           <h2>عن المعلم</h2>
-          <p>{teacher.bio}</p>
+          {teacher.bio && <p>{teacher.bio}</p>}
+          <IntroVideo url={teacher.intro_video_url} name={teacher.name} />
         </section>
       )}
       <section className="section">

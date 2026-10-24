@@ -1,5 +1,6 @@
 "use client";
 
+import { OfferExtras } from "@/components/OfferExtras";
 import { useState } from "react";
 import { Icon } from "@/components/Icon";
 import { newOfferingAction } from "@/app/actions";
@@ -88,6 +89,7 @@ export function NewOfferForm({ subjects, levels, error }: { subjects: Opt[]; lev
           </label>
         </fieldset>
       )}
+      <OfferExtras type={tp} />
       {tp === "group" && <p className="note"><Icon name="cal" />ننشئ لقاءات الأسابيع الثمانية القادمة تلقائياً.</p>}
       {tp === "private" && <p className="note"><Icon name="clock" />أوقاتك المتاحة الافتراضية: الأحد إلى الخميس 15:00 إلى 21:00.</p>}
       <button className="btn block">نشر العرض</button>

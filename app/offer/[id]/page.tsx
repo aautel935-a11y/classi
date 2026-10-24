@@ -12,7 +12,8 @@ import { dayLong, shekel, time } from "@/lib/format";
 import { nextDays, privateSlots } from "@/lib/dates";
 import { BookingFlow } from "./BookingFlow";
 import { WaitlistJoin } from "./WaitlistJoin";
-import { leaveWaitlistAction } from "@/app/actions";
+import { buyPackageAction, leaveWaitlistAction } from "@/app/actions";
+import { IntroVideo } from "@/components/IntroVideo";
 
 export const dynamic = "force-dynamic";
 
@@ -30,10 +31,10 @@ export default async function OfferPage({ params, searchParams }: { params: Prom
   // Everything else the page needs, fetched at the same time.
   const empty = Promise.resolve({ data: null as any });
   const now = new Date().toISOString();
-  const [mineR, ownerR, avR, busyR, ssR, seatsR, kidsR, bufR, wlR] = await Promise.all([
+  const [mineR, ownerR, avR, busyR, ssR, seatsR, kidsR, bufR, wlR, pkR] = await Promise.all([
     user ? supabase.rpc("is_offering_owner", { p_offering: o.id }) : empty,
     o.teacher
-      ? supabase.from("teachers").select("user_id").eq("id", o.teacher.id).maybeSingle()
+      ? supabase.from("teachers").select("user_id,intro_video_url").eq("id", o.teacher.id).maybeSingle()
       : supabase.from("institutes").select("owner_id").eq("id", o.institute!.id).maybeSingle(),
     o.type === "private" && o.teacher_id ? supabase.from("availability").select("weekday,start_time,end_time").eq("teacher_id", o.teacher_id) : empty,
     o.type === "private" && o.teacher_id
@@ -46,6 +47,7 @@ export default async function OfferPage({ params, searchParams }: { params: Prom
     user ? supabase.from("children").select("id,name,grade").order("created_at") : empty,
     o.type === "private" && o.teacher_id ? supabase.rpc("teacher_buffer", { p_teacher: o.teacher_id }) : empty,
     user ? supabase.rpc("my_waitlist") : empty,
+    user && o.package_enabled ? supabase.from("lesson_packages").select("id,child_id,remaining,size").eq("offering_id", o.id).eq("status", "active").eq("user_id", user.id) : empty,
   ]);
   const mine = mineR.data;
   const ownerAccount = ownerR.data as any;
@@ -57,6 +59,17 @@ export default async function OfferPage({ params, searchParams }: { params: Prom
   const courseTaken = rows.filter((r) => r.offering_id === o.id && !r.session_id).reduce((a, r) => a + r.taken, 0);
   const firstSession = ss[0]?.starts_at ?? null;
   const children = kidsR.data;
+  const kidList = (children ?? []) as { id: string; name: string; grade: string | null }[];
+  // Who may still take the trial lesson (once per student with this teacher).
+  const trialFor: string[] = [];
+  if (user && o.type === "private" && o.trial_price != null) {
+    const who = [null, ...kidList.map((k) => k.id)];
+    const res = await Promise.all(who.map((c) => supabase.rpc("trial_available", { p_offering: o.id, p_child: c })));
+    res.forEach((r, i) => { if (r.data) trialFor.push(who[i] ?? "self"); });
+  }
+  const myPackages = ((pkR.data ?? []) as { id: string; child_id: string | null; remaining: number; size: number }[]).map((p) => ({ who: p.child_id ?? "self", remaining: p.remaining, size: p.size }));
+  const pkgOn = !!(o.package_enabled && o.package_size && o.package_price && (o.type === "private" || o.type === "group"));
+  const pkgSave = pkgOn ? o.package_size! * o.price - o.package_price! : 0;
 
   const full = o.type === "course" && o.seats != null && courseTaken >= o.seats;
   // Nothing left to book: full course, every upcoming group meeting full, or no free private hours.
@@ -89,6 +102,7 @@ export default async function OfferPage({ params, searchParams }: { params: Prom
           {o.type === "private" && o.auto_confirm && <span className="badge ok"><Icon name="check" />تأكيد فوري</span>}
           {o.allow_weekly && (o.type === "private" || o.type === "group") && <span className="badge"><Icon name="cal" />يمكن الحجز أسبوعياً</span>}
           {noRoom && o.type !== "private" && <span className="badge bad">ممتلئ</span>}
+          {o.type === "private" && o.trial_price != null && <span className="badge ok">{o.trial_price === 0 ? "حصة تجريبية مجانية" : `حصة تجريبية بـ ${o.trial_price} ₪`}</span>}
         </div>
         <h1>{o.title}</h1>
         <Link className="card" href={o.teacher ? `/teacher/${own.id}` : `/institute/${own.id}`} style={{ flexDirection: "row", alignItems: "center", gap: 12 }}>
@@ -134,6 +148,48 @@ export default async function OfferPage({ params, searchParams }: { params: Prom
             رابط زوم أو ميت يظهر في جدولك بعد تأكيد الحجز.
           </p>
         ) : null}
+        <IntroVideo url={ownerAccount?.intro_video_url} name={o.teacher ? `أ. ${o.teacher.name}` : ownerName(o)} />
+        {pkgOn && !mine && (
+          <div className="card package-card">
+            <div className="row between">
+              <b>رزمة {o.package_size} حصص</b>
+              <span className="num"><b>{shekel(o.package_price!)}</b>{pkgSave > 0 && <span className="small muted"> بدل {shekel(o.package_size! * o.price)}</span>}</span>
+            </div>
+            <span className="small muted">
+              {pkgSave > 0 ? `توفّر ${shekel(pkgSave)}. ` : ""}كل حجز يُخصم من الرزمة تلقائياً، والحصة الملغاة ترجع إليها.
+            </span>
+            {sp.package && <p className="okmsg">الرزمة جاهزة. احجز حصصك وستُخصم منها.</p>}
+            {sp.package_error && <p className="err">{sp.package_error}</p>}
+            {myPackages.map((p) => (
+              <span key={p.who} className="badge ok" style={{ alignSelf: "flex-start" }}>
+                رزمتك{p.who !== "self" ? ` لـ${kidList.find((k) => k.id === p.who)?.name ?? ""}` : ""}: بقي {p.remaining} من {p.size}
+              </span>
+            ))}
+            {user ? (
+              <details>
+                <summary className="link small">شراء رزمة</summary>
+                <form action={buyPackageAction} className="formstack" style={{ marginTop: 8 }}>
+                  <input type="hidden" name="offering_id" value={o.id} />
+                  <label className="field">
+                    لمن الرزمة؟
+                    <select name="who">
+                      <option value="self">أنا</option>
+                      {kidList.map((k) => <option key={k.id} value={k.id}>{k.name}</option>)}
+                    </select>
+                  </label>
+                  <label className="field">
+                    الدفع
+                    <select name="pay"><option value="bit">Bit</option><option value="cash">نقداً للمعلم</option></select>
+                  </label>
+                  <p className="small muted">الدفع للمعلم مباشرة في هذه المرحلة. يصله إشعار بشرائك.</p>
+                  <button className="btn sm">تأكيد شراء الرزمة</button>
+                </form>
+              </details>
+            ) : (
+              <Link className="link small" href={`/login?next=/offer/${o.id}`}>سجّل الدخول لشراء رزمة</Link>
+            )}
+          </div>
+        )}
         {isAdmin && <AdminQuick kind="offering" id={o.id} hidden={!!(o as any).moderation_hidden} back={`/offer/${o.id}`} userId={ownerAccount?.user_id ?? ownerAccount?.owner_id} />}
         {canMessage && (
           <MessageButton
@@ -172,7 +228,10 @@ export default async function OfferPage({ params, searchParams }: { params: Prom
             offering={{ id: o.id, type: o.type, title: o.title, price: o.price, seats: o.seats, full, places: o.places, autoConfirm: !!o.auto_confirm, allowWeekly: !!o.allow_weekly }}
             slots={slots}
             groupSessions={groupSessions}
-            kids={(children ?? []) as { id: string; name: string; grade: string | null }[]}
+            kids={kidList}
+            trialFor={trialFor}
+            trialPrice={o.trial_price ?? null}
+            packages={myPackages}
           />
           </>
         ) : (

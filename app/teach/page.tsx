@@ -18,7 +18,7 @@ const modeLabel = (m: string | null) => (m === "online" ? "أونلاين" : m =
 export default async function Teach({ searchParams }: { searchParams: Promise<Record<string, string | undefined>> }) {
   const sp = await searchParams;
   const { supabase, user, profile } = await requireUser("/teach");
-  const { data: t } = await supabase.from("teachers").select("id,name,verify,town,bio,years,is_school_teacher,subject_id,photo_url,buffer_minutes").eq("user_id", user.id).maybeSingle();
+  const { data: t } = await supabase.from("teachers").select("id,name,verify,town,bio,years,is_school_teacher,subject_id,photo_url,buffer_minutes,intro_video_url").eq("user_id", user.id).maybeSingle();
 
   if (!t) {
     const { data: subjects } = await supabase.from("subjects").select("id,name").order("id");
@@ -115,6 +115,11 @@ export default async function Teach({ searchParams }: { searchParams: Promise<Re
               </div>
               <label className="row"><input type="checkbox" name="school" defaultChecked={t.is_school_teacher} /> أنا معلم في مدرسة</label>
               <label className="field" htmlFor="e-bio">عن أسلوبك في التدريس<textarea id="e-bio" name="bio" rows={4} defaultValue={t.bio} /></label>
+              <label className="field" htmlFor="e-video">
+                فيديو تعريفي قصير (اختياري)
+                <input id="e-video" name="intro_video" type="url" dir="ltr" placeholder="https://youtu.be/…" defaultValue={t.intro_video_url ?? ""} />
+                <span className="small muted">رابط من YouTube أو Instagram أو TikTok أو Google Drive. دقيقة واحدة تعرّف فيها عن نفسك وطريقتك تكفي.</span>
+              </label>
               <button className="btn">حفظ</button>
             </form>
           </details>

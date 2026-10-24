@@ -26,10 +26,19 @@ export async function bookAction(input: {
   pay: string;
   weekly?: boolean;
   mode?: Place | null;
+  trial?: boolean;
 }): Promise<Result> {
   revalidateTag("catalog");
   const { supabase, user } = await client();
   if (!user) return { error: "سجّل الدخول أولاً لإتمام الحجز." };
+  if (input.trial && !input.weekly) {
+    const { error } = await supabase.rpc("create_trial_booking", {
+      p_offering: input.offeringId, p_child: input.childId || null, p_starts_at: input.startsAt || null, p_pay: input.pay, p_mode: input.mode || null,
+    });
+    if (error) return { error: error.message };
+    revalidatePath("/schedule");
+    return { ok: true };
+  }
   if (input.weekly) {
     const { data, error } = await supabase.rpc("create_weekly_booking", {
       p_offering: input.offeringId,
@@ -166,6 +175,21 @@ export async function teacherSetupAction(form: FormData) {
   redirect("/teach");
 }
 
+// Trial lesson and lesson packages from the offer form (both optional).
+function offerExtras(form: FormData, type: string): Record<string, unknown> {
+  const out: Record<string, unknown> = {};
+  if (type === "private") out.trial_price = form.get("trial_on") === "on" ? Math.max(0, num(form, "trial_price") || 0) : null;
+  if (type === "private" || type === "group") {
+    const size = Math.round(num(form, "package_size"));
+    const price = Math.round(num(form, "package_price"));
+    const on = form.get("package_on") === "on";
+    out.package_enabled = on && size >= 2 && size <= 50 && price > 0;
+    if (size >= 2 && size <= 50) out.package_size = size;
+    if (price > 0) out.package_price = price;
+  }
+  return out;
+}
+
 export async function newOfferingAction(form: FormData) {
   revalidateTag("catalog");
   const { supabase, user } = await client();
@@ -188,6 +212,7 @@ export async function newOfferingAction(form: FormData) {
     minutes: type === "group" ? 90 : type === "recorded" ? 0 : 60,
     auto_confirm: type === "private" && form.get("auto_confirm") === "on",
     allow_weekly: (type === "private" || type === "group") && form.get("allow_weekly") === "on",
+    ...offerExtras(form, type),
   };
   if (type === "group") {
     row.seats = num(form, "seats") || 6;
@@ -348,8 +373,10 @@ export async function updateTeacherAction(form: FormData) {
       bio: str(form, "bio"),
       years: num(form, "years"),
       is_school_teacher: form.get("school") === "on",
+      intro_video_url: /^https:\/\/\S{6,290}$/.test(str(form, "intro_video")) ? str(form, "intro_video") : null,
     })
     .eq("user_id", user.id);
+  if (str(form, "intro_video") && !/^https:\/\//.test(str(form, "intro_video"))) redirect(`/teach?error=${encodeURIComponent("رابط الفيديو يجب أن يبدأ بـ https://")}`);
   revalidatePath("/teach");
   redirect("/teach?ok=profile");
 }
@@ -445,6 +472,8 @@ export async function updateOfferingAction(form: FormData) {
   if (o.type === "recorded") row.lessons_count = num(form, "lessons") || null;
   if (o.type === "private") row.auto_confirm = form.get("auto_confirm") === "on";
   if (o.type === "private" || o.type === "group") row.allow_weekly = form.get("allow_weekly") === "on";
+  Object.assign(row, offerExtras(form, o.type));
+  if (form.get("package_on") === "on" && !row.package_enabled) redirect(`${path}?error=${encodeURIComponent("لتفعيل الرزمة أدخل عدد الحصص (2 إلى 50) وسعر الرزمة.")}&edit=1`);
   const { error } = await supabase.from("offerings").update(row).eq("id", id);
   revalidatePath(path);
   revalidatePath(`/offer/${id}`);
@@ -690,4 +719,24 @@ export async function teacherCancelBookingAction(form: FormData) {
   revalidateTag("catalog");
   revalidatePath("/teach");
   redirect(calBack(form, error ? { error: error.message } : { ok: "cancelled" }));
+}
+
+// ---------- lesson packages ----------
+export async function buyPackageAction(form: FormData) {
+  const { supabase, user } = await client();
+  const id = str(form, "offering_id");
+  if (!user) redirect(`/login?next=/offer/${id}`);
+  const who = str(form, "who");
+  const { error } = await supabase.rpc("buy_package", { p_offering: id, p_child: who && who !== "self" ? who : null, p_pay: str(form, "pay") || "bit" });
+  revalidatePath(`/offer/${id}`);
+  redirect(`/offer/${id}?${error ? `package_error=${encodeURIComponent(error.message)}` : "package=1"}`);
+}
+
+export async function cancelPackageAction(form: FormData) {
+  const { supabase, user } = await client();
+  if (!user) redirect("/login");
+  const back = str(form, "back") || "/teach";
+  const { error } = await supabase.rpc("cancel_package", { p_package: str(form, "id") });
+  revalidatePath(back);
+  redirect(`${back}?${error ? `error=${encodeURIComponent(error.message)}` : "saved=package"}`);
 }

@@ -10,7 +10,7 @@ export const TYPES: Record<OfferingType, { name: string; icon: IconName; desc: s
 };
 export const PLACES: Record<Place, string> = { home: "حضوري", online: "أونلاين", center: "في المعهد" };
 export const TOWNS = ["باقة الغربية", "جت", "الطيبة", "الطيرة", "كفر قرع", "عرعرة", "أم الفحم", "زيمر", "قلنسوة", "كفر قاسم"];
-export const PAY_LABEL: Record<string, string> = { bit: "Bit", cash: "نقداً", card: "بطاقة ائتمان", installments: "3 دفعات" };
+export const PAY_LABEL: Record<string, string> = { bit: "Bit", cash: "نقداً", card: "بطاقة ائتمان", installments: "3 دفعات", package: "من الرزمة" };
 
 export type IconName =
   | "home" | "search" | "cal" | "chat" | "user" | "person" | "users" | "building" | "monitor" | "play"
@@ -32,6 +32,10 @@ export type Offering = {
   active?: boolean;
   auto_confirm?: boolean;
   allow_weekly?: boolean;
+  trial_price?: number | null;
+  package_enabled?: boolean;
+  package_size?: number | null;
+  package_price?: number | null;
   teacher_id: string | null;
   institute_id: string | null;
   subject: { id: number; name: string } | null;
@@ -42,7 +46,7 @@ export type Offering = {
 };
 
 export const OFFERING_SELECT =
-  "id,type,title,active,moderation_hidden,auto_confirm,allow_weekly,places,price,seats,schedule_note,start_date,sessions_count,lessons_count,minutes,teacher_id,institute_id," +
+  "id,type,title,active,moderation_hidden,auto_confirm,allow_weekly,trial_price,package_enabled,package_size,package_price,places,price,seats,schedule_note,start_date,sessions_count,lessons_count,minutes,teacher_id,institute_id," +
   "subject:subjects(id,name),level:levels(id,name)," +
   "teacher:teachers!offerings_teacher_id_fkey(id,name,town,rating,reviews_count,photo_url)," +
   "institute:institutes(id,name,town,rating,reviews_count,logo_url)," +

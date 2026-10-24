@@ -1,11 +1,12 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { Icon } from "@/components/Icon";
-import { saveLinkAction, startBookingConversationAction, updateOfferingAction } from "@/app/actions";
+import { cancelPackageAction, saveLinkAction, startBookingConversationAction, updateOfferingAction } from "@/app/actions";
 import { requireUser } from "@/lib/session";
 import { PAY_LABEL, PLACES, TYPES, type OfferingType, type Place } from "@/lib/types";
 import { dayLong, isoDay, time } from "@/lib/format";
 import { EditSession } from "./EditSession";
+import { OfferExtras } from "@/components/OfferExtras";
 import { WaitlistOwner, type WRow } from "@/components/WaitlistOwner";
 
 export const dynamic = "force-dynamic";
@@ -19,7 +20,7 @@ export default async function ManageOffer({ params, searchParams }: { params: Pr
   const { supabase } = await requireUser(path);
   const { data: o } = await supabase
     .from("offerings")
-    .select("id,type,title,price,seats,places,lessons_count,subject_id,level_id,course_teacher_id,institute_id,teacher_id,auto_confirm,allow_weekly,course_teacher:teachers!offerings_course_teacher_id_fkey(name)")
+    .select("id,type,title,price,seats,places,lessons_count,subject_id,level_id,course_teacher_id,institute_id,teacher_id,auto_confirm,allow_weekly,trial_price,package_enabled,package_size,package_price,course_teacher:teachers!offerings_course_teacher_id_fkey(name)")
     .eq("id", id)
     .maybeSingle();
   if (!o) notFound();
@@ -28,7 +29,7 @@ export default async function ManageOffer({ params, searchParams }: { params: Pr
     supabase.rpc("is_offering_owner", { p_offering: id }),
   ]);
   if (!staff) notFound();
-  const [{ data: sessions }, { data: rooms }, { data: roster }, { data: link }, { data: subjects }, { data: levels }, { data: staffList }, { data: wl }] = await Promise.all([
+  const [{ data: sessions }, { data: rooms }, { data: roster }, { data: link }, { data: subjects }, { data: levels }, { data: staffList }, { data: wl }, { data: pk }] = await Promise.all([
     supabase.from("sessions").select("id,seq,starts_at,changed,cancelled,room_id,room:rooms(name)").eq("offering_id", id).order("seq"),
     o.institute_id ? supabase.from("rooms").select("id,name").eq("institute_id", o.institute_id).order("name") : Promise.resolve({ data: [] as { id: string; name: string }[] }),
     supabase.rpc("owner_bookings", { p_offering: id }),
@@ -37,6 +38,7 @@ export default async function ManageOffer({ params, searchParams }: { params: Pr
     supabase.from("levels").select("id,name").order("sort"),
     o.institute_id ? supabase.from("institute_teachers").select("teacher:teachers(id,name)").eq("institute_id", o.institute_id) : Promise.resolve({ data: [] as any[] }),
     supabase.rpc("owner_waitlist", { p_offering: id }),
+    supabase.rpc("owner_packages", { p_offering: id }),
   ]);
   const placeNow = (o.places as string[]).includes("home") && (o.places as string[]).includes("online") ? "both" : (o.places as string[])[0];
   const type = o.type as OfferingType;
@@ -58,6 +60,7 @@ export default async function ManageOffer({ params, searchParams }: { params: Pr
           {(sessions ?? []).length ? ` · ${(sessions ?? []).length} لقاء` : ""}
         </p>
         {sp.saved === "link" && <p className="okmsg">حُفظ الرابط. يراه الطلاب المؤكَّدون في جدولهم.</p>}
+        {sp.saved === "package" && <p className="okmsg">أُلغيت الرزمة ووصل ولي الأمر إشعار. الحصص القادمة بقيت محجوزة بالسعر العادي.</p>}
         {sp.saved === "offer" && <p className="okmsg">حُفظت التعديلات. السعر الجديد يسري على الحجوزات القادمة فقط.</p>}
         {sp.error && <p className="err">{sp.error}</p>}
       </div>
@@ -115,6 +118,7 @@ export default async function ManageOffer({ params, searchParams }: { params: Pr
                   <span><b>السماح بالحجز الأسبوعي</b><span className="small muted">{type === "group" ? "اشتراك في كل اللقاءات القادمة." : "نفس الموعد كل أسبوع، يتجدد تلقائياً."}</span></span>
                 </label>
               )}
+              <OfferExtras type={type} trialPrice={(o as any).trial_price} packageOn={(o as any).package_enabled} packageSize={(o as any).package_size} packagePrice={(o as any).package_price} />
               <p className="note"><Icon name="check" />من حجز قبل التعديل يبقى على السعر الذي حجز به.</p>
               <button className="btn">حفظ التعديلات</button>
             </form>
@@ -174,6 +178,33 @@ export default async function ManageOffer({ params, searchParams }: { params: Pr
       )}
 
       {type !== "recorded" && <WaitlistOwner rows={(wl ?? []) as WRow[]} back={path} showTitle={false} canAnswer={!!owner} flash={sp.wl} />}
+
+      {((pk ?? []) as any[]).length > 0 && (
+        <section className="section">
+          <h2>رزم الحصص</h2>
+          {((pk ?? []) as { id: string; student_name: string; size: number; remaining: number; price: number; pay_method: string; status: string; created_at: string }[]).map((p) => (
+            <div key={p.id} className="card" style={{ flexDirection: "row", alignItems: "center", gap: 12 }}>
+              <div className="stack" style={{ gap: 2, flex: 1, minWidth: 0 }}>
+                <b>{p.student_name}</b>
+                <span className="small muted">بقي {p.remaining} من {p.size} · {p.price} ₪ · {PAY_LABEL[p.pay_method] ?? p.pay_method} · {dayLong(p.created_at)}</span>
+              </div>
+              <div className="stack" style={{ gap: 4, alignItems: "flex-end" }}>
+                <span className={`badge ${p.status === "active" ? "ok" : p.status === "cancelled" ? "bad" : ""}`}>{p.status === "active" ? "فعّالة" : p.status === "used" ? "انتهت" : "ملغاة"}</span>
+                {owner && p.status === "active" && (
+                  <details>
+                    <summary className="link small" style={{ color: "var(--bad)" }}>إلغاء</summary>
+                    <form action={cancelPackageAction} style={{ marginTop: 6 }}>
+                      <input type="hidden" name="id" value={p.id} />
+                      <input type="hidden" name="back" value={path} />
+                      <button className="btn sm badb">تأكيد إلغاء الرزمة</button>
+                    </form>
+                  </details>
+                )}
+              </div>
+            </div>
+          ))}
+        </section>
+      )}
 
       <section className="section">
         <h2>{type === "private" ? "الحجوزات" : "الطلاب"}</h2>
