@@ -6,52 +6,53 @@ import { getSession } from "@/lib/session";
 import { OFFERING_SELECT, PLACES, TYPES, ownerName, ownerOf, ownerPhoto, type Offering } from "@/lib/types";
 import { Avatar } from "@/components/Avatar";
 import { MessageButton } from "@/components/MessageButton";
+import { ReportButton } from "@/components/ReportButton";
+import { AdminQuick } from "@/components/AdminQuick";
 import { dayLong, shekel, time } from "@/lib/format";
 import { nextDays, privateSlots } from "@/lib/dates";
 import { BookingFlow } from "./BookingFlow";
 
 export const dynamic = "force-dynamic";
 
-export default async function OfferPage({ params }: { params: Promise<{ id: string }> }) {
+export default async function OfferPage({ params, searchParams }: { params: Promise<{ id: string }>; searchParams: Promise<Record<string, string | undefined>> }) {
   const { id } = await params;
-  const { supabase, user } = await getSession();
+  const sp = await searchParams;
+  const { supabase, user, profile } = await getSession();
+  const isAdmin = !!profile?.roles?.includes("admin");
   if (!/^[0-9a-f-]{36}$/i.test(id)) notFound();
   const { data } = await supabase.from("offerings").select(OFFERING_SELECT).eq("id", id).maybeSingle();
   if (!data) notFound();
   const o = data as unknown as Offering;
   const own = ownerOf(o);
   if (!own) notFound();
-  const { data: mine } = user ? await supabase.rpc("is_offering_owner", { p_offering: o.id }) : { data: false };
-  const { data: ownerAccount } = o.teacher
-    ? await supabase.from("teachers").select("user_id").eq("id", o.teacher.id).maybeSingle()
-    : await supabase.from("institutes").select("owner_id").eq("id", o.institute!.id).maybeSingle();
-  const canMessage = !mine && !!((ownerAccount as any)?.user_id ?? (ownerAccount as any)?.owner_id);
-
-  // what the booking sheet needs
-  let slots: ReturnType<typeof privateSlots> = [];
-  let groupSessions: { id: string; starts_at: string; taken: number }[] = [];
-  let courseTaken = 0;
-  let firstSession: string | null = null;
-
-  if (o.type === "private" && o.teacher_id) {
-    const days = nextDays(7);
-    const [{ data: av }, { data: busy }] = await Promise.all([
-      supabase.from("availability").select("weekday,start_time,end_time").eq("teacher_id", o.teacher_id),
-      supabase.rpc("teacher_busy", { p_teacher: o.teacher_id, p_from: new Date().toISOString(), p_to: new Date(Date.now() + 9 * 864e5).toISOString() }),
-    ]);
-    slots = privateSlots(av ?? [], busy ?? [], o.minutes || 60, days);
-  }
-  if (o.type === "group" || o.type === "course") {
-    const [{ data: ss }, { data: seats }] = await Promise.all([
-      supabase.from("sessions").select("id,starts_at,seq").eq("offering_id", o.id).eq("cancelled", false).gt("starts_at", new Date().toISOString()).order("starts_at").limit(o.type === "group" ? 4 : 1),
-      supabase.rpc("seats_overview"),
-    ]);
-    const rows = (seats ?? []) as { offering_id: string; session_id: string | null; taken: number }[];
-    groupSessions = (ss ?? []).map((s) => ({ id: s.id, starts_at: s.starts_at, taken: rows.find((r) => r.session_id === s.id)?.taken ?? 0 }));
-    courseTaken = rows.filter((r) => r.offering_id === o.id && !r.session_id).reduce((a, r) => a + r.taken, 0);
-    firstSession = ss?.[0]?.starts_at ?? null;
-  }
-  const { data: children } = user ? await supabase.from("children").select("id,name,grade").order("created_at") : { data: [] };
+  // Everything else the page needs, fetched at the same time.
+  const empty = Promise.resolve({ data: null as any });
+  const now = new Date().toISOString();
+  const [mineR, ownerR, avR, busyR, ssR, seatsR, kidsR] = await Promise.all([
+    user ? supabase.rpc("is_offering_owner", { p_offering: o.id }) : empty,
+    o.teacher
+      ? supabase.from("teachers").select("user_id").eq("id", o.teacher.id).maybeSingle()
+      : supabase.from("institutes").select("owner_id").eq("id", o.institute!.id).maybeSingle(),
+    o.type === "private" && o.teacher_id ? supabase.from("availability").select("weekday,start_time,end_time").eq("teacher_id", o.teacher_id) : empty,
+    o.type === "private" && o.teacher_id
+      ? supabase.rpc("teacher_busy", { p_teacher: o.teacher_id, p_from: now, p_to: new Date(Date.now() + 9 * 864e5).toISOString() })
+      : empty,
+    o.type === "group" || o.type === "course"
+      ? supabase.from("sessions").select("id,starts_at,seq").eq("offering_id", o.id).eq("cancelled", false).gt("starts_at", now).order("starts_at").limit(o.type === "group" ? 4 : 1)
+      : empty,
+    o.type === "group" || o.type === "course" ? supabase.rpc("seats_overview") : empty,
+    user ? supabase.from("children").select("id,name,grade").order("created_at") : empty,
+  ]);
+  const mine = mineR.data;
+  const ownerAccount = ownerR.data as any;
+  const canMessage = !mine && !!(ownerAccount?.user_id ?? ownerAccount?.owner_id);
+  const slots = o.type === "private" ? privateSlots(avR.data ?? [], busyR.data ?? [], o.minutes || 60, nextDays(7)) : [];
+  const rows = (seatsR.data ?? []) as { offering_id: string; session_id: string | null; taken: number }[];
+  const ss = (ssR.data ?? []) as { id: string; starts_at: string }[];
+  const groupSessions = ss.map((x) => ({ id: x.id, starts_at: x.starts_at, taken: rows.find((r) => r.session_id === x.id)?.taken ?? 0 }));
+  const courseTaken = rows.filter((r) => r.offering_id === o.id && !r.session_id).reduce((a, r) => a + r.taken, 0);
+  const firstSession = ss[0]?.starts_at ?? null;
+  const children = kidsR.data;
 
   const full = o.type === "course" && o.seats != null && courseTaken >= o.seats;
   const facts: [string, string][] = [
@@ -116,6 +117,7 @@ export default async function OfferPage({ params }: { params: Promise<{ id: stri
             رابط زوم أو ميت يظهر في جدولك بعد تأكيد الحجز.
           </p>
         ) : null}
+        {isAdmin && <AdminQuick kind="offering" id={o.id} hidden={!!(o as any).moderation_hidden} back={`/offer/${o.id}`} userId={ownerAccount?.user_id ?? ownerAccount?.owner_id} />}
         {canMessage && (
           <MessageButton
             teacherId={o.teacher?.id}
@@ -138,6 +140,7 @@ export default async function OfferPage({ params }: { params: Promise<{ id: stri
             سجّل الدخول للحجز
           </Link>
         )}
+        {!mine && <ReportButton type="offering" id={o.id} back={`/offer/${o.id}`} flash={{ ok: sp.reported, error: sp.report_error }} />}
       </div>
     </div>
   );

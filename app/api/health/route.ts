@@ -1,22 +1,14 @@
 import { NextResponse } from "next/server";
-import { createClient } from "@/lib/supabase/server";
+import { runHealthChecks } from "@/lib/health";
 
 export const dynamic = "force-dynamic";
 
-// Connection check: shows whether the database answers, without revealing the key.
+// Public status: 200 when everything works, 503 when a service fails, so an
+// uptime monitor (for example UptimeRobot) can watch this address.
 export async function GET() {
-  const url = process.env.NEXT_PUBLIC_SUPABASE_URL ?? "";
-  const key = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY ?? "";
-  const out: Record<string, unknown> = {
-    url_host: url.replace(/^https?:\/\//, "").split("/")[0] || null,
-    key_kind: key.startsWith("sb_publishable_") ? "publishable" : key.startsWith("eyJ") ? "legacy-anon" : key ? "unknown" : "missing",
-    key_length: key.length,
-  };
-  if (url && key) {
-    const supabase = await createClient();
-    const { count, error } = await supabase.from("offerings").select("id", { count: "exact", head: true });
-    out.offerings = count;
-    out.error = error ? { code: error.code, message: error.message } : null;
-  }
-  return NextResponse.json(out);
+  const result = await runHealthChecks();
+  return NextResponse.json(
+    { ok: result.ok, checked_at: result.checked_at, checks: result.checks.map(({ name, status, ms }) => ({ name, status, ms })) },
+    { status: result.ok ? 200 : 503, headers: { "Cache-Control": "no-store" } }
+  );
 }

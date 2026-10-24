@@ -1,18 +1,23 @@
 import { notFound } from "next/navigation";
 import { Icon } from "@/components/Icon";
 import { OfferCard } from "@/components/OfferCard";
-import { createClient } from "@/lib/supabase/server";
+import { getSession } from "@/lib/session";
+import { ReportButton } from "@/components/ReportButton";
+import { AdminQuick } from "@/components/AdminQuick";
 import { OFFERING_SELECT, type Offering } from "@/lib/types";
 import { Avatar } from "@/components/Avatar";
 import { MessageButton } from "@/components/MessageButton";
 
 export const dynamic = "force-dynamic";
 
-export default async function TeacherPage({ params }: { params: Promise<{ id: string }> }) {
+export default async function TeacherPage({ params, searchParams }: { params: Promise<{ id: string }>; searchParams: Promise<Record<string, string | undefined>> }) {
   const { id } = await params;
-  const supabase = await createClient();
+  const sp = await searchParams;
+  if (!/^[0-9a-f-]{36}$/i.test(id)) notFound();
+  const { supabase, user, profile } = await getSession();
+  const isAdmin = !!profile?.roles?.includes("admin");
   const [{ data: t }, { data: offers }] = await Promise.all([
-    supabase.from("teachers").select("id,user_id,name,town,bio,years,is_school_teacher,rating,reviews_count,verify,photo_url,subject:subjects(name)").eq("id", id).maybeSingle(),
+    supabase.from("teachers").select("id,user_id,name,town,bio,years,is_school_teacher,rating,reviews_count,verify,photo_url,moderation_hidden,subject:subjects(name)").eq("id", id).maybeSingle(),
     supabase.from("offerings").select(OFFERING_SELECT).eq("teacher_id", id).eq("active", true),
   ]);
   if (!t) notFound();
@@ -34,7 +39,8 @@ export default async function TeacherPage({ params }: { params: Promise<{ id: st
           </div>
         </div>
       </div>
-      {teacher.user_id && <MessageButton teacherId={teacher.id} back={`/teacher/${teacher.id}`} label="راسل المعلم" />}
+      {isAdmin && <AdminQuick kind="teacher" id={teacher.id} hidden={teacher.moderation_hidden} back={`/teacher/${teacher.id}`} userId={teacher.user_id} />}
+      {teacher.user_id && teacher.user_id !== user?.id && <MessageButton teacherId={teacher.id} back={`/teacher/${teacher.id}`} label="راسل المعلم" />}
       <div className="facts" style={{ marginTop: 12 }}>
         <div className="fact"><b className="num">{Number(teacher.rating).toFixed(1)}</b><span>التقييم</span></div>
         <div className="fact"><b className="num">{teacher.reviews_count}</b><span>تقييماً</span></div>
@@ -56,6 +62,7 @@ export default async function TeacherPage({ params }: { params: Promise<{ id: st
           )}
         </div>
         <p className="note"><Icon name="check" />يقيّم فقط من حضر حصة فعلاً.</p>
+        {teacher.user_id !== user?.id && <ReportButton type="teacher" id={teacher.id} back={`/teacher/${teacher.id}`} flash={{ ok: sp.reported, error: sp.report_error }} />}
       </section>
     </div>
   );

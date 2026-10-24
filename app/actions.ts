@@ -1,6 +1,6 @@
 "use server";
 
-import { revalidatePath } from "next/cache";
+import { revalidatePath, revalidateTag } from "next/cache";
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { fromLocal } from "@/lib/format";
@@ -27,6 +27,7 @@ export async function bookAction(input: {
   weekly?: boolean;
   mode?: Place | null;
 }): Promise<Result> {
+  revalidateTag("catalog");
   const { supabase, user } = await client();
   if (!user) return { error: "سجّل الدخول أولاً لإتمام الحجز." };
   const { error } = await supabase.rpc("create_booking", {
@@ -44,6 +45,7 @@ export async function bookAction(input: {
 }
 
 export async function cancelBookingAction(form: FormData) {
+  revalidateTag("catalog");
   const { supabase } = await client();
   const { error } = await supabase.rpc("cancel_booking", { p_booking: str(form, "id") });
   revalidatePath("/schedule");
@@ -133,6 +135,7 @@ export async function removeChildAction(form: FormData) {
 
 // ---------- teacher ----------
 export async function teacherSetupAction(form: FormData) {
+  revalidateTag("catalog");
   const { supabase, user } = await client();
   if (!user) redirect("/login?next=/teach");
   const { error } = await supabase.from("teachers").insert({
@@ -150,6 +153,7 @@ export async function teacherSetupAction(form: FormData) {
 }
 
 export async function newOfferingAction(form: FormData) {
+  revalidateTag("catalog");
   const { supabase, user } = await client();
   if (!user) redirect("/login?next=/teach/new");
   const { data: t } = await supabase.from("teachers").select("id").eq("user_id", user.id).maybeSingle();
@@ -190,6 +194,7 @@ export async function newOfferingAction(form: FormData) {
 }
 
 export async function deleteOfferingAction(form: FormData) {
+  revalidateTag("catalog");
   const { supabase } = await client();
   const id = str(form, "id");
   const back = str(form, "path") || "/teach";
@@ -201,6 +206,7 @@ export async function deleteOfferingAction(form: FormData) {
 }
 
 export async function toggleOfferingAction(form: FormData) {
+  revalidateTag("catalog");
   const { supabase } = await client();
   const back = str(form, "path") || "/teach";
   const active = str(form, "active") === "1";
@@ -211,6 +217,7 @@ export async function toggleOfferingAction(form: FormData) {
 
 // ---------- institute ----------
 export async function instituteSetupAction(form: FormData) {
+  revalidateTag("catalog");
   const { supabase, user } = await client();
   if (!user) redirect("/login?next=/manage");
   const { data: inst, error } = await supabase
@@ -226,6 +233,7 @@ export async function instituteSetupAction(form: FormData) {
 }
 
 export async function newCourseAction(form: FormData) {
+  revalidateTag("catalog");
   const { supabase, user } = await client();
   if (!user) redirect("/login?next=/manage/new-course");
   const { data: inst } = await supabase.from("institutes").select("id").eq("owner_id", user.id).maybeSingle();
@@ -288,6 +296,7 @@ export async function saveAttendanceAction(form: FormData) {
 
 // ---------- photos ----------
 export async function savePhotoAction(kind: "teacher" | "institute" | "profile", url: string): Promise<Result> {
+  revalidateTag("catalog");
   const { supabase, user } = await client();
   if (!user) return { error: "سجّل الدخول أولاً." };
   let ok = false;
@@ -311,6 +320,7 @@ export async function savePhotoAction(kind: "teacher" | "institute" | "profile",
 }
 
 export async function updateTeacherAction(form: FormData) {
+  revalidateTag("catalog");
   const { supabase, user } = await client();
   if (!user) redirect("/login?next=/teach");
   await supabase
@@ -329,6 +339,7 @@ export async function updateTeacherAction(form: FormData) {
 }
 
 export async function updateInstituteAction(form: FormData) {
+  revalidateTag("catalog");
   const { supabase, user } = await client();
   if (!user) redirect("/login?next=/manage");
   await supabase.from("institutes").update({ name: str(form, "name"), town: str(form, "town"), bio: str(form, "bio") }).eq("owner_id", user.id);
@@ -338,6 +349,7 @@ export async function updateInstituteAction(form: FormData) {
 
 // ---------- admin ----------
 export async function adminVerifyAction(form: FormData) {
+  revalidateTag("catalog");
   const { supabase } = await client();
   const { error } = await supabase.rpc("admin_verify", {
     p_kind: str(form, "kind"),
@@ -384,6 +396,7 @@ export async function saveAvailabilityAction(form: FormData) {
 
 // ---------- editing an offer ----------
 export async function updateOfferingAction(form: FormData) {
+  revalidateTag("catalog");
   const { supabase, user } = await client();
   if (!user) redirect("/login");
   const id = str(form, "id");
@@ -460,4 +473,57 @@ export async function resolveReportAction(form: FormData) {
   const { supabase } = await client();
   await supabase.from("conversation_reports").update({ resolved: true }).eq("id", str(form, "id"));
   revalidatePath("/admin");
+}
+
+// ---------- reports and moderation ----------
+export async function submitReportAction(form: FormData) {
+  const { supabase, user } = await client();
+  const back = str(form, "back") || "/";
+  if (!user) redirect(`/login?next=${encodeURIComponent(back)}`);
+  const { error } = await supabase.from("reports").insert({
+    target_type: str(form, "target_type"),
+    target_id: str(form, "target_id"),
+    reason: str(form, "reason") || "other",
+    details: str(form, "details").slice(0, 1000) || null,
+  });
+  redirect(`${back}?${error ? `report_error=${encodeURIComponent(error.message)}` : "reported=1"}`);
+}
+
+export async function adminSetStatusAction(form: FormData) {
+  revalidateTag("catalog");
+  const { supabase } = await client();
+  const back = str(form, "back") || "/admin";
+  const { error } = await supabase.rpc("admin_set_user_status", {
+    p_user: str(form, "user_id"),
+    p_status: str(form, "status"),
+    p_days: str(form, "status") === "suspended" ? num(form, "days") || 7 : null,
+    p_reason: str(form, "reason") || null,
+  });
+  revalidatePath(back);
+  redirect(`${back}${back.includes("?") ? "&" : "?"}${error ? `error=${encodeURIComponent(error.message)}` : "done=status"}`);
+}
+
+export async function adminHideAction(form: FormData) {
+  revalidateTag("catalog");
+  const { supabase } = await client();
+  const back = str(form, "back") || "/admin";
+  const { error } = await supabase.rpc("admin_hide", {
+    p_kind: str(form, "kind"),
+    p_id: str(form, "id"),
+    p_hidden: str(form, "hidden") === "1",
+    p_reason: str(form, "reason") || null,
+  });
+  revalidatePath(back);
+  redirect(`${back}${back.includes("?") ? "&" : "?"}${error ? `error=${encodeURIComponent(error.message)}` : "done=hide"}`);
+}
+
+export async function adminCloseReportAction(form: FormData) {
+  const { supabase } = await client();
+  const { error } = await supabase.rpc("admin_close_report", {
+    p_report: str(form, "id"),
+    p_status: str(form, "status"),
+    p_note: str(form, "note") || null,
+  });
+  revalidatePath("/admin");
+  redirect(`/admin?tab=reports${error ? `&error=${encodeURIComponent(error.message)}` : "&done=report"}`);
 }

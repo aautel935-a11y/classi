@@ -40,7 +40,7 @@ export type Offering = {
 };
 
 export const OFFERING_SELECT =
-  "id,type,title,active,places,price,seats,schedule_note,start_date,sessions_count,lessons_count,minutes,teacher_id,institute_id," +
+  "id,type,title,active,moderation_hidden,places,price,seats,schedule_note,start_date,sessions_count,lessons_count,minutes,teacher_id,institute_id," +
   "subject:subjects(id,name),level:levels(id,name)," +
   "teacher:teachers!offerings_teacher_id_fkey(id,name,town,rating,reviews_count,photo_url)," +
   "institute:institutes(id,name,town,rating,reviews_count,logo_url)," +

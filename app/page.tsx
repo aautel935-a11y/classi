@@ -3,7 +3,6 @@ import { Avatar } from "@/components/Avatar";
 import { Icon, Stars } from "@/components/Icon";
 import { OfferCard } from "@/components/OfferCard";
 import { loadCatalog } from "@/lib/catalog";
-import { createClient } from "@/lib/supabase/server";
 import { getSession } from "@/lib/session";
 import { TYPES, subjectLook, type OfferingType } from "@/lib/types";
 
@@ -11,17 +10,9 @@ export const dynamic = "force-dynamic";
 
 export default async function Home() {
   const { profile } = await getSession();
-  const supabase = await createClient();
   const town = profile?.town || "باقة الغربية";
-  const [{ offerings, taken, subjects }, { data: teachers }] = await Promise.all([
-    loadCatalog(),
-    supabase
-      .from("teachers")
-      .select("id,name,town,rating,reviews_count,photo_url,subject:subjects(name)")
-      .eq("town", town)
-      .order("rating", { ascending: false })
-      .limit(8),
-  ]);
+  const { offerings, taken, subjects, teachers: allTeachers } = await loadCatalog();
+  const teachers = allTeachers.filter((t) => t.town === town).slice(0, 8);
   const courses = offerings.filter((o) => o.type === "course").slice(0, 3);
   const types: OfferingType[] = ["private", "group", "course", "recorded"];
   const first = profile?.full_name?.split(" ")[0];

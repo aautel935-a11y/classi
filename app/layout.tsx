@@ -4,7 +4,8 @@ import "./globals.css";
 import { BottomNav } from "@/components/BottomNav";
 import { Icon, Logo } from "@/components/Icon";
 import { isConfigured } from "@/lib/supabase/server";
-import { getSession } from "@/lib/session";
+import { getSession, isBlocked } from "@/lib/session";
+import { signOutAction } from "@/app/actions";
 import { navFor } from "@/lib/types";
 
 export const metadata: Metadata = {
@@ -35,13 +36,12 @@ async function Shell({ children }: { children: React.ReactNode }) {
   let unread = 0;
   let unreadMessages = 0;
   if (user) {
-    const [{ count }, { data: convs }] = await Promise.all([
-      supabase.from("notifications").select("id", { count: "exact", head: true }).is("read_at", null).neq("kind", "message"),
-      supabase.rpc("my_conversations"),
-    ]);
-    unread = count ?? 0;
-    unreadMessages = ((convs ?? []) as { unread: number }[]).reduce((a, c) => a + (c.unread || 0), 0);
+    const { data } = await supabase.rpc("my_header_counts");
+    const row = (Array.isArray(data) ? data[0] : data) as { notifications: number; messages: number } | null;
+    unread = row?.notifications ?? 0;
+    unreadMessages = row?.messages ?? 0;
   }
+  if (isBlocked(profile)) return <Blocked status={profile!.status} until={profile!.suspended_until} reason={profile!.status_reason} />;
   const kind = navFor(profile?.active_role ?? "guardian");
   return (
     <>
@@ -70,6 +70,18 @@ async function Shell({ children }: { children: React.ReactNode }) {
       </div>
       <BottomNav kind={kind} unread={unreadMessages} />
     </>
+  );
+}
+
+function Blocked({ status, until, reason }: { status: string; until: string | null; reason: string | null }) {
+  return (
+    <div className="setup" dir="rtl">
+      <h1>{status === "banned" ? "تم إيقاف هذا الحساب" : "حسابك موقوف مؤقتاً"}</h1>
+      {status !== "banned" && until && <p>ينتهي الإيقاف في {new Date(until).toLocaleDateString("ar-u-nu-latn", { timeZone: "Asia/Jerusalem", day: "numeric", month: "long", year: "numeric" })}.</p>}
+      {reason && <p className="muted">السبب: {reason}</p>}
+      <p className="small muted">إذا كنت تعتقد أن هذا خطأ، راسل إدارة Classi.</p>
+      <form action={signOutAction}><button className="btn ghost">تسجيل الخروج</button></form>
+    </div>
   );
 }
 
