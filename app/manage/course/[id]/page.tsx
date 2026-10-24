@@ -18,7 +18,7 @@ export default async function ManageOffer({ params, searchParams }: { params: Pr
   const { supabase } = await requireUser(path);
   const { data: o } = await supabase
     .from("offerings")
-    .select("id,type,title,price,seats,places,lessons_count,subject_id,level_id,course_teacher_id,institute_id,teacher_id,course_teacher:teachers!offerings_course_teacher_id_fkey(name)")
+    .select("id,type,title,price,seats,places,lessons_count,subject_id,level_id,course_teacher_id,institute_id,teacher_id,auto_confirm,allow_weekly,course_teacher:teachers!offerings_course_teacher_id_fkey(name)")
     .eq("id", id)
     .maybeSingle();
   if (!o) notFound();
@@ -101,6 +101,18 @@ export default async function ManageOffer({ params, searchParams }: { params: Pr
                 )}
               </div>
               {type === "course" && <label className="row"><input type="checkbox" name="online" defaultChecked={places.includes("online")} /> يمكن الحضور أونلاين أيضاً</label>}
+              {type === "private" && (
+                <label className="switch-row">
+                  <input type="checkbox" name="auto_confirm" defaultChecked={(o as any).auto_confirm} />
+                  <span><b>تأكيد فوري</b><span className="small muted">يُثبَّت الحجز مباشرة دون انتظار موافقتك.</span></span>
+                </label>
+              )}
+              {(type === "private" || type === "group") && (
+                <label className="switch-row">
+                  <input type="checkbox" name="allow_weekly" defaultChecked={(o as any).allow_weekly} />
+                  <span><b>السماح بالحجز الأسبوعي</b><span className="small muted">{type === "group" ? "اشتراك في كل اللقاءات القادمة." : "نفس الموعد كل أسبوع، يتجدد تلقائياً."}</span></span>
+                </label>
+              )}
               <p className="note"><Icon name="check" />من حجز قبل التعديل يبقى على السعر الذي حجز به.</p>
               <button className="btn">حفظ التعديلات</button>
             </form>
@@ -169,7 +181,7 @@ export default async function ManageOffer({ params, searchParams }: { params: Pr
               <span className="small muted">
                 {b.starts_at ? `${dayLong(b.starts_at)} · ${time(b.starts_at)} · ` : ""}
                 {b.mode ? (b.mode === "online" ? "أونلاين" : PLACES[b.mode as Place]) : ""}
-                {b.weekly ? " · يريد نفس الموعد أسبوعياً" : ""}
+                {b.series_id ? " · أسبوعي" : ""}
               </span>
             </div>
             <div className="stack" style={{ gap: 4, alignItems: "flex-end" }}>

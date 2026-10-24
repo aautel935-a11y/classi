@@ -28,7 +28,7 @@ export default async function OfferPage({ params, searchParams }: { params: Prom
   // Everything else the page needs, fetched at the same time.
   const empty = Promise.resolve({ data: null as any });
   const now = new Date().toISOString();
-  const [mineR, ownerR, avR, busyR, ssR, seatsR, kidsR] = await Promise.all([
+  const [mineR, ownerR, avR, busyR, ssR, seatsR, kidsR, bufR] = await Promise.all([
     user ? supabase.rpc("is_offering_owner", { p_offering: o.id }) : empty,
     o.teacher
       ? supabase.from("teachers").select("user_id").eq("id", o.teacher.id).maybeSingle()
@@ -42,11 +42,12 @@ export default async function OfferPage({ params, searchParams }: { params: Prom
       : empty,
     o.type === "group" || o.type === "course" ? supabase.rpc("seats_overview") : empty,
     user ? supabase.from("children").select("id,name,grade").order("created_at") : empty,
+    o.type === "private" && o.teacher_id ? supabase.rpc("teacher_buffer", { p_teacher: o.teacher_id }) : empty,
   ]);
   const mine = mineR.data;
   const ownerAccount = ownerR.data as any;
   const canMessage = !mine && !!(ownerAccount?.user_id ?? ownerAccount?.owner_id);
-  const slots = o.type === "private" ? privateSlots(avR.data ?? [], busyR.data ?? [], o.minutes || 60, nextDays(7)) : [];
+  const slots = o.type === "private" ? privateSlots(avR.data ?? [], busyR.data ?? [], o.minutes || 60, nextDays(7), Number(bufR.data ?? 0)) : [];
   const rows = (seatsR.data ?? []) as { offering_id: string; session_id: string | null; taken: number }[];
   const ss = (ssR.data ?? []) as { id: string; starts_at: string }[];
   const groupSessions = ss.map((x) => ({ id: x.id, starts_at: x.starts_at, taken: rows.find((r) => r.session_id === x.id)?.taken ?? 0 }));
@@ -71,8 +72,10 @@ export default async function OfferPage({ params, searchParams }: { params: Prom
   return (
     <div className="wrap">
       <div className="section">
-        <div className="row">
+        <div className="row" style={{ flexWrap: "wrap" }}>
           <TypeBadge type={o.type} />
+          {o.type === "private" && o.auto_confirm && <span className="badge ok"><Icon name="check" />تأكيد فوري</span>}
+          {o.allow_weekly && (o.type === "private" || o.type === "group") && <span className="badge"><Icon name="cal" />يمكن الحجز أسبوعياً</span>}
           {full && <span className="badge bad">ممتلئ</span>}
         </div>
         <h1>{o.title}</h1>
@@ -103,7 +106,7 @@ export default async function OfferPage({ params, searchParams }: { params: Prom
         {o.type === "private" && (
           <p className="note">
             <Icon name="clock" />
-            إلغاء مجاني حتى 24 ساعة قبل الحصة.
+            {o.auto_confirm ? "الحجز يُثبَّت فوراً دون انتظار موافقة المعلم. " : "يؤكد المعلم الحجز بعد الطلب. "}إلغاء مجاني حتى 24 ساعة قبل الحصة.
           </p>
         )}
         {o.type === "recorded" ? (
@@ -130,7 +133,7 @@ export default async function OfferPage({ params, searchParams }: { params: Prom
           <Link className="btn ghost block" href={`/manage/course/${o.id}`}>هذا عرضك: إدارة العرض</Link>
         ) : user ? (
           <BookingFlow
-            offering={{ id: o.id, type: o.type, title: o.title, price: o.price, seats: o.seats, full, places: o.places }}
+            offering={{ id: o.id, type: o.type, title: o.title, price: o.price, seats: o.seats, full, places: o.places, autoConfirm: !!o.auto_confirm, allowWeekly: !!o.allow_weekly }}
             slots={slots}
             groupSessions={groupSessions}
             kids={(children ?? []) as { id: string; name: string; grade: string | null }[]}

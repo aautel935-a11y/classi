@@ -73,6 +73,21 @@ export function NewOfferForm({ subjects, levels, error }: { subjects: Opt[]; lev
           <span className="small muted">لا يظهر للعامة. يراه الطالب في جدوله بعد تأكيد الحجز. يمكنك إضافته أو تغييره لاحقاً.</span>
         </label>
       )}
+      {(tp === "private" || tp === "group") && (
+        <fieldset className="card">
+          <legend>طريقة الحجز</legend>
+          {tp === "private" && (
+            <label className="switch-row">
+              <input type="checkbox" name="auto_confirm" />
+              <span><b>تأكيد فوري</b><span className="small muted">يُثبَّت الحجز مباشرة دون انتظار موافقتك. اتركه مغلقاً لتوافق على كل طلب بنفسك.</span></span>
+            </label>
+          )}
+          <label className="switch-row">
+            <input type="checkbox" name="allow_weekly" />
+            <span><b>السماح بالحجز الأسبوعي</b><span className="small muted">{tp === "group" ? "يستطيع الطالب الاشتراك في كل اللقاءات القادمة مرة واحدة." : "يستطيع الطالب تثبيت نفس الموعد كل أسبوع."}</span></span>
+          </label>
+        </fieldset>
+      )}
       {tp === "group" && <p className="note"><Icon name="cal" />ننشئ لقاءات الأسابيع الثمانية القادمة تلقائياً.</p>}
       {tp === "private" && <p className="note"><Icon name="clock" />أوقاتك المتاحة الافتراضية: الأحد إلى الخميس 15:00 إلى 21:00.</p>}
       <button className="btn block">نشر العرض</button>

@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { Icon } from "@/components/Icon";
-import { cancelBookingAction } from "@/app/actions";
+import { cancelBookingAction, cancelSeriesAction } from "@/app/actions";
 import { requireUser } from "@/lib/session";
 import { PAY_LABEL, PLACES, type Place } from "@/lib/types";
 import { dayNum, dayShort, monthName, time } from "@/lib/format";
@@ -8,7 +8,7 @@ import { dayNum, dayShort, monthName, time } from "@/lib/format";
 export const dynamic = "force-dynamic";
 
 type Row = {
-  id: string; status: string; pay_method: string; starts_at: string | null; session_id: string | null; mode: Place | null; price: number | null;
+  id: string; status: string; pay_method: string; starts_at: string | null; session_id: string | null; mode: Place | null; price: number | null; series_id: string | null;
   child: { name: string } | null;
   session: { starts_at: string } | null;
   offering: { id: string; type: string; title: string; places: Place[]; teacher: { name: string } | null; institute: { name: string } | null };
@@ -19,7 +19,7 @@ export default async function Schedule({ searchParams }: { searchParams: Promise
   const { supabase, user } = await requireUser("/schedule");
   const { data } = await supabase
     .from("bookings")
-    .select("id,status,pay_method,starts_at,session_id,mode,price,child:children(name),session:sessions(starts_at),offering:offerings(id,type,title,places,teacher:teachers!offerings_teacher_id_fkey(name),institute:institutes(name))")
+    .select("id,status,pay_method,starts_at,session_id,mode,price,series_id,child:children(name),session:sessions(starts_at),offering:offerings(id,type,title,places,teacher:teachers!offerings_teacher_id_fkey(name),institute:institutes(name))")
     .eq("booked_by", user.id)
     .in("status", ["pending", "confirmed"])
     .order("created_at", { ascending: false });
@@ -42,20 +42,40 @@ export default async function Schedule({ searchParams }: { searchParams: Promise
       return { r, at, room: n?.room?.name as string | undefined, changed: r.offering.type === "course" && changedOf(r.offering.id) };
     })
     .sort((a, b) => (a.at ?? "9").localeCompare(b.at ?? "9"));
+  // A weekly series shows once: its next lesson, with how many are booked ahead.
+  const now = new Date().toISOString();
+  const seriesCount = new Map<string, number>();
+  items.forEach(({ r, at }) => { if (r.series_id && (!at || at > now)) seriesCount.set(r.series_id, (seriesCount.get(r.series_id) ?? 0) + 1); });
+  const shown = new Set<string>();
+  const visible = items.filter(({ r, at }) => {
+    if (!r.series_id) return true;
+    if (at && at < now) return false;
+    if (shown.has(r.series_id)) return false;
+    shown.add(r.series_id);
+    return true;
+  });
 
   return (
     <div className="wrap">
       <div className="section">
         <h1>جدولي</h1>
-        {sp.booked && <p className="okmsg">تم الحجز. تجد التفاصيل هنا وفي الإشعارات.</p>}
+        {sp.booked && (
+          <div className="okmsg">
+            {sp.booked === "weekly"
+              ? `${sp.instant === "1" ? "تم تثبيت موعدك الأسبوعي" : "أُرسل طلبك الأسبوعي للمعلم"}: ${sp.created ?? ""} حصص محجوزة للأسابيع القادمة.`
+              : sp.instant === "0" ? "أُرسل طلب الحجز للمعلم. يصلك إشعار عند موافقته." : "تم الحجز. تجد التفاصيل هنا وفي الإشعارات."}
+            {sp.skipped && <p className="small" style={{ marginTop: 4 }}>لم نحجز هذه المواعيد لأن المعلم مشغول فيها: {sp.skipped}</p>}
+          </div>
+        )}
+        {sp.cancelled_series && <p className="okmsg">أُلغي الموعد الأسبوعي ({sp.cancelled_series} حصص قادمة).</p>}
         {sp.error && <p className="err">{sp.error}</p>}
         <p className="small muted">كل الحصص والدورات لك ولأبنائك في مكان واحد.</p>
-        {items.length === 0 && (
+        {visible.length === 0 && (
           <div className="empty">
             لا حصص بعد. <Link className="link" href="/search">ابحث عن معلم</Link> واحجز أول حصة.
           </div>
         )}
-        {items.map(({ r, at, room, changed }) => (
+        {visible.map(({ r, at, room, changed }) => (
           <div key={r.id} className="card lesson">
             <div className="date">
               {at ? (
@@ -96,6 +116,7 @@ export default async function Schedule({ searchParams }: { searchParams: Promise
                   <span className="badge">بانتظار موافقة المعلم</span>
                 )}
                 {changed && <span className="badge">غيّر المعهد الموعد</span>}
+                {r.series_id && <span className="badge"><Icon name="cal" />أسبوعي · {seriesCount.get(r.series_id) ?? 0} حصص قادمة</span>}
                 <span className="badge">الدفع: {PAY_LABEL[r.pay_method] ?? r.pay_method}{r.price != null ? ` · ${r.price} ₪` : ""}</span>
               </div>
               {(() => {
@@ -115,10 +136,22 @@ export default async function Schedule({ searchParams }: { searchParams: Promise
                 );
               })()}
               {r.offering.type !== "recorded" && (
-                <form action={cancelBookingAction} className="inline-form">
-                  <input type="hidden" name="id" value={r.id} />
-                  <button className="link small" style={{ color: "var(--bad)" }}>إلغاء الحجز</button>
-                </form>
+                <div className="row" style={{ gap: 16, flexWrap: "wrap" }}>
+                  <form action={cancelBookingAction} className="inline-form">
+                    <input type="hidden" name="id" value={r.id} />
+                    <button className="link small" style={{ color: "var(--bad)" }}>{r.series_id ? "إلغاء هذه الحصة فقط" : "إلغاء الحجز"}</button>
+                  </form>
+                  {r.series_id && (
+                    <details>
+                      <summary className="link small" style={{ color: "var(--bad)" }}>إيقاف الموعد الأسبوعي</summary>
+                      <form action={cancelSeriesAction} className="row" style={{ marginTop: 6, flexWrap: "wrap" }}>
+                        <input type="hidden" name="id" value={r.series_id} />
+                        <span className="small">تُلغى كل الحصص القادمة.</span>
+                        <button className="btn sm badb">تأكيد الإيقاف</button>
+                      </form>
+                    </details>
+                  )}
+                </div>
               )}
             </div>
           </div>

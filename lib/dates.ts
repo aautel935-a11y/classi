@@ -31,7 +31,8 @@ export function privateSlots(
   availability: { weekday: number; start_time: string; end_time: string }[],
   busy: { starts_at: string; minutes: number }[],
   minutes: number,
-  days = nextDays(7)
+  days = nextDays(7),
+  bufferMinutes = 0
 ): Slot[] {
   const now = Date.now();
   const slots: Slot[] = [];
@@ -40,13 +41,16 @@ export function privateSlots(
     for (const a of availability.filter((x) => x.weekday === wd)) {
       const [sh, sm] = a.start_time.split(":").map(Number);
       const [eh, em] = a.end_time.split(":").map(Number);
-      for (let m = sh * 60 + sm; m + minutes <= eh * 60 + em; m += 60) {
+      // With a break, slots are spaced lesson + break apart (60 + 15 = every 75 minutes).
+      const step = bufferMinutes > 0 ? minutes + bufferMinutes : 60;
+      for (let m = sh * 60 + sm; m + minutes <= eh * 60 + em; m += step) {
         const time = `${String(Math.floor(m / 60)).padStart(2, "0")}:${String(m % 60).padStart(2, "0")}`;
         const start = fromLocal(day, time).getTime();
         const end = start + minutes * 60000;
+        const buf = bufferMinutes * 60000;
         const clash = busy.some((b) => {
           const bs = new Date(b.starts_at).getTime();
-          return bs < end && bs + b.minutes * 60000 > start;
+          return bs - buf < end && bs + b.minutes * 60000 + buf > start;
         });
         slots.push({ day, time, at: new Date(start).toISOString(), busy: clash || start < now + 2 * 3600000 });
       }

@@ -8,7 +8,7 @@ import { PLACES, type OfferingType, type Place } from "@/lib/types";
 import type { Slot } from "@/lib/dates";
 
 type Props = {
-  offering: { id: string; type: OfferingType; title: string; price: number; seats: number | null; full: boolean; places: Place[] };
+  offering: { id: string; type: OfferingType; title: string; price: number; seats: number | null; full: boolean; places: Place[]; autoConfirm: boolean; allowWeekly: boolean };
   slots: Slot[];
   groupSessions: { id: string; starts_at: string; taken: number }[];
   kids: { id: string; name: string; grade: string | null }[];
@@ -16,6 +16,7 @@ type Props = {
 
 const ACTION: Record<OfferingType, string> = { private: "اختر موعداً", group: "احجز مقعداً", course: "سجّل في الدورة", recorded: "اشترِ المحتوى" };
 const DONE: Record<OfferingType, string> = { private: "إرسال طلب الحجز", group: "تأكيد الحجز", course: "تأكيد التسجيل", recorded: "إتمام الشراء" };
+const WEEKS = 8;
 
 export function BookingFlow({ offering: o, slots, groupSessions, kids }: Props) {
   const router = useRouter();
@@ -32,8 +33,10 @@ export function BookingFlow({ offering: o, slots, groupSessions, kids }: Props) 
   const [pending, start] = useTransition();
 
   const chooseMode = o.type !== "recorded" && o.places.length > 1;
+  const canWeekly = o.allowWeekly && (o.type === "private" || o.type === "group");
   const steps = [
     ...(o.type === "private" ? ["slot"] : o.type === "group" ? ["session"] : []),
+    ...(canWeekly ? ["freq"] : []),
     ...(chooseMode ? ["mode"] : []),
     "who",
     "pay",
@@ -42,7 +45,9 @@ export function BookingFlow({ offering: o, slots, groupSessions, kids }: Props) 
   const days = useMemo(() => Array.from(new Set(slots.map((s) => s.day))), [slots]);
   const curDay = day ?? days[0];
   const pays = o.type === "course" ? [["bit", "Bit"], ["installments", "3 دفعات"], ["cash", "نقداً في المعهد"]] : o.type === "recorded" ? [["bit", "Bit"], ["card", "بطاقة ائتمان"]] : [["bit", "Bit"], ["cash", "نقداً للمعلم"]];
-  const ready = (st === "slot" && slot) || (st === "session" && session) || (st === "mode" && mode) || (st === "who" && who) || (st === "pay" && pay);
+  const ready = (st === "slot" && slot) || (st === "session" && session) || st === "freq" || (st === "mode" && mode) || (st === "who" && who) || (st === "pay" && pay);
+  const instant = o.type !== "private" || o.autoConfirm;
+  const dayName = (iso: string) => dayShort(iso).replace(/^ال/, "");
   const whoName = who === "self" ? "أنا" : kids.find((k) => k.id === who)?.name;
   const chosenAt = slot?.at ?? groupSessions.find((g) => g.id === session)?.starts_at;
 
@@ -60,7 +65,10 @@ export function BookingFlow({ offering: o, slots, groupSessions, kids }: Props) 
       });
       if (r.error) return setError(r.error);
       setOpen(false);
-      router.push("/schedule?booked=1");
+      const q = new URLSearchParams({ booked: weekly ? "weekly" : "1", instant: instant ? "1" : "0" });
+      if (r.created != null) q.set("created", String(r.created));
+      if (r.skipped?.length) q.set("skipped", r.skipped.join("، "));
+      router.push(`/schedule?${q}`);
     });
   }
 
@@ -102,9 +110,6 @@ export function BookingFlow({ offering: o, slots, groupSessions, kids }: Props) 
                           </button>
                         ))}
                       </div>
-                      <label className="row small">
-                        <input type="checkbox" checked={weekly} onChange={(e) => setWeekly(e.target.checked)} /> أريد نفس الموعد كل أسبوع
-                      </label>
                     </>
                   )}
                 </>
@@ -126,6 +131,28 @@ export function BookingFlow({ offering: o, slots, groupSessions, kids }: Props) 
                       </button>
                     );
                   })}
+                </>
+              )}
+
+              {st === "freq" && chosenAt && (
+                <>
+                  <h2>حصة واحدة أم كل أسبوع؟</h2>
+                  <button className="opt" aria-pressed={!weekly} onClick={() => setWeekly(false)}>
+                    <span className="dot" />
+                    <span>{o.type === "group" ? "هذا اللقاء فقط" : "حصة واحدة"} <span className="muted small">· {dayLong(chosenAt)} {time(chosenAt)}</span></span>
+                  </button>
+                  <button className="opt" aria-pressed={weekly} onClick={() => setWeekly(true)}>
+                    <span className="dot" />
+                    <span>
+                      {o.type === "group" ? "اشتراك في كل اللقاءات القادمة" : "موعد ثابت كل أسبوع"}
+                      <span className="muted small"> · كل {dayName(chosenAt)} الساعة {time(chosenAt)}</span>
+                    </span>
+                  </button>
+                  {weekly && (
+                    <p className="note">
+                      نحجز لك الأسابيع الـ{WEEKS} القادمة ونجدّدها تلقائياً. إذا كان المعلم مشغولاً في أسبوع ما نخبرك به. يمكنك إلغاء الموعد الأسبوعي في أي وقت من جدولي.
+                    </p>
+                  )}
                 </>
               )}
 
@@ -183,7 +210,7 @@ export function BookingFlow({ offering: o, slots, groupSessions, kids }: Props) 
                       <div>
                         <span>الموعد</span>
                         <span>
-                          {dayLong(chosenAt)} · {time(chosenAt)}
+                          {weekly ? `كل ${dayName(chosenAt)} ${time(chosenAt)}، يبدأ ${dayLong(chosenAt)}` : `${dayLong(chosenAt)} · ${time(chosenAt)}`}
                         </span>
                       </div>
                     )}
@@ -204,14 +231,16 @@ export function BookingFlow({ offering: o, slots, groupSessions, kids }: Props) 
                       </div>
                     )}
                     <div className="total">
-                      <span>المجموع</span>
+                      <span>{weekly ? "لكل حصة" : "المجموع"}</span>
                       <span className="num">{o.price} ₪</span>
                     </div>
                   </div>
                   <p className="note">
-                    {o.type === "private"
-                      ? "يصل الطلب للمعلم، وتصلك رسالة عند التأكيد. الدفع للمعلم مباشرة في هذه المرحلة."
-                      : "يصلك تأكيد في الإشعارات. الدفع الإلكتروني يُضاف في المرحلة القادمة."}
+                    {o.type === "private" && !o.autoConfirm
+                      ? "يصل الطلب للمعلم، وتصلك رسالة عند موافقته. الدفع للمعلم مباشرة في هذه المرحلة."
+                      : o.type === "private"
+                        ? "يُثبَّت الموعد فوراً دون انتظار، ويظهر رابط اللقاء أونلاين في جدولك إن وُجد."
+                        : "يصلك تأكيد في الإشعارات. الدفع الإلكتروني يُضاف في المرحلة القادمة."}
                   </p>
                 </>
               )}
@@ -229,7 +258,7 @@ export function BookingFlow({ offering: o, slots, groupSessions, kids }: Props) 
                   disabled={!ready || pending}
                   onClick={() => (step === steps.length - 1 ? submit() : setStep(step + 1))}
                 >
-                  {pending ? "جارٍ الحفظ…" : step === steps.length - 1 ? DONE[o.type] : "التالي"}
+                  {pending ? "جارٍ الحفظ…" : step === steps.length - 1 ? (o.type === "private" && o.autoConfirm ? "تأكيد الحجز" : weekly && o.type === "private" ? "إرسال الطلب الأسبوعي" : DONE[o.type]) : "التالي"}
                 </button>
               </div>
             </div>

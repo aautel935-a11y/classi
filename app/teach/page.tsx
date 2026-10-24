@@ -9,14 +9,14 @@ import { dayLong, isoDay, time } from "@/lib/format";
 
 export const dynamic = "force-dynamic";
 
-type BRow = { booking_id: string; offering_id: string; offering_title: string; offering_type: string; student_name: string; starts_at: string | null; status: string; pay_method: string; mode: string | null; weekly: boolean };
+type BRow = { booking_id: string; offering_id: string; offering_title: string; offering_type: string; student_name: string; starts_at: string | null; status: string; pay_method: string; mode: string | null; weekly: boolean; series_id: string | null; series_count: number | null };
 const DAYS = ["الأحد", "الاثنين", "الثلاثاء", "الأربعاء", "الخميس", "الجمعة", "السبت"];
 const modeLabel = (m: string | null) => (m === "online" ? "أونلاين" : m === "home" ? "حضوري" : m === "center" ? "في المعهد" : "");
 
 export default async function Teach({ searchParams }: { searchParams: Promise<Record<string, string | undefined>> }) {
   const sp = await searchParams;
   const { supabase, user, profile } = await requireUser("/teach");
-  const { data: t } = await supabase.from("teachers").select("id,name,verify,town,bio,years,is_school_teacher,subject_id,photo_url").eq("user_id", user.id).maybeSingle();
+  const { data: t } = await supabase.from("teachers").select("id,name,verify,town,bio,years,is_school_teacher,subject_id,photo_url,buffer_minutes").eq("user_id", user.id).maybeSingle();
 
   if (!t) {
     const { data: subjects } = await supabase.from("subjects").select("id,name").order("id");
@@ -59,7 +59,15 @@ export default async function Teach({ searchParams }: { searchParams: Promise<Re
   const hourFrom = (hours ?? [])[0]?.start_time?.slice(0, 5) ?? "15:00";
   const hourTo = (hours ?? [])[0]?.end_time?.slice(0, 5) ?? "21:00";
   const rows = (bookings ?? []) as BRow[];
-  const requests = rows.filter((b) => b.status === "pending");
+  // One request card per weekly series (its first pending lesson), plus single requests.
+  const seenSeries = new Set<string>();
+  const requests = rows.filter((b) => {
+    if (b.status !== "pending") return false;
+    if (!b.series_id) return true;
+    if (seenSeries.has(b.series_id)) return false;
+    seenSeries.add(b.series_id);
+    return true;
+  });
   const today = isoDay(new Date());
   const todays = rows.filter((b) => b.status === "confirmed" && b.starts_at && isoDay(b.starts_at) === today);
   const upcoming = rows.filter((b) => b.status === "confirmed" && b.starts_at && b.starts_at > new Date().toISOString()).slice(0, 6);
@@ -117,10 +125,10 @@ export default async function Teach({ searchParams }: { searchParams: Promise<Re
             {r.starts_at && <p className="small muted">{dayLong(r.starts_at)}</p>}
             <div className="row" style={{ flexWrap: "wrap" }}>
               {r.mode && <span className="badge"><Icon name={r.mode === "online" ? "monitor" : "home"} />{modeLabel(r.mode)}</span>}
-              {r.weekly && <span className="badge">يريد نفس الموعد أسبوعياً</span>}
+              {r.series_id && <span className="badge"><Icon name="cal" />أسبوعي · {r.series_count} حصص</span>}
             </div>
             <div className="row">
-              <form action={respondAction}><input type="hidden" name="id" value={r.booking_id} /><input type="hidden" name="accept" value="1" /><button className="btn sm okb">قبول</button></form>
+              <form action={respondAction}><input type="hidden" name="id" value={r.booking_id} /><input type="hidden" name="accept" value="1" /><button className="btn sm okb">{r.series_id ? "قبول كل المواعيد" : "قبول"}</button></form>
               <form action={respondAction}><input type="hidden" name="id" value={r.booking_id} /><input type="hidden" name="accept" value="0" /><button className="btn sm badb">رفض</button></form>
               <form action={startBookingConversationAction}><input type="hidden" name="booking_id" value={r.booking_id} /><button className="btn sm ghost"><Icon name="chat" />راسل</button></form>
             </div>
@@ -134,7 +142,7 @@ export default async function Teach({ searchParams }: { searchParams: Promise<Re
         {upcoming.map((b) => (
           <div key={b.booking_id} className="card" style={{ flexDirection: "row", alignItems: "center", gap: 12 }}>
             <div className="stack" style={{ gap: 2, flex: 1, minWidth: 0 }}>
-              <b>{b.student_name}</b>
+              <b>{b.student_name}{b.series_id ? " · أسبوعي" : ""}</b>
               <span className="small muted">{b.offering_title}{b.mode ? ` · ${modeLabel(b.mode)}` : ""}</span>
             </div>
             <span className="small num">{dayLong(b.starts_at!)} · {time(b.starts_at!)}</span>
@@ -169,6 +177,16 @@ export default async function Teach({ searchParams }: { searchParams: Promise<Re
           <div className="typeform">
             <label className="field" htmlFor="h-from">من الساعة<input id="h-from" name="from" type="time" defaultValue={hourFrom} /></label>
             <label className="field" htmlFor="h-to">حتى الساعة<input id="h-to" name="to" type="time" defaultValue={hourTo} /></label>
+            <label className="field" htmlFor="h-buffer">
+              استراحة بين الحصص
+              <select id="h-buffer" name="buffer" defaultValue={String(t.buffer_minutes ?? 0)}>
+                <option value="0">بدون</option>
+                <option value="5">5 دقائق</option>
+                <option value="10">10 دقائق</option>
+                <option value="15">15 دقيقة</option>
+                <option value="30">30 دقيقة</option>
+              </select>
+            </label>
           </div>
           <p className="note"><Icon name="clock" />الطلاب يرون مواعيد كل ساعة ضمن هذه الأوقات، والمحجوز منها يظهر مشغولاً.</p>
           <button className="btn ghost">حفظ الأوقات</button>

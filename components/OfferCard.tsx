@@ -22,6 +22,8 @@ export function OfferCard({ o, taken, showOwner = true }: { o: Offering; taken?:
       <div className="top">
         <div className="row" style={{ flexWrap: "wrap" }}>
           <TypeBadge type={o.type} />
+          {o.type === "private" && o.auto_confirm && <span className="badge ok"><Icon name="check" />تأكيد فوري</span>}
+          {o.allow_weekly && (o.type === "private" || o.type === "group") && <span className="badge"><Icon name="cal" />أسبوعي</span>}
           {full && <span className="badge bad">ممتلئ</span>}
         </div>
         <div className="price num">

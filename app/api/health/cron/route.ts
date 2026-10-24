@@ -1,5 +1,6 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { runHealthChecks } from "@/lib/health";
+import { publicClient } from "@/lib/supabase/public";
 
 export const dynamic = "force-dynamic";
 
@@ -9,6 +10,8 @@ export async function GET(request: NextRequest) {
   if (secret && request.headers.get("authorization") !== `Bearer ${secret}`) {
     return NextResponse.json({ error: "unauthorized" }, { status: 401 });
   }
+  // Keep weekly bookings filled for the coming weeks.
+  const { data: extended } = await publicClient().rpc("extend_recurring");
   const result = await runHealthChecks();
   let emailed = false;
   const resend = process.env.RESEND_API_KEY;
@@ -30,5 +33,5 @@ export async function GET(request: NextRequest) {
     });
     emailed = r.ok;
   }
-  return NextResponse.json({ ok: result.ok, emailed, checks: result.checks }, { status: result.ok ? 200 : 503 });
+  return NextResponse.json({ ok: result.ok, emailed, extended, checks: result.checks }, { status: result.ok ? 200 : 503 });
 }

@@ -122,3 +122,9 @@ where o.type = 'group' and extract(dow from d)::int = any (pg_temp.weekdays(o.sc
 -- weekly free hours: Sunday to Thursday, 15:00-21:00
 insert into public.availability (teacher_id, weekday, start_time, end_time)
 select t.id, w, '15:00', '21:00' from public.teachers t, generate_series(0,4) w;
+
+-- Demo booking settings: a few offers with instant confirmation and weekly booking.
+update public.offerings set auto_confirm = true, allow_weekly = true
+ where title in ('رياضيات بجروت 5 وحدات', 'برمجة Python للمبتدئين', 'بسيخومتري كمي');
+update public.offerings set allow_weekly = true
+ where title in ('إنجليزي محادثة وبجروت', 'مجموعة تقوية رياضيات، صف عاشر', 'مجموعة أونلاين، تحضير الشفوي');

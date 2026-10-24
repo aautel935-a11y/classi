@@ -7,7 +7,7 @@ import { fromLocal } from "@/lib/format";
 import { datesOn, nextDays } from "@/lib/dates";
 import type { OfferingType, Place, Role } from "@/lib/types";
 
-type Result = { error?: string; ok?: boolean; count?: number };
+type Result = { error?: string; ok?: boolean; count?: number; created?: number; skipped?: string[] };
 
 async function client() {
   const supabase = await createClient();
@@ -30,6 +30,20 @@ export async function bookAction(input: {
   revalidateTag("catalog");
   const { supabase, user } = await client();
   if (!user) return { error: "سجّل الدخول أولاً لإتمام الحجز." };
+  if (input.weekly) {
+    const { data, error } = await supabase.rpc("create_weekly_booking", {
+      p_offering: input.offeringId,
+      p_child: input.childId || null,
+      p_starts_at: input.startsAt || null,
+      p_session: input.sessionId || null,
+      p_pay: input.pay,
+      p_mode: input.mode || null,
+    });
+    if (error) return { error: error.message };
+    revalidatePath("/schedule");
+    const res = data as { created: number; skipped: string[] };
+    return { ok: true, created: res.created, skipped: res.skipped };
+  }
   const { error } = await supabase.rpc("create_booking", {
     p_offering: input.offeringId,
     p_child: input.childId || null,
@@ -172,6 +186,8 @@ export async function newOfferingAction(form: FormData) {
     places,
     price: num(form, "price"),
     minutes: type === "group" ? 90 : type === "recorded" ? 0 : 60,
+    auto_confirm: type === "private" && form.get("auto_confirm") === "on",
+    allow_weekly: (type === "private" || type === "group") && form.get("allow_weekly") === "on",
   };
   if (type === "group") {
     row.seats = num(form, "seats") || 6;
@@ -388,6 +404,8 @@ export async function saveAvailabilityAction(form: FormData) {
   const to = str(form, "to") || "21:00";
   if (to <= from) redirect(`/teach?error=${encodeURIComponent("ساعة النهاية يجب أن تكون بعد ساعة البداية.")}`);
   const days = form.getAll("days").map(Number).filter((d) => d >= 0 && d <= 6);
+  const buffer = [0, 5, 10, 15, 30].includes(num(form, "buffer")) ? num(form, "buffer") : 0;
+  await supabase.from("teachers").update({ buffer_minutes: buffer }).eq("id", t.id);
   await supabase.from("availability").delete().eq("teacher_id", t.id);
   if (days.length) await supabase.from("availability").insert(days.map((w) => ({ teacher_id: t.id, weekday: w, start_time: from, end_time: to })));
   revalidatePath("/teach");
@@ -423,6 +441,8 @@ export async function updateOfferingAction(form: FormData) {
   }
   if (o.type === "group" || o.type === "course") row.seats = num(form, "seats") || null;
   if (o.type === "recorded") row.lessons_count = num(form, "lessons") || null;
+  if (o.type === "private") row.auto_confirm = form.get("auto_confirm") === "on";
+  if (o.type === "private" || o.type === "group") row.allow_weekly = form.get("allow_weekly") === "on";
   const { error } = await supabase.from("offerings").update(row).eq("id", id);
   revalidatePath(path);
   revalidatePath(`/offer/${id}`);
@@ -526,4 +546,13 @@ export async function adminCloseReportAction(form: FormData) {
   });
   revalidatePath("/admin");
   redirect(`/admin?tab=reports${error ? `&error=${encodeURIComponent(error.message)}` : "&done=report"}`);
+}
+
+export async function cancelSeriesAction(form: FormData) {
+  revalidateTag("catalog");
+  const { supabase } = await client();
+  const back = str(form, "back") || "/schedule";
+  const { data, error } = await supabase.rpc("cancel_series", { p_series: str(form, "id") });
+  revalidatePath(back);
+  redirect(`${back}?${error ? `error=${encodeURIComponent(error.message)}` : `cancelled_series=${data}`}`);
 }
