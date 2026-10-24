@@ -8,6 +8,7 @@ $P -d classi_test -c "drop role if exists anon" -c "drop role if exists authenti
 $D -f "$(dirname "$0")/supabase_stub.sql"
 $D -f "$(dirname "$0")/../migrations/20261024000000_init.sql"
 $D -f "$(dirname "$0")/../migrations/20261024010000_photos_admin.sql"
+$D -f "$(dirname "$0")/../migrations/20261024020000_role_test_fixes.sql"
 $D -f "$(dirname "$0")/../seed.sql"
 $D -f "$(dirname "$0")/grants.sql"
-$P -d classi_test -f "$(dirname "$0")/flow_test.sql"
+$P -d classi_test -f "$(dirname "$0")/${1:-flow_test}.sql"

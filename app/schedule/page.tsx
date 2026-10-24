@@ -8,7 +8,7 @@ import { dayNum, dayShort, monthName, time } from "@/lib/format";
 export const dynamic = "force-dynamic";
 
 type Row = {
-  id: string; status: string; pay_method: string; starts_at: string | null; session_id: string | null;
+  id: string; status: string; pay_method: string; starts_at: string | null; session_id: string | null; mode: Place | null;
   child: { name: string } | null;
   session: { starts_at: string } | null;
   offering: { id: string; type: string; title: string; places: Place[]; teacher: { name: string } | null; institute: { name: string } | null };
@@ -19,11 +19,13 @@ export default async function Schedule({ searchParams }: { searchParams: Promise
   const { supabase, user } = await requireUser("/schedule");
   const { data } = await supabase
     .from("bookings")
-    .select("id,status,pay_method,starts_at,session_id,child:children(name),session:sessions(starts_at),offering:offerings(id,type,title,places,teacher:teachers!offerings_teacher_id_fkey(name),institute:institutes(name))")
+    .select("id,status,pay_method,starts_at,session_id,mode,child:children(name),session:sessions(starts_at),offering:offerings(id,type,title,places,teacher:teachers!offerings_teacher_id_fkey(name),institute:institutes(name))")
     .eq("booked_by", user.id)
     .in("status", ["pending", "confirmed"])
     .order("created_at", { ascending: false });
-  const rows = (data ?? []) as unknown as Row[];
+  const rows = ((data ?? []) as unknown as Row[]).filter((r) => r.offering);
+  const { data: links } = await supabase.from("offering_links").select("offering_id,url,note");
+  const linkOf = (oid: string) => (links ?? []).find((l) => l.offering_id === oid);
 
   // courses: show the next meeting and whether the institute changed times
   const courseIds = rows.filter((r) => r.offering.type === "course").map((r) => r.offering.id);
@@ -80,10 +82,12 @@ export default async function Schedule({ searchParams }: { searchParams: Promise
                   <Icon name="person" />
                   {r.child?.name ?? "أنا"}
                 </span>
-                <span>
-                  <Icon name={r.offering.places.includes("online") ? "monitor" : "pin"} />
-                  {room ?? r.offering.places.map((p) => PLACES[p]).join(" أو ")}
-                </span>
+                {r.offering.type !== "recorded" && (
+                  <span>
+                    <Icon name={(r.mode ?? r.offering.places[0]) === "online" ? "monitor" : "pin"} />
+                    {room ?? (r.mode ? (r.mode === "online" ? "أونلاين" : PLACES[r.mode]) : r.offering.places.map((p) => PLACES[p]).join(" أو "))}
+                  </span>
+                )}
               </div>
               <div className="row" style={{ flexWrap: "wrap" }}>
                 {r.status === "confirmed" ? (
@@ -94,6 +98,22 @@ export default async function Schedule({ searchParams }: { searchParams: Promise
                 {changed && <span className="badge">غيّر المعهد الموعد</span>}
                 <span className="badge">الدفع: {PAY_LABEL[r.pay_method] ?? r.pay_method}</span>
               </div>
+              {(() => {
+                const l = linkOf(r.offering.id);
+                const wantsLink = r.offering.type === "recorded" || (r.mode ?? r.offering.places[0]) === "online" || (r.offering.type !== "private" && r.offering.places.includes("online"));
+                if (!wantsLink || r.status !== "confirmed") return null;
+                return l ? (
+                  <div className="stack" style={{ gap: 4 }}>
+                    <a className="btn sm" href={l.url} target="_blank" rel="noopener noreferrer">
+                      <Icon name={r.offering.type === "recorded" ? "play" : "monitor"} />
+                      {r.offering.type === "recorded" ? "شاهد المحتوى" : "ادخل إلى اللقاء أونلاين"}
+                    </a>
+                    {l.note && <span className="small muted">{l.note}</span>}
+                  </div>
+                ) : (
+                  <span className="small muted">الرابط لم يُضف بعد. يصلك إشعار عندما يضيفه المعلم.</span>
+                );
+              })()}
               {r.offering.type !== "recorded" && (
                 <form action={cancelBookingAction} className="inline-form">
                   <input type="hidden" name="id" value={r.id} />

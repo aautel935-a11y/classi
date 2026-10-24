@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { Icon } from "@/components/Icon";
 import { OfferCard } from "@/components/OfferCard";
-import { respondAction, teacherSetupAction, toggleOfferingAction, updateTeacherAction } from "@/app/actions";
+import { respondAction, saveAvailabilityAction, teacherSetupAction, toggleOfferingAction, updateTeacherAction } from "@/app/actions";
 import { PhotoUpload } from "@/components/PhotoUpload";
 import { requireUser } from "@/lib/session";
 import { OFFERING_SELECT, TOWNS, type Offering } from "@/lib/types";
@@ -9,7 +9,9 @@ import { dayLong, isoDay, time } from "@/lib/format";
 
 export const dynamic = "force-dynamic";
 
-type BRow = { booking_id: string; offering_title: string; offering_type: string; student_name: string; starts_at: string | null; status: string; pay_method: string };
+type BRow = { booking_id: string; offering_id: string; offering_title: string; offering_type: string; student_name: string; starts_at: string | null; status: string; pay_method: string; mode: string | null; weekly: boolean };
+const DAYS = ["الأحد", "الاثنين", "الثلاثاء", "الأربعاء", "الخميس", "الجمعة", "السبت"];
+const modeLabel = (m: string | null) => (m === "online" ? "أونلاين" : m === "home" ? "حضوري" : m === "center" ? "في المعهد" : "");
 
 export default async function Teach({ searchParams }: { searchParams: Promise<Record<string, string | undefined>> }) {
   const sp = await searchParams;
@@ -38,18 +40,24 @@ export default async function Teach({ searchParams }: { searchParams: Promise<Re
     );
   }
 
-  const [{ data: bookings }, { data: offers }, { data: courseSessions }, { data: subjectList }] = await Promise.all([
+  const [{ data: bookings }, { data: offers }, { data: courseSessions }, { data: subjectList }, { data: hours }, { data: links }] = await Promise.all([
     supabase.rpc("owner_bookings"),
     supabase.from("offerings").select(OFFERING_SELECT).eq("teacher_id", t.id).order("created_at"),
     supabase
       .from("sessions")
-      .select("id,seq,starts_at,changed,room:rooms(name),offering:offerings!inner(title,course_teacher_id,institute:institutes(name))")
+      .select("id,seq,starts_at,changed,offering_id,room:rooms(name),offering:offerings!inner(title,course_teacher_id,institute:institutes(name))")
       .eq("offering.course_teacher_id", t.id)
       .gt("starts_at", new Date().toISOString())
       .order("starts_at")
       .limit(6),
     supabase.from("subjects").select("id,name").order("id"),
+    supabase.from("availability").select("weekday,start_time,end_time").eq("teacher_id", t.id),
+    supabase.from("offering_links").select("offering_id"),
   ]);
+  const hasLink = new Set((links ?? []).map((l) => l.offering_id));
+  const hourDays = new Set((hours ?? []).map((h) => h.weekday));
+  const hourFrom = (hours ?? [])[0]?.start_time?.slice(0, 5) ?? "15:00";
+  const hourTo = (hours ?? [])[0]?.end_time?.slice(0, 5) ?? "21:00";
   const rows = (bookings ?? []) as BRow[];
   const requests = rows.filter((b) => b.status === "pending");
   const today = isoDay(new Date());
@@ -64,7 +72,7 @@ export default async function Teach({ searchParams }: { searchParams: Promise<Re
         {t.verify !== "verified" && (
           <p className="note"><Icon name="shield" />ملفك بانتظار التوثيق. عروضك تظهر للطلاب بعد التوثيق.</p>
         )}
-        {sp.ok && <p className="okmsg">{sp.ok === "profile" ? "حُفظ ملفك." : "نُشر العرض."}</p>}
+        {sp.ok && <p className="okmsg">{sp.ok === "profile" ? "حُفظ ملفك." : sp.ok === "hours" ? "حُفظت أوقاتك المتاحة." : "نُشر العرض."}</p>}
         {sp.error && <p className="err">{sp.error}</p>}
         <div className="stats">
           <div className="stat hl"><b className="num">{todays.length}</b><span>حصص اليوم</span></div>
@@ -103,6 +111,10 @@ export default async function Teach({ searchParams }: { searchParams: Promise<Re
             <div className="row between"><b>{r.student_name}</b>{r.starts_at && <span className="badge num">{time(r.starts_at)}</span>}</div>
             <p className="small">{r.offering_title}</p>
             {r.starts_at && <p className="small muted">{dayLong(r.starts_at)}</p>}
+            <div className="row" style={{ flexWrap: "wrap" }}>
+              {r.mode && <span className="badge"><Icon name={r.mode === "online" ? "monitor" : "home"} />{modeLabel(r.mode)}</span>}
+              {r.weekly && <span className="badge">يريد نفس الموعد أسبوعياً</span>}
+            </div>
             <div className="row">
               <form action={respondAction}><input type="hidden" name="id" value={r.booking_id} /><input type="hidden" name="accept" value="1" /><button className="btn sm okb">قبول</button></form>
               <form action={respondAction}><input type="hidden" name="id" value={r.booking_id} /><input type="hidden" name="accept" value="0" /><button className="btn sm badb">رفض</button></form>
@@ -118,7 +130,7 @@ export default async function Teach({ searchParams }: { searchParams: Promise<Re
           <div key={b.booking_id} className="card" style={{ flexDirection: "row", alignItems: "center", gap: 12 }}>
             <div className="stack" style={{ gap: 2, flex: 1, minWidth: 0 }}>
               <b>{b.student_name}</b>
-              <span className="small muted">{b.offering_title}</span>
+              <span className="small muted">{b.offering_title}{b.mode ? ` · ${modeLabel(b.mode)}` : ""}</span>
             </div>
             <span className="small num">{dayLong(b.starts_at!)} · {time(b.starts_at!)}</span>
           </div>
@@ -129,16 +141,34 @@ export default async function Teach({ searchParams }: { searchParams: Promise<Re
         <section className="section">
           <h2>دوراتي في المعاهد</h2>
           {(courseSessions as any[]).map((s) => (
-            <div key={s.id} className="card">
+            <Link key={s.id} className="card" href={`/manage/course/${s.offering_id}`}>
               <div className="row" style={{ flexWrap: "wrap" }}>
                 <b>{s.offering.title}، اللقاء {s.seq}</b>
                 {s.changed && <span className="badge">غيّر المعهد الموعد</span>}
               </div>
               <span className="small muted">{s.offering.institute?.name} · {dayLong(s.starts_at)} · <span className="num">{time(s.starts_at)}</span>{s.room ? ` · ${s.room.name}` : ""}</span>
-            </div>
+              <span className="link small">الطلاب والحضور</span>
+            </Link>
           ))}
         </section>
       )}
+
+      <section className="section">
+        <h2>أوقاتي المتاحة للدروس الخصوصية</h2>
+        <form action={saveAvailabilityAction} className="card formstack">
+          <div className="weekdays">
+            {DAYS.map((d, i) => (
+              <label key={d}><input type="checkbox" name="days" value={i} defaultChecked={hourDays.has(i)} />{d}</label>
+            ))}
+          </div>
+          <div className="typeform">
+            <label className="field" htmlFor="h-from">من الساعة<input id="h-from" name="from" type="time" defaultValue={hourFrom} /></label>
+            <label className="field" htmlFor="h-to">حتى الساعة<input id="h-to" name="to" type="time" defaultValue={hourTo} /></label>
+          </div>
+          <p className="note"><Icon name="clock" />الطلاب يرون مواعيد كل ساعة ضمن هذه الأوقات، والمحجوز منها يظهر مشغولاً.</p>
+          <button className="btn ghost">حفظ الأوقات</button>
+        </form>
+      </section>
 
       <section className="section">
         <div className="row between">
@@ -149,7 +179,11 @@ export default async function Teach({ searchParams }: { searchParams: Promise<Re
         {mine.map((o) => (
           <div key={o.id} className="stack" style={{ gap: 6 }}>
             <OfferCard o={o} showOwner={false} />
-            <form action={toggleOfferingAction} className="row">
+            {(o.type === "recorded" || o.places.includes("online")) && !hasLink.has(o.id) && (
+              <p className="err small">لم تضف رابط {o.type === "recorded" ? "المحتوى" : "زوم"} بعد. الطلاب لن يعرفوا أين يدخلون.</p>
+            )}
+            <form action={toggleOfferingAction} className="row" style={{ gap: 16 }}>
+              <Link className="link small" href={`/manage/course/${o.id}`}>إدارة العرض{o.type === "recorded" || o.places.includes("online") ? " والرابط" : ""}</Link>
               <input type="hidden" name="id" value={o.id} />
               <input type="hidden" name="path" value="/teach" />
               <input type="hidden" name="active" value={o.active === false ? "1" : "0"} />

@@ -10,6 +10,8 @@ type Opt = { id: number; name: string };
 
 export function NewOfferForm({ subjects, levels, error }: { subjects: Opt[]; levels: Opt[]; error?: string }) {
   const [tp, setTp] = useState<Exclude<OfferingType, "course">>("private");
+  const [place, setPlace] = useState("home");
+  const online = tp === "recorded" || place === "online" || place === "both";
   return (
     <form action={newOfferingAction} className="section">
       <h1>عرض جديد</h1>
@@ -46,7 +48,7 @@ export function NewOfferForm({ subjects, levels, error }: { subjects: Opt[]; lev
         {tp !== "recorded" && (
           <label className="field" htmlFor="place">
             المكان
-            <select id="place" name="place">
+            <select id="place" name="place" value={place} onChange={(e) => setPlace(e.target.value)}>
               <option value="home">حضوري</option>
               <option value="online">أونلاين</option>
               {tp === "private" && <option value="both">الاثنان</option>}
@@ -64,6 +66,13 @@ export function NewOfferForm({ subjects, levels, error }: { subjects: Opt[]; lev
           <label className="field" htmlFor="lessons">عدد الدروس<input id="lessons" name="lessons" type="number" min={1} defaultValue={12} /></label>
         )}
       </div>
+      {online && (
+        <label className="field" htmlFor="link">
+          {tp === "recorded" ? "رابط المحتوى (YouTube غير مُدرج أو Google Drive)" : "رابط زوم أو Google Meet الثابت"}
+          <input id="link" name="link" type="url" dir="ltr" placeholder={tp === "recorded" ? "https://drive.google.com/…" : "https://zoom.us/j/…"} />
+          <span className="small muted">لا يظهر للعامة. يراه الطالب في جدوله بعد تأكيد الحجز. يمكنك إضافته أو تغييره لاحقاً.</span>
+        </label>
+      )}
       {tp === "group" && <p className="note"><Icon name="cal" />ننشئ لقاءات الأسابيع الثمانية القادمة تلقائياً.</p>}
       {tp === "private" && <p className="note"><Icon name="clock" />أوقاتك المتاحة الافتراضية: الأحد إلى الخميس 15:00 إلى 21:00.</p>}
       <button className="btn block">نشر العرض</button>

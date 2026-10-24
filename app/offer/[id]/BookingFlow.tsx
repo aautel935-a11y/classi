@@ -4,11 +4,11 @@ import { useMemo, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { bookAction } from "@/app/actions";
 import { dayLong, dayNum, dayShort, monthName, time } from "@/lib/format";
-import type { OfferingType } from "@/lib/types";
+import { PLACES, type OfferingType, type Place } from "@/lib/types";
 import type { Slot } from "@/lib/dates";
 
 type Props = {
-  offering: { id: string; type: OfferingType; title: string; price: number; seats: number | null; full: boolean };
+  offering: { id: string; type: OfferingType; title: string; price: number; seats: number | null; full: boolean; places: Place[] };
   slots: Slot[];
   groupSessions: { id: string; starts_at: string; taken: number }[];
   kids: { id: string; name: string; grade: string | null }[];
@@ -27,15 +27,22 @@ export function BookingFlow({ offering: o, slots, groupSessions, kids }: Props) 
   const [who, setWho] = useState<string | null>(null); // child id or "self"
   const [pay, setPay] = useState<string | null>(null);
   const [weekly, setWeekly] = useState(false);
+  const [mode, setMode] = useState<Place | null>(o.places.length === 1 ? o.places[0] : null);
   const [error, setError] = useState<string | null>(null);
   const [pending, start] = useTransition();
 
-  const steps = o.type === "private" ? ["slot", "who", "pay"] : o.type === "group" ? ["session", "who", "pay"] : ["who", "pay"];
+  const chooseMode = o.type !== "recorded" && o.places.length > 1;
+  const steps = [
+    ...(o.type === "private" ? ["slot"] : o.type === "group" ? ["session"] : []),
+    ...(chooseMode ? ["mode"] : []),
+    "who",
+    "pay",
+  ];
   const st = steps[step];
   const days = useMemo(() => Array.from(new Set(slots.map((s) => s.day))), [slots]);
   const curDay = day ?? days[0];
   const pays = o.type === "course" ? [["bit", "Bit"], ["installments", "3 دفعات"], ["cash", "نقداً في المعهد"]] : o.type === "recorded" ? [["bit", "Bit"], ["card", "بطاقة ائتمان"]] : [["bit", "Bit"], ["cash", "نقداً للمعلم"]];
-  const ready = (st === "slot" && slot) || (st === "session" && session) || (st === "who" && who) || (st === "pay" && pay);
+  const ready = (st === "slot" && slot) || (st === "session" && session) || (st === "mode" && mode) || (st === "who" && who) || (st === "pay" && pay);
   const whoName = who === "self" ? "أنا" : kids.find((k) => k.id === who)?.name;
   const chosenAt = slot?.at ?? groupSessions.find((g) => g.id === session)?.starts_at;
 
@@ -49,6 +56,7 @@ export function BookingFlow({ offering: o, slots, groupSessions, kids }: Props) 
         sessionId: session,
         pay: pay!,
         weekly,
+        mode,
       });
       if (r.error) return setError(r.error);
       setOpen(false);
@@ -121,6 +129,21 @@ export function BookingFlow({ offering: o, slots, groupSessions, kids }: Props) 
                 </>
               )}
 
+              {st === "mode" && (
+                <>
+                  <h2>كيف تريد الحضور؟</h2>
+                  {o.places.map((p) => (
+                    <button key={p} className="opt" aria-pressed={mode === p} onClick={() => setMode(p)}>
+                      <span className="dot" />
+                      <span>
+                        {p === "online" ? "أونلاين (زوم أو ميت)" : p === "home" ? "حضوري" : PLACES[p]}
+                        {p === "home" && o.type === "private" && <span className="muted small"> · نتفق على المكان في الرسائل</span>}
+                      </span>
+                    </button>
+                  ))}
+                </>
+              )}
+
               {st === "who" && (
                 <>
                   <h2>{o.type === "course" ? "من سيسجّل؟" : o.type === "recorded" ? "لمن المحتوى؟" : "من سيحضر؟"}</h2>
@@ -168,6 +191,12 @@ export function BookingFlow({ offering: o, slots, groupSessions, kids }: Props) 
                       <span>الطالب</span>
                       <span>{whoName}</span>
                     </div>
+                    {mode && o.type !== "recorded" && (
+                      <div>
+                        <span>الحضور</span>
+                        <span>{mode === "online" ? "أونلاين" : PLACES[mode]}</span>
+                      </div>
+                    )}
                     {pay === "installments" && (
                       <div>
                         <span>كل دفعة</span>

@@ -52,6 +52,9 @@ export function OfferCard({ o, taken, showOwner = true }: { o: Offering; taken?:
         </span>
         <Stars rating={own.rating} count={own.reviews_count} />
       </div>
+      {o.type === "group" && o.schedule_note && taken == null && (
+        <div className="row small muted"><Icon name="cal" /><span>{o.schedule_note} · {o.seats} مقاعد</span></div>
+      )}
       {o.seats != null && taken != null && (
         <>
           <div className="row small muted between">

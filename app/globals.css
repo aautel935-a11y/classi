@@ -256,3 +256,5 @@ details summary::-webkit-details-marker{display:none}
 .offer-title{display:flex;align-items:center;gap:10px}
 .offer-title .glyph{flex:none;width:40px;height:36px;border-radius:10px;display:grid;place-items:center;background:var(--tint);color:var(--ink);font-family:var(--display);font-weight:700;font-size:11px;letter-spacing:-.3px;direction:ltr;white-space:nowrap}
 .card.offer{border-inline-start:1px solid var(--line)}
+.card.join{background:var(--soft);border-color:var(--accent)}
+.card.join .btn{align-self:flex-start}

@@ -25,6 +25,7 @@ export async function bookAction(input: {
   sessionId?: string | null;
   pay: string;
   weekly?: boolean;
+  mode?: Place | null;
 }): Promise<Result> {
   const { supabase, user } = await client();
   if (!user) return { error: "سجّل الدخول أولاً لإتمام الحجز." };
@@ -35,6 +36,7 @@ export async function bookAction(input: {
     p_session: input.sessionId || null,
     p_pay: input.pay,
     p_weekly: !!input.weekly,
+    p_mode: input.mode || null,
   });
   if (error) return { error: error.message };
   revalidatePath("/schedule");
@@ -172,8 +174,11 @@ export async function newOfferingAction(form: FormData) {
     row.schedule_note = `كل ${["أحد", "اثنين", "ثلاثاء", "أربعاء", "خميس", "جمعة"][weekday]} ${tm}`;
   }
   if (type === "recorded") row.lessons_count = num(form, "lessons") || null;
+  const link = str(form, "link");
+  if (link && !/^https?:\/\//i.test(link)) redirect(`/teach/new?error=${encodeURIComponent("الرابط يجب أن يبدأ بـ https://")}`);
   const { data: o, error } = await supabase.from("offerings").insert(row).select("id").single();
   if (error || !o) redirect(`/teach/new?error=${encodeURIComponent(error?.message ?? "تعذّر النشر")}`);
+  if (link) await supabase.from("offering_links").upsert({ offering_id: o.id, url: link });
   if (type === "group") {
     const days = datesOn(nextDays(1)[0], [weekday], 8);
     await supabase.from("sessions").insert(
@@ -320,4 +325,38 @@ export async function adminVerifyAction(form: FormData) {
   });
   revalidatePath("/admin");
   if (error) redirect(`/admin?error=${encodeURIComponent(error.message)}`);
+}
+
+// ---------- meeting / content link ----------
+export async function saveLinkAction(form: FormData) {
+  const { supabase, user } = await client();
+  if (!user) redirect("/login");
+  const id = str(form, "offering_id");
+  const url = str(form, "url");
+  const path = str(form, "path") || `/manage/course/${id}`;
+  if (!url) {
+    await supabase.from("offering_links").delete().eq("offering_id", id);
+  } else {
+    if (!/^https?:\/\//i.test(url)) redirect(`${path}?error=${encodeURIComponent("الرابط يجب أن يبدأ بـ https://")}`);
+    const { error } = await supabase.from("offering_links").upsert({ offering_id: id, url, note: str(form, "note") || null, updated_at: new Date().toISOString() });
+    if (error) redirect(`${path}?error=${encodeURIComponent(error.message)}`);
+  }
+  revalidatePath(path);
+  redirect(`${path}?saved=link`);
+}
+
+// ---------- teacher availability ----------
+export async function saveAvailabilityAction(form: FormData) {
+  const { supabase, user } = await client();
+  if (!user) redirect("/login?next=/teach");
+  const { data: t } = await supabase.from("teachers").select("id").eq("user_id", user.id).maybeSingle();
+  if (!t) redirect("/teach");
+  const from = str(form, "from") || "15:00";
+  const to = str(form, "to") || "21:00";
+  if (to <= from) redirect(`/teach?error=${encodeURIComponent("ساعة النهاية يجب أن تكون بعد ساعة البداية.")}`);
+  const days = form.getAll("days").map(Number).filter((d) => d >= 0 && d <= 6);
+  await supabase.from("availability").delete().eq("teacher_id", t.id);
+  if (days.length) await supabase.from("availability").insert(days.map((w) => ({ teacher_id: t.id, weekday: w, start_time: from, end_time: to })));
+  revalidatePath("/teach");
+  redirect("/teach?ok=hours");
 }

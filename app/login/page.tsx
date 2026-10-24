@@ -5,7 +5,7 @@ export default async function Login({ searchParams }: { searchParams: Promise<Re
   return (
     <div className="wrap">
       <div className="section">
-        <LoginForm next={sp.next && sp.next.startsWith("/") ? sp.next : "/"} />
+        <LoginForm next={sp.next && sp.next.startsWith("/") ? sp.next : "/"} initial={sp.mode === "up" ? "up" : "in"} />
       </div>
     </div>
   );

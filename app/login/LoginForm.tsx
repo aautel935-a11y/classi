@@ -12,9 +12,9 @@ const ROLES = [
   ["institute", "معهد"],
 ] as const;
 
-export function LoginForm({ next }: { next: string }) {
+export function LoginForm({ next, initial = "in" }: { next: string; initial?: "in" | "up" }) {
   const router = useRouter();
-  const [mode, setMode] = useState<"in" | "up">("in");
+  const [mode, setMode] = useState<"in" | "up" | "reset">(initial);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [sent, setSent] = useState(false);
@@ -27,6 +27,15 @@ export function LoginForm({ next }: { next: string }) {
     const supabase = createClient();
     const email = String(f.get("email")).trim();
     const password = String(f.get("password"));
+    if (mode === "reset") {
+      const { error } = await supabase.auth.resetPasswordForEmail(email, {
+        redirectTo: `${window.location.origin}/auth/callback?next=${encodeURIComponent("/account/password")}`,
+      });
+      setBusy(false);
+      if (error) return setError(error.message);
+      setSent(true);
+      return;
+    }
     if (mode === "in") {
       const { error } = await supabase.auth.signInWithPassword({ email, password });
       setBusy(false);
@@ -40,7 +49,7 @@ export function LoginForm({ next }: { next: string }) {
       email,
       password,
       options: {
-        data: { full_name: String(f.get("full_name")).trim() },
+        data: { full_name: String(f.get("full_name")).trim(), role, town: String(f.get("town") || "") },
         emailRedirectTo: `${window.location.origin}/auth/callback?next=${encodeURIComponent(role === "teacher" ? "/teach" : role === "institute" ? "/manage" : next)}&role=${role}`,
       },
     });
@@ -59,13 +68,14 @@ export function LoginForm({ next }: { next: string }) {
     return (
       <div className="stack">
         <h1>افحص بريدك</h1>
-        <p>أرسلنا لك رابط تفعيل. اضغط عليه لإكمال إنشاء الحساب، ثم ستعود إلى Classi تلقائياً.</p>
+        <p>{mode === "reset" ? "أرسلنا لك رابطاً لتعيين كلمة مرور جديدة." : "أرسلنا لك رابط تفعيل. اضغط عليه لإكمال إنشاء الحساب، ثم ستعود إلى Classi تلقائياً."}</p>
+        <p className="small muted">لم تصل الرسالة؟ افحص مجلد الرسائل غير المرغوب فيها (Spam)، أو انتظر دقيقتين.</p>
       </div>
     );
 
   return (
     <form className="formstack" onSubmit={onSubmit}>
-      <h1>{mode === "in" ? "تسجيل الدخول" : "حساب جديد"}</h1>
+      <h1>{mode === "in" ? "تسجيل الدخول" : mode === "up" ? "حساب جديد" : "نسيت كلمة المرور"}</h1>
       <div className="seg" role="group" style={{ gridTemplateColumns: "1fr 1fr" }}>
         <button type="button" aria-pressed={mode === "in"} onClick={() => setMode("in")}>لدي حساب</button>
         <button type="button" aria-pressed={mode === "up"} onClick={() => setMode("up")}>حساب جديد</button>
@@ -99,12 +109,20 @@ export function LoginForm({ next }: { next: string }) {
         البريد الإلكتروني
         <input id="email" name="email" type="email" required autoComplete="email" dir="ltr" />
       </label>
+      {mode !== "reset" && (
       <label className="field" htmlFor="password">
         كلمة المرور
         <input id="password" name="password" type="password" required minLength={8} autoComplete={mode === "in" ? "current-password" : "new-password"} dir="ltr" />
       </label>
+      )}
+      {mode === "in" && (
+        <button type="button" className="link small" style={{ alignSelf: "flex-start" }} onClick={() => { setMode("reset"); setError(null); }}>نسيت كلمة المرور؟</button>
+      )}
+      {mode === "reset" && (
+        <button type="button" className="link small" style={{ alignSelf: "flex-start" }} onClick={() => { setMode("in"); setError(null); }}>العودة لتسجيل الدخول</button>
+      )}
       {error && <p className="err">{error}</p>}
-      <button className="btn block" disabled={busy}>{busy ? "لحظة…" : mode === "in" ? "دخول" : "إنشاء الحساب"}</button>
+      <button className="btn block" disabled={busy}>{busy ? "لحظة…" : mode === "in" ? "دخول" : mode === "up" ? "إنشاء الحساب" : "أرسل رابط التعيين"}</button>
       {mode === "up" && <p className="small muted">بإنشاء الحساب أنت توافق على شروط الاستخدام وسياسة الخصوصية.</p>}
     </form>
   );

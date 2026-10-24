@@ -92,6 +92,16 @@ export default async function Home() {
         </section>
       )}
 
+      {(!profile || profile.active_role === "guardian" || profile.active_role === "student") && (
+        <section className="section">
+          <div className="card join">
+            <h2>معلم أو صاحب معهد؟</h2>
+            <p className="small">أنشئ ملفك مجاناً، حدّد أوقاتك وأسعارك، واستقبل الحجوزات. للدروس الحضورية أو عبر زوم.</p>
+            <Link className="btn" href={profile ? "/account" : "/login?mode=up&next=/teach"}>{profile ? "حوّل حسابك لمعلم أو معهد" : "انضم إلى Classi"}</Link>
+          </div>
+        </section>
+      )}
+
       {courses.length > 0 && (
         <section className="section">
           <h2>دورات تبدأ قريباً</h2>

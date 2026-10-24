@@ -14,10 +14,13 @@ export const dynamic = "force-dynamic";
 export default async function OfferPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
   const { supabase, user } = await getSession();
+  if (!/^[0-9a-f-]{36}$/i.test(id)) notFound();
   const { data } = await supabase.from("offerings").select(OFFERING_SELECT).eq("id", id).maybeSingle();
   if (!data) notFound();
   const o = data as unknown as Offering;
   const own = ownerOf(o);
+  if (!own) notFound();
+  const { data: mine } = user ? await supabase.rpc("is_offering_owner", { p_offering: o.id }) : { data: false };
 
   // what the booking sheet needs
   let slots: ReturnType<typeof privateSlots> = [];
@@ -97,15 +100,22 @@ export default async function OfferPage({ params }: { params: Promise<{ id: stri
             إلغاء مجاني حتى 24 ساعة قبل الحصة.
           </p>
         )}
-        {o.places.includes("online") && (
+        {o.type === "recorded" ? (
+          <p className="note">
+            <Icon name="play" />
+            رابط المحتوى يظهر في جدولك فور الشراء.
+          </p>
+        ) : o.places.includes("online") ? (
           <p className="note">
             <Icon name="monitor" />
-            رابط اللقاء يصلك من المعلم بعد التأكيد.
+            رابط زوم أو ميت يظهر في جدولك بعد تأكيد الحجز.
           </p>
-        )}
-        {user ? (
+        ) : null}
+        {mine ? (
+          <Link className="btn ghost block" href={`/manage/course/${o.id}`}>هذا عرضك: إدارة العرض</Link>
+        ) : user ? (
           <BookingFlow
-            offering={{ id: o.id, type: o.type, title: o.title, price: o.price, seats: o.seats, full }}
+            offering={{ id: o.id, type: o.type, title: o.title, price: o.price, seats: o.seats, full, places: o.places }}
             slots={slots}
             groupSessions={groupSessions}
             kids={(children ?? []) as { id: string; name: string; grade: string | null }[]}
