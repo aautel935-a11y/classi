@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { Icon } from "@/components/Icon";
 import {
-  teacherAddBookingAction, teacherBlockAction, teacherCancelBookingAction, teacherMoveBookingAction, teacherUnblockAction,
+  teacherAddBookingAction, teacherBlockAction, teacherVacationAction, teacherCancelBookingAction, teacherMoveBookingAction, teacherUnblockAction,
 } from "@/app/actions";
 import { requireUser } from "@/lib/session";
 import { ConfirmPay, PayBadge } from "@/components/Pay";
@@ -30,6 +30,7 @@ const OK: Record<string, string> = {
   cancelled: "أُلغي الحجز ووصل الطالب إشعار بالسبب.",
   report: "أُرسل التقرير ووصل ولي الأمر إشعار.",
   payment: "حُدّثت حالة الدفع.",
+  vacation: "أُغلقت أيام العطلة كاملة. لا يستطيع أحد الحجز فيها، ويمكنك فتح أي يوم منها لاحقاً.",
 };
 
 /** The teacher's day by day: free hours, bookings, meetings and closed hours, each with its actions. */
@@ -90,6 +91,19 @@ export default async function TeacherCalendar({ searchParams }: { searchParams: 
         <p className="small muted">أغلق ساعات، أضف طلابك لساعة فارغة، أو غيّر موعد أي حصة. كل تغيير يصل للطالب فوراً.</p>
         {sp.ok && <p className="okmsg">{sp.ok.startsWith("blocked:") ? `أُغلقت الساعة لـ${sp.ok.split(":")[1]} أسابيع.` : OK[sp.ok]}{sp.ok === "added" && sp.n && Number(sp.n) > 1 ? ` (${sp.n} حصص)` : ""}{sp.skipped ? ` لم تُحجز هذه الأسابيع لأنها مشغولة: ${sp.skipped}` : ""}</p>}
         {sp.error && <p className="err">{sp.error}</p>}
+
+        <details className="card" id="vacation">
+          <summary className="row between" style={{ cursor: "pointer" }}><b>عطلة أو إغلاق أيام</b><span className="link small">إغلاق يوم أو أكثر دفعة واحدة</span></summary>
+          <form action={teacherVacationAction} className="formstack" style={{ marginTop: 10 }}>
+            <div className="typeform">
+              <label className="field">من يوم<input type="date" name="from" required min={today} defaultValue={day} /></label>
+              <label className="field">حتى يوم (شاملاً)<input type="date" name="to" min={today} /></label>
+            </div>
+            <label className="field">ملاحظة لك (لا يراها الطلاب)<input name="note" maxLength={120} placeholder="مثلاً: سفر، عيد" /></label>
+            <p className="note"><Icon name="clock" />إن كانت لديك حصص أو لقاءات في هذه الأيام نخبرك بها أولاً، فتنقلها أو تلغيها ثم تغلق الأيام.</p>
+            <button className="btn sm">إغلاق الأيام</button>
+          </form>
+        </details>
 
         <div className="row between">
           <Link className="btn sm ghost" href={`/teach/calendar?day=${addDays(weekStart, -7)}`}>الأسبوع السابق</Link>

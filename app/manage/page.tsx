@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { Icon } from "@/components/Icon";
-import { addStaffAction, instituteSetupAction, updateInstituteAction } from "@/app/actions";
+import { addStaffAction, instituteSetupAction, removeStaffAction, updateInstituteAction } from "@/app/actions";
 import { PhotoUpload } from "@/components/PhotoUpload";
 import { WaitlistOwner, type WRow } from "@/components/WaitlistOwner";
 import { PaymentsOwner, type MoneySummary, type PayRow } from "@/components/PaymentsOwner";
@@ -155,10 +155,22 @@ export default async function Manage({ searchParams }: { searchParams: Promise<R
         </section>
       )}
 
-      <section className="section">
+      <section className="section" id="staff">
         <h2>معلمو المعهد</h2>
-        <div className="row" style={{ flexWrap: "wrap" }}>
-          {(staff ?? []).map((s: any) => s.teacher && <span key={s.teacher.id} className="badge">أ. {s.teacher.name}</span>)}
+        {sp.saved === "staff_removed" && <p className="okmsg">أُزيل المعلم من الطاقم ومن دوراته، ولم يعد يرى طلاب المعهد.</p>}
+        <div className="stack" style={{ gap: 6 }}>
+          {(staff ?? []).map((s: any) => s.teacher && (
+            <div key={s.teacher.id} className="row between card" style={{ padding: "8px 12px" }}>
+              <span>أ. {s.teacher.name}</span>
+              <details>
+                <summary className="link small" style={{ color: "var(--bad)" }}>إزالة</summary>
+                <form action={removeStaffAction} style={{ marginTop: 6 }}>
+                  <input type="hidden" name="teacher_id" value={s.teacher.id} />
+                  <button className="btn sm badb">تأكيد: إزالته من المعهد ودوراته</button>
+                </form>
+              </details>
+            </div>
+          ))}
           {(staff ?? []).length === 0 && <span className="small muted">لم تضف معلمين بعد.</span>}
         </div>
         <form action={addStaffAction} className="row">

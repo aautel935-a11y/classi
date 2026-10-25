@@ -76,9 +76,8 @@ export default async function Teach({ searchParams }: { searchParams: Promise<Re
   const reviewOf = (id: string) => ((reviewRows ?? []) as { id: string; review_status: string; review_note: string | null; pending_changes: unknown }[]).find((r) => r.id === id);
   const bitLocal = bitRow?.bit_phone ? String(bitRow.bit_phone).replace(/^\+972/, "0") : "";
   const hasLink = new Set((links ?? []).map((l) => l.offering_id));
-  const hourDays = new Set((hours ?? []).map((h) => h.weekday));
-  const hourFrom = (hours ?? [])[0]?.start_time?.slice(0, 5) ?? "15:00";
-  const hourTo = (hours ?? [])[0]?.end_time?.slice(0, 5) ?? "21:00";
+  const dayRanges = (d: number) => ((hours ?? []) as { weekday: number; start_time: string; end_time: string }[])
+    .filter((h) => h.weekday === d).sort((x, y) => x.start_time.localeCompare(y.start_time)).map((h) => [h.start_time.slice(0, 5), h.end_time.slice(0, 5)]);
   const rows = (bookings ?? []) as BRow[];
   // One request card per weekly series (its first pending lesson), plus single requests.
   const seenSeries = new Set<string>();
@@ -260,14 +259,31 @@ export default async function Teach({ searchParams }: { searchParams: Promise<Re
       <section className="section" id="hours">
         <h2>أوقاتي المتاحة للدروس الخصوصية</h2>
         <form action={saveAvailabilityAction} className="card formstack">
-          <div className="weekdays">
-            {DAYS.map((d, i) => (
-              <label key={d}><input type="checkbox" name="days" value={i} defaultChecked={hourDays.has(i)} />{d}</label>
-            ))}
+          {sp.ok === "hours" && <p className="okmsg">حُفظت الأوقات.</p>}
+          <div className="hours-grid">
+            {DAYS.map((d, i) => {
+              const r = dayRanges(i);
+              return (
+                <div key={d} className="hours-day">
+                  <label className="row" style={{ gap: 6, minWidth: 92 }}><input type="checkbox" name={`on_${i}`} defaultChecked={r.length > 0} /><b>{d}</b></label>
+                  <span className="row" style={{ gap: 4 }}>
+                    <input aria-label={`${d} من`} name={`from_${i}`} type="time" defaultValue={r[0]?.[0] ?? "15:00"} />
+                    <span className="small muted">حتى</span>
+                    <input aria-label={`${d} حتى`} name={`to_${i}`} type="time" defaultValue={r[0]?.[1] ?? "21:00"} />
+                  </span>
+                  <details open={r.length > 1}>
+                    <summary className="link small">فترة ثانية</summary>
+                    <span className="row" style={{ gap: 4, marginTop: 4 }}>
+                      <input aria-label={`${d} فترة ثانية من`} name={`from2_${i}`} type="time" defaultValue={r[1]?.[0] ?? ""} />
+                      <span className="small muted">حتى</span>
+                      <input aria-label={`${d} فترة ثانية حتى`} name={`to2_${i}`} type="time" defaultValue={r[1]?.[1] ?? ""} />
+                    </span>
+                  </details>
+                </div>
+              );
+            })}
           </div>
           <div className="typeform">
-            <label className="field" htmlFor="h-from">من الساعة<input id="h-from" name="from" type="time" defaultValue={hourFrom} /></label>
-            <label className="field" htmlFor="h-to">حتى الساعة<input id="h-to" name="to" type="time" defaultValue={hourTo} /></label>
             <label className="field" htmlFor="h-buffer">
               استراحة بين الحصص
               <select id="h-buffer" name="buffer" defaultValue={String(t.buffer_minutes ?? 0)}>
@@ -279,7 +295,7 @@ export default async function Teach({ searchParams }: { searchParams: Promise<Re
               </select>
             </label>
           </div>
-          <p className="note"><Icon name="clock" />الطلاب يرون مواعيد كل ساعة ضمن هذه الأوقات، والمحجوز منها يظهر مشغولاً.</p>
+          <p className="note"><Icon name="clock" />لكل يوم أوقاته، ويمكن إضافة فترة ثانية (مثلاً صباحاً ومساءً). لعطلة أو إغلاق أيام محددة استخدم <Link className="link" href="/teach/calendar#vacation">التقويم</Link>.</p>
           <button className="btn ghost">حفظ الأوقات</button>
         </form>
       </section>

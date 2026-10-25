@@ -43,9 +43,17 @@ export function NewOfferForm({ subjects, levels, error }: { subjects: Opt[]; lev
         <label className="field" htmlFor="subject_id">المادة<select id="subject_id" name="subject_id">{subjects.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}</select></label>
         <label className="field" htmlFor="level_id">المرحلة<select id="level_id" name="level_id" defaultValue={levels.find((l) => l.name === "ثانوي")?.id}>{levels.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}</select></label>
         <label className="field" htmlFor="price">
-          {tp === "private" ? "السعر للساعة (₪)" : tp === "group" ? "السعر للطالب في اللقاء (₪)" : "السعر (₪)"}
+          {tp === "private" ? "السعر للحصة (₪)" : tp === "group" ? "السعر للطالب في اللقاء (₪)" : "السعر (₪)"}
           <input id="price" name="price" type="number" min={0} required defaultValue={tp === "private" ? 150 : tp === "group" ? 60 : 149} />
         </label>
+        {tp !== "recorded" && (
+          <label className="field" htmlFor="minutes">
+            مدة {tp === "private" ? "الحصة" : "اللقاء"}
+            <select id="minutes" name="minutes" defaultValue={tp === "private" ? "60" : "90"}>
+              {(tp === "private" ? [30, 45, 60, 90, 120] : [45, 60, 90, 120, 150]).map((m) => <option key={m} value={m}>{m === 60 ? "ساعة" : m === 90 ? "ساعة ونصف" : m === 120 ? "ساعتان" : `${m} دقيقة`}</option>)}
+            </select>
+          </label>
+        )}
         {tp !== "recorded" && (
           <label className="field" htmlFor="place">
             المكان

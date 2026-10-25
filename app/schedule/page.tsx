@@ -3,14 +3,14 @@ import { Icon } from "@/components/Icon";
 import { cancelBookingAction, cancelSeriesAction, leaveWaitlistAction } from "@/app/actions";
 import { requireUser } from "@/lib/session";
 import { PushToggle } from "@/components/PushToggle";
-import { PayBadge, PayForStudent } from "@/components/Pay";
+import { PayBadge, PayForStudent, installmentAmount } from "@/components/Pay";
 import { PAY_LABEL, PLACES, type Place } from "@/lib/types";
 import { dayNum, dayShort, monthName, time } from "@/lib/format";
 
 export const dynamic = "force-dynamic";
 
 type Row = {
-  id: string; status: string; pay_method: string; starts_at: string | null; session_id: string | null; mode: Place | null; price: number | null; series_id: string | null; pay_status: string;
+  id: string; status: string; pay_method: string; starts_at: string | null; session_id: string | null; mode: Place | null; price: number | null; series_id: string | null; pay_status: string; installments_total: number; installments_paid: number;
   child: { name: string } | null;
   session: { starts_at: string } | null;
   offering: { id: string; type: string; title: string; places: Place[]; teacher: { name: string } | null; institute: { name: string } | null };
@@ -21,7 +21,7 @@ export default async function Schedule({ searchParams }: { searchParams: Promise
   const { supabase, user } = await requireUser("/schedule");
   const { data } = await supabase
     .from("bookings")
-    .select("id,status,pay_method,starts_at,session_id,mode,price,series_id,pay_status,child:children(name),session:sessions(starts_at),offering:offerings(id,type,title,places,teacher:teachers!offerings_teacher_id_fkey(name),institute:institutes(name))")
+    .select("id,status,pay_method,starts_at,session_id,mode,price,series_id,pay_status,installments_total,installments_paid,child:children(name),session:sessions(starts_at),offering:offerings(id,type,title,places,teacher:teachers!offerings_teacher_id_fkey(name),institute:institutes(name))")
     .eq("booked_by", user.id)
     .in("status", ["pending", "confirmed"])
     .order("created_at", { ascending: false });
@@ -159,14 +159,14 @@ export default async function Schedule({ searchParams }: { searchParams: Promise
                 )}
                 {changed && <span className="badge">غيّر المعهد الموعد</span>}
                 {r.series_id && <span className="badge"><Icon name="cal" />أسبوعي · {seriesCount.get(r.series_id) ?? 0} حصص قادمة</span>}
-                <PayBadge status={r.pay_status} method={r.pay_method} />
+                <PayBadge status={r.pay_status} method={r.pay_method} inst={r.installments_total > 1 ? [r.installments_paid, r.installments_total] : undefined} />
                 {r.price != null && r.price > 0 && <span className="badge num">{r.price} ₪</span>}
               </div>
               {r.status === "confirmed" && at && at < now && r.offering.type !== "recorded" && (
                 <Link className="link small" href={`/review?booking=${r.id}`}>★ قيّم {r.offering.teacher ? `أ. ${r.offering.teacher.name}` : r.offering.institute?.name}</Link>
               )}
               {r.status === "confirmed" && (
-                <PayForStudent bookingId={r.id} status={r.pay_status} method={r.pay_method} amount={r.price} bit={payOf(r.offering.id)?.bit_phone} owner={payOf(r.offering.id)?.owner_name} back="/schedule" />
+                <PayForStudent bookingId={r.id} status={r.pay_status} method={r.pay_method} amount={r.price != null ? installmentAmount(r.price, r.installments_total, r.installments_paid) : null} bit={payOf(r.offering.id)?.bit_phone} owner={payOf(r.offering.id)?.owner_name} back="/schedule" />
               )}
               {(() => {
                 const l = linkOf(r.offering.id);

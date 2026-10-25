@@ -9,8 +9,20 @@ export const PAY_STATUS: Record<string, { label: string; tone: string }> = {
   package: { label: "ضمن الرزمة", tone: "ok" },
 };
 
-export function PayBadge({ status, method, teacherView = false }: { status: string; method?: string | null; teacherView?: boolean }) {
+/** Integer installment amount; the last one absorbs rounding (same as installment_amount() in SQL). */
+export function installmentAmount(price: number, total: number, paid: number) {
+  if (total <= 1) return price;
+  const each = Math.floor(price / total);
+  return paid >= total - 1 ? price - each * (total - 1) : each;
+}
+
+export function PayBadge({ status, method, teacherView = false, inst }: { status: string; method?: string | null; teacherView?: boolean; inst?: [number, number] }) {
   let label = PAY_STATUS[status]?.label ?? status;
+  if (inst && inst[1] > 1 && (status === "unpaid" || status === "reported")) {
+    const n = `الدفعة ${inst[0] + 1} من ${inst[1]}`;
+    label = status === "reported" ? (teacherView ? `${n}: حُوّلت، أكّد الاستلام` : `${n}: بانتظار التأكيد`) : teacherView ? `${n} لم تصل بعد` : `${n} مستحقة`;
+    return <span className={`badge ${status === "reported" ? "warn" : ""}`}>{label}</span>;
+  }
   if (status === "unpaid") label = method === "cash" ? (teacherView ? "نقداً، لم تستلم بعد" : "الدفع نقداً عند الحصة") : teacherView ? "Bit، لم يصل بعد" : "حوّل عبر Bit";
   if (status === "reported" && teacherView) label = "حوّل عبر Bit، أكّد الاستلام";
   return <span className={`badge ${PAY_STATUS[status]?.tone ?? ""} ${status === "reported" ? "warn" : ""}`}>{label}</span>;
@@ -42,7 +54,7 @@ export function PayForStudent({ bookingId, packageId, status, method, amount, bi
 }
 
 /** Teacher side: mark money as received (or a reported transfer as not arrived). */
-export function ConfirmPay({ bookingId, packageId, status, back }: { bookingId?: string; packageId?: string; status: string; back: string }) {
+export function ConfirmPay({ bookingId, packageId, status, back, installment }: { bookingId?: string; packageId?: string; status: string; back: string; installment?: [number, number] }) {
   if (status !== "unpaid" && status !== "reported") return null;
   const hidden = (
     <>
@@ -53,7 +65,7 @@ export function ConfirmPay({ bookingId, packageId, status, back }: { bookingId?:
   );
   return (
     <div className="row" style={{ gap: 12, flexWrap: "wrap" }}>
-      <form action={confirmPaymentAction}>{hidden}<button className="btn sm okb">استلمت المبلغ</button></form>
+      <form action={confirmPaymentAction}>{hidden}<button className="btn sm okb">{installment ? `استلمت الدفعة ${installment[0]} من ${installment[1]}` : "استلمت المبلغ"}</button></form>
       {status === "reported" && (
         <form action={confirmPaymentAction}>{hidden}<input type="hidden" name="received" value="0" /><button className="link small" style={{ color: "var(--bad)" }}>لم يصل</button></form>
       )}

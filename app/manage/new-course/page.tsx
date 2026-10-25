@@ -39,6 +39,7 @@ export default async function NewCourse({ searchParams }: { searchParams: Promis
           <label className="field" htmlFor="seats">المقاعد<input id="seats" name="seats" type="number" min={1} defaultValue={14} /></label>
           <label className="field" htmlFor="start">تاريخ البداية<input id="start" name="start" type="date" required defaultValue={start} /></label>
           <label className="field" htmlFor="time">الساعة<input id="time" name="time" type="time" required defaultValue="17:00" /></label>
+          <label className="field" htmlFor="minutes">مدة اللقاء<select id="minutes" name="minutes" defaultValue="90">{[45, 60, 90, 120, 150].map((m) => <option key={m} value={m}>{m === 60 ? "ساعة" : m === 90 ? "ساعة ونصف" : m === 120 ? "ساعتان" : `${m} دقيقة`}</option>)}</select></label>
           <label className="field" htmlFor="sessions">عدد اللقاءات<input id="sessions" name="sessions" type="number" min={1} max={60} defaultValue={12} /></label>
         </div>
         <fieldset>

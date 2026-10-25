@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { Icon } from "@/components/Icon";
-import { cancelPackageAction, saveLinkAction, startBookingConversationAction, updateOfferingAction } from "@/app/actions";
+import { cancelPackageAction, cancelSessionAction, enrollWalkInAction, saveLinkAction, startBookingConversationAction, updateOfferingAction } from "@/app/actions";
 import { requireUser } from "@/lib/session";
 import { PAY_LABEL, PLACES, TYPES, type OfferingType, type Place } from "@/lib/types";
 import { dayLong, isoDay, time } from "@/lib/format";
@@ -21,7 +21,7 @@ export default async function ManageOffer({ params, searchParams }: { params: Pr
   const { supabase } = await requireUser(path);
   const { data: o } = await supabase
     .from("offerings")
-    .select("id,type,title,price,seats,places,lessons_count,subject_id,level_id,course_teacher_id,institute_id,teacher_id,auto_confirm,allow_weekly,trial_price,package_enabled,package_size,package_price,review_status,review_note,pending_changes,course_teacher:teachers!offerings_course_teacher_id_fkey(name)")
+    .select("id,type,title,price,seats,places,lessons_count,subject_id,level_id,course_teacher_id,institute_id,teacher_id,auto_confirm,allow_weekly,minutes,trial_price,package_enabled,package_size,package_price,review_status,review_note,pending_changes,course_teacher:teachers!offerings_course_teacher_id_fkey(name)")
     .eq("id", id)
     .maybeSingle();
   if (!o) notFound();
@@ -62,6 +62,8 @@ export default async function ManageOffer({ params, searchParams }: { params: Pr
         </p>
         {sp.saved === "link" && <p className="okmsg">حُفظ الرابط. يراه الطلاب المؤكَّدون في جدولهم.</p>}
         {sp.ok === "payment" && <p className="okmsg">حُدّثت حالة الدفع.</p>}
+        {sp.ok === "cancelled" && <p className="okmsg">أُلغي اللقاء ووصل إشعار للمعلم ولكل المشتركين.</p>}
+        {sp.ok === "enrolled" && <p className="okmsg">سُجّل الطالب. {sp.linked === "1" ? "رقمه مسجّل في Classi فوصله إشعار ويرى الدورة في جدوله." : "يظهر في قائمة الطلاب ويُحسب من المقاعد."}</p>}
         {sp.saved === "package" && <p className="okmsg">أُلغيت الرزمة ووصل ولي الأمر إشعار. الحصص القادمة بقيت محجوزة بالسعر العادي.</p>}
         {sp.saved === "offer" && <p className="okmsg">حُفظت التعديلات. السعر والمقاعد وطريقة الحجز تسري فوراً؛ تعديل العنوان والمادة والعروض الاختيارية يظهر بعد موافقة الإدارة.</p>}
         {(o as any).review_status === "pending" && <p className="note"><Icon name="clock" />العرض بانتظار موافقة الإدارة ولا يظهر للطلاب بعد.</p>}
@@ -91,6 +93,14 @@ export default async function ManageOffer({ params, searchParams }: { params: Pr
                       <option value="home">حضوري</option>
                       <option value="online">أونلاين</option>
                       {type === "private" && <option value="both">الاثنان</option>}
+                    </select>
+                  </label>
+                )}
+                {type !== "recorded" && (
+                  <label className="field" htmlFor="ed-minutes">
+                    مدة {type === "private" ? "الحصة" : "اللقاء"}
+                    <select id="ed-minutes" name="minutes" defaultValue={String((o as any).minutes ?? 60)}>
+                      {[30, 45, 60, 90, 120, 150].map((m) => <option key={m} value={m}>{m === 60 ? "ساعة" : m === 90 ? "ساعة ونصف" : m === 120 ? "ساعتان" : `${m} دقيقة`}</option>)}
                     </select>
                   </label>
                 )}
@@ -160,14 +170,26 @@ export default async function ManageOffer({ params, searchParams }: { params: Pr
               <div className="stack" style={{ gap: 2, flex: 1, minWidth: 0 }}>
                 <div className="row" style={{ flexWrap: "wrap" }}>
                   <b>اللقاء {s.seq}</b>
-                  {s.changed && <span className="badge">تغيّر الموعد</span>}
+                  {s.cancelled && <span className="badge bad">ملغى</span>}
+                  {s.changed && !s.cancelled && <span className="badge">تغيّر الموعد</span>}
                   {s.starts_at < now && <span className="badge ok">انتهى</span>}
                 </div>
                 <span className="small muted">{dayLong(s.starts_at)} · <span className="num">{time(s.starts_at)}</span>{s.room ? ` · ${s.room.name}` : ""}</span>
               </div>
               <div className="row" style={{ gap: 6 }}>
                 <Link className="btn sm ghost" href={`/manage/course/${id}/attendance/${s.id}`}>الحضور</Link>
-                {owner && s.starts_at >= now && (
+                {owner && s.starts_at >= now && !s.cancelled && (
+                  <details>
+                    <summary className="btn sm ghost" style={{ color: "var(--bad)" }}>إلغاء</summary>
+                    <form action={cancelSessionAction} className="formstack" style={{ marginTop: 6, minWidth: 200 }}>
+                      <input type="hidden" name="session_id" value={s.id} />
+                      <input type="hidden" name="back" value={path} />
+                      <input name="reason" placeholder="السبب (مثلاً: عطلة العيد)" maxLength={120} />
+                      <button className="btn sm badb">إلغاء هذا اللقاء وإبلاغ الطلاب</button>
+                    </form>
+                  </details>
+                )}
+                {owner && s.starts_at >= now && !s.cancelled && (
                   <EditSession
                     path={path}
                     session={{ id: s.id, seq: s.seq, day: isoDay(s.starts_at), time: time(s.starts_at), roomId: s.room_id }}
@@ -213,14 +235,43 @@ export default async function ManageOffer({ params, searchParams }: { params: Pr
         </section>
       )}
 
+      {owner && type === "course" && (
+        <section className="section">
+          <details className="card" open={sp.enroll === "1"}>
+            <summary className="row between" style={{ cursor: "pointer" }}><b>تسجيل طالب يدوياً</b><span className="link small">سجّل ودفع في المقر</span></summary>
+            <form action={enrollWalkInAction} className="formstack" style={{ marginTop: 12 }}>
+              <input type="hidden" name="offering_id" value={id} />
+              <input type="hidden" name="back" value={path} />
+              <div className="typeform">
+                <label className="field" htmlFor="wi-name">اسم الطالب<input id="wi-name" name="name" required minLength={2} maxLength={60} /></label>
+                <label className="field" htmlFor="wi-phone">هاتف ولي الأمر (اختياري)<input id="wi-phone" name="phone" type="tel" dir="ltr" placeholder="05X-XXX XXXX" /></label>
+                <label className="field" htmlFor="wi-pay">
+                  طريقة الدفع
+                  <select id="wi-pay" name="pay" defaultValue="cash">
+                    <option value="cash">نقداً</option>
+                    <option value="bit">Bit</option>
+                    {type === "course" && <option value="installments">3 دفعات</option>}
+                  </select>
+                </label>
+              </div>
+              <label className="row"><input type="checkbox" name="paid" /> دفع الآن (أو الدفعة الأولى)</label>
+              <p className="note"><Icon name="check" />إن كان رقم الهاتف مسجّلاً في Classi يُربط الحجز بحسابه ويصله إشعار. يُحسب الطالب من المقاعد.</p>
+              <button className="btn">تسجيل</button>
+            </form>
+          </details>
+        </section>
+      )}
+
       <section className="section">
         <h2>{type === "private" ? "الحجوزات" : "الطلاب"}</h2>
         {list.length === 0 && <div className="empty">لا حجوزات بعد.</div>}
         {list.map((b) => (
           <div key={b.booking_id} className="card" style={{ flexDirection: "row", alignItems: "center", gap: 12 }}>
             <div className="stack" style={{ gap: 2, flex: 1, minWidth: 0 }}>
-              <b>{b.student_name}</b>
+              <b>{b.student_name}{b.offline && <span className="badge" style={{ marginInlineStart: 6 }}>سُجّل في المعهد</span>}</b>
+              {b.offline && b.offline_phone && <span className="small muted num" dir="ltr" style={{ textAlign: "end" }}>{b.offline_phone}</span>}
               <span className="small muted">
+                {b.installments_total > 1 ? `أقساط: دُفع ${b.installments_paid} من ${b.installments_total} · ` : ""}
                 {b.starts_at ? `${dayLong(b.starts_at)} · ${time(b.starts_at)} · ` : ""}
                 {b.mode ? (b.mode === "online" ? "أونلاين" : PLACES[b.mode as Place]) : ""}
                 {b.series_id ? " · أسبوعي" : ""}
@@ -228,9 +279,9 @@ export default async function ManageOffer({ params, searchParams }: { params: Pr
             </div>
             <div className="stack" style={{ gap: 4, alignItems: "flex-end" }}>
               <span className={`badge ${b.status === "confirmed" ? "ok" : ""}`}>{b.status === "confirmed" ? "مؤكد" : "بانتظار ردّك"}</span>
-              {b.status === "confirmed" && b.pay_status && <PayBadge status={b.pay_status} method={b.pay_method} teacherView />}
-              {owner && b.status === "confirmed" && <ConfirmPay bookingId={b.booking_id} status={b.pay_status} back={path} />}
-              {owner && (
+              {b.status === "confirmed" && b.pay_status && <PayBadge status={b.pay_status} method={b.pay_method} teacherView inst={b.installments_total > 1 ? [b.installments_paid, b.installments_total] : undefined} />}
+              {owner && b.status === "confirmed" && <ConfirmPay bookingId={b.booking_id} status={b.pay_status} back={path} installment={b.installments_total > 1 ? [b.installments_paid + 1, b.installments_total] : undefined} />}
+              {owner && !b.offline && (
                 <form action={startBookingConversationAction}>
                   <input type="hidden" name="booking_id" value={b.booking_id} />
                   <button className="link small"><Icon name="chat" /> راسل</button>

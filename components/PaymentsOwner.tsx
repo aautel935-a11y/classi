@@ -2,7 +2,7 @@ import { Icon } from "@/components/Icon";
 import { ConfirmPay, PayBadge } from "@/components/Pay";
 import { dayLong, shekel } from "@/lib/format";
 
-export type PayRow = { kind: "booking" | "package"; id: string; offering_id: string; title: string; who: string; amount: number; pay_method: string; pay_status: string; lesson_at: string; reported_at: string | null };
+export type PayRow = { kind: "booking" | "package"; id: string; offering_id: string; title: string; who: string; amount: number; pay_method: string; pay_status: string; lesson_at: string; reported_at: string | null; installments_total?: number; installments_paid?: number };
 export type MoneySummary = { paid_month: number; open_amount: number; reported: number };
 
 /** Teacher/institute: money to confirm (Bit transfers reported) and to collect (cash, unpaid). */
@@ -30,8 +30,8 @@ export function PaymentsOwner({ rows, summary, back, hasBit, flash }: { rows: Pa
           </div>
           <span className="small muted">{r.title} · {dayLong(r.lesson_at)}</span>
           <div className="row between" style={{ flexWrap: "wrap", gap: 8 }}>
-            <PayBadge status={r.pay_status} method={r.pay_method} teacherView />
-            <ConfirmPay bookingId={r.kind === "booking" ? r.id : undefined} packageId={r.kind === "package" ? r.id : undefined} status={r.pay_status} back={back} />
+            <PayBadge status={r.pay_status} method={r.pay_method} teacherView inst={(r.installments_total ?? 1) > 1 ? [r.installments_paid ?? 0, r.installments_total!] : undefined} />
+            <ConfirmPay bookingId={r.kind === "booking" ? r.id : undefined} packageId={r.kind === "package" ? r.id : undefined} status={r.pay_status} back={back} installment={(r.installments_total ?? 1) > 1 ? [(r.installments_paid ?? 0) + 1, r.installments_total!] : undefined} />
           </div>
         </div>
       ))}

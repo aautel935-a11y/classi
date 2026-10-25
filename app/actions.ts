@@ -4,7 +4,7 @@ import { revalidatePath, revalidateTag } from "next/cache";
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { fromLocal } from "@/lib/format";
-import { datesOn, nextDays } from "@/lib/dates";
+import { WEEKDAYS, datesOn, nextDays } from "@/lib/dates";
 import type { OfferingType, Place, Role } from "@/lib/types";
 
 type Result = { error?: string; ok?: boolean; count?: number; created?: number; skipped?: string[] };
@@ -212,7 +212,7 @@ export async function newOfferingAction(form: FormData) {
     level_id: num(form, "level_id") || null,
     places,
     price: num(form, "price"),
-    minutes: type === "group" ? 90 : type === "recorded" ? 0 : 60,
+    minutes: type === "recorded" ? 0 : [30, 45, 60, 90, 120, 150].includes(num(form, "minutes")) ? num(form, "minutes") : type === "group" ? 90 : 60,
     auto_confirm: type === "private" && form.get("auto_confirm") === "on",
     allow_weekly: (type === "private" || type === "group") && form.get("allow_weekly") === "on",
     ...offerExtras(form, type),
@@ -230,7 +230,7 @@ export async function newOfferingAction(form: FormData) {
   if (type === "group") {
     const days = datesOn(nextDays(1)[0], [weekday], 8);
     await supabase.from("sessions").insert(
-      days.map((d, i) => ({ offering_id: o.id, seq: i + 1, starts_at: fromLocal(d, tm).toISOString(), minutes: 90 }))
+      days.map((d, i) => ({ offering_id: o.id, seq: i + 1, starts_at: fromLocal(d, tm).toISOString(), minutes: Number(row.minutes) || 90 }))
     );
   }
   revalidatePath("/teach");
@@ -304,7 +304,7 @@ export async function newCourseAction(form: FormData) {
       schedule_note: `${weekdays.map((w) => names[w]).join(" و")} ${tm}`,
       start_date: start,
       sessions_count: count,
-      minutes: 90,
+      minutes: [45, 60, 90, 120, 150].includes(num(form, "minutes")) ? num(form, "minutes") : 90,
       default_room_id: room,
     })
     .select("id")
@@ -312,7 +312,7 @@ export async function newCourseAction(form: FormData) {
   if (error || !o) redirect(`/manage/new-course?error=${encodeURIComponent(error?.message ?? "تعذّر الحفظ")}`);
   const days = datesOn(start, weekdays, count);
   await supabase.from("sessions").insert(
-    days.map((d, i) => ({ offering_id: o.id, seq: i + 1, starts_at: fromLocal(d, tm).toISOString(), minutes: 90, room_id: room }))
+    days.map((d, i) => ({ offering_id: o.id, seq: i + 1, starts_at: fromLocal(d, tm).toISOString(), minutes: [45, 60, 90, 120, 150].includes(num(form, "minutes")) ? num(form, "minutes") : 90, room_id: room }))
   );
   revalidatePath("/manage");
   redirect(`/manage/course/${o.id}`);
@@ -438,18 +438,27 @@ export async function saveAvailabilityAction(form: FormData) {
   if (!user) redirect("/login?next=/teach");
   const { data: t } = await supabase.from("teachers").select("id").eq("user_id", user.id).maybeSingle();
   if (!t) redirect("/teach");
-  const from = str(form, "from") || "15:00";
-  const to = str(form, "to") || "21:00";
-  if (to <= from) redirect(`/teach?error=${encodeURIComponent("ساعة النهاية يجب أن تكون بعد ساعة البداية.")}`);
-  const days = form.getAll("days").map(Number).filter((d) => d >= 0 && d <= 6);
+  const rows: { teacher_id: string; weekday: number; start_time: string; end_time: string }[] = [];
+  for (let w = 0; w <= 6; w++) {
+    if (form.get(`on_${w}`) !== "on") continue;
+    const ranges = [[str(form, `from_${w}`), str(form, `to_${w}`)], [str(form, `from2_${w}`), str(form, `to2_${w}`)]].filter(([a, b]) => a && b);
+    for (const [a, b] of ranges) {
+      if (b <= a) redirect(`/teach?error=${encodeURIComponent(`في يوم ${WEEKDAYS[w]}: ساعة النهاية يجب أن تكون بعد البداية.`)}#hours`);
+    }
+    if (ranges.length === 2 && ranges[1][0] < ranges[0][1] && ranges[0][0] < ranges[1][1]) {
+      redirect(`/teach?error=${encodeURIComponent(`في يوم ${WEEKDAYS[w]}: الفترتان متداخلتان.`)}#hours`);
+    }
+    for (const [a, b] of ranges) rows.push({ teacher_id: t.id, weekday: w, start_time: a, end_time: b });
+  }
   const buffer = [0, 5, 10, 15, 30].includes(num(form, "buffer")) ? num(form, "buffer") : 0;
   await supabase.from("teachers").update({ buffer_minutes: buffer }).eq("id", t.id);
   await supabase.from("availability").delete().eq("teacher_id", t.id);
-  if (days.length) await supabase.from("availability").insert(days.map((w) => ({ teacher_id: t.id, weekday: w, start_time: from, end_time: to })));
+  if (rows.length) await supabase.from("availability").insert(rows);
+  const days = rows;
   // People waiting for this teacher's private lessons hear about the new hours.
   if (days.length) await supabase.rpc("waitlist_hours_opened");
   revalidatePath("/teach");
-  redirect("/teach?ok=hours");
+  redirect("/teach?ok=hours#hours");
 }
 
 // ---------- editing an offer ----------
@@ -481,6 +490,7 @@ export async function updateOfferingAction(form: FormData) {
   }
   if (o.type === "group" || o.type === "course") row.seats = num(form, "seats") || null;
   if (o.type === "recorded") row.lessons_count = num(form, "lessons") || null;
+  if (o.type !== "recorded" && [30, 45, 60, 90, 120, 150].includes(num(form, "minutes"))) row.minutes = num(form, "minutes");
   if (o.type === "private") row.auto_confirm = form.get("auto_confirm") === "on";
   if (o.type === "private" || o.type === "group") row.allow_weekly = form.get("allow_weekly") === "on";
   Object.assign(row, offerExtras(form, o.type));
@@ -921,4 +931,48 @@ export async function deleteAccountAction(form: FormData) {
   if (error) redirect(`/account?error=${encodeURIComponent(error.message)}#delete`);
   await supabase.auth.signOut();
   redirect("/?deleted=1");
+}
+
+// ---------- operations: meetings, walk-ins, staff, vacation ----------
+export async function cancelSessionAction(form: FormData) {
+  const { supabase, user } = await client();
+  if (!user) redirect("/login");
+  const back = backTo(form, "/manage");
+  const { error } = await supabase.rpc("cancel_session", { p_session: str(form, "session_id"), p_reason: str(form, "reason") || null });
+  revalidatePath(back.split(/[?#]/)[0]);
+  revalidatePath("/schedule");
+  redirect(withQ(back, error ? `error=${encodeURIComponent(error.message)}` : "ok=cancelled"));
+}
+
+export async function enrollWalkInAction(form: FormData) {
+  revalidateTag("catalog");
+  const { supabase, user } = await client();
+  if (!user) redirect("/login");
+  const back = backTo(form, "/manage");
+  const { data, error } = await supabase.rpc("institute_enroll", {
+    p_offering: str(form, "offering_id"), p_name: str(form, "name"), p_phone: str(form, "phone") || null,
+    p_pay: str(form, "pay") || "cash", p_paid: form.get("paid") === "on",
+  });
+  revalidatePath(back.split(/[?#]/)[0]);
+  if (error) redirect(withQ(back, `enroll=1&error=${encodeURIComponent(error.message)}`));
+  const { data: b } = await supabase.from("bookings").select("booked_by").eq("id", data as string).maybeSingle();
+  redirect(withQ(back, `ok=enrolled&linked=${b?.booked_by ? "1" : "0"}`));
+}
+
+export async function removeStaffAction(form: FormData) {
+  const { supabase, user } = await client();
+  if (!user) redirect("/login");
+  const { error } = await supabase.rpc("institute_remove_staff", { p_teacher: str(form, "teacher_id") });
+  revalidatePath("/manage");
+  redirect(`/manage?${error ? `error=${encodeURIComponent(error.message)}` : "saved=staff_removed"}#staff`);
+}
+
+export async function teacherVacationAction(form: FormData) {
+  const { supabase, user } = await client();
+  if (!user) redirect("/login");
+  const from = str(form, "from");
+  const to = str(form, "to") || from;
+  const { data, error } = await supabase.rpc("teacher_vacation", { p_from: from, p_to: to, p_note: str(form, "note") || null });
+  revalidatePath("/teach/calendar");
+  redirect(`/teach/calendar?day=${from}&${error ? `error=${encodeURIComponent(error.message)}` : `ok=vacation&n=${data ?? 0}`}`);
 }
