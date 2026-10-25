@@ -9,9 +9,18 @@ import { signOutAction } from "@/app/actions";
 import { navFor } from "@/lib/types";
 import { Splash, splashScript } from "@/components/Splash";
 
+const SITE = "https://classi-nine.vercel.app";
 export const metadata: Metadata = {
-  title: "Classi",
+  metadataBase: new URL(SITE),
+  title: { default: "Classi · كل التعليم في مكان واحد", template: "%s · Classi" },
   description: "معلمون خصوصيون، مجموعات تقوية، دورات معاهد وتعليم أونلاين في مكان واحد.",
+  openGraph: {
+    type: "website", siteName: "Classi", locale: "ar_IL", url: SITE,
+    title: "Classi · كل التعليم في مكان واحد",
+    description: "احجز معلماً خصوصياً أو مجموعة تقوية أو دورة معهد في بلدك أو أونلاين.",
+    images: [{ url: "/og.png", width: 1200, height: 630, alt: "Classi" }],
+  },
+  twitter: { card: "summary_large_image", images: ["/og.png"] },
   appleWebApp: { capable: true, title: "Classi", statusBarStyle: "default" },
   icons: { apple: "/apple-touch-icon.png" },
 };

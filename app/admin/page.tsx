@@ -2,14 +2,14 @@ import { createClient } from "@/lib/supabase/server";
 import Link from "next/link";
 import { Avatar } from "@/components/Avatar";
 import { Icon } from "@/components/Icon";
-import { adminCloseReportAction, adminHideAction, adminSetStatusAction, adminVerifyAction, resolveReportAction } from "@/app/actions";
+import { adminCloseReportAction, adminHideAction, adminHideReviewAction, adminReviewAction, adminSubscriptionAction, adminSetStatusAction, adminVerifyAction, resolveReportAction } from "@/app/actions";
 import { requireUser } from "@/lib/session";
 import { dayLong, time } from "@/lib/format";
 import { runHealthChecks } from "@/lib/health";
 
 export const dynamic = "force-dynamic";
 
-const TABS: [string, string][] = [["reports", "البلاغات"], ["verify", "التوثيق"], ["users", "الحسابات"], ["log", "سجلّ الإجراءات"], ["health", "حالة النظام"]];
+const TABS: [string, string][] = [["review", "المراجعة"], ["subs", "الاشتراكات والإطلاق"], ["reports", "البلاغات"], ["verify", "التوثيق"], ["users", "الحسابات"], ["log", "سجلّ الإجراءات"], ["health", "حالة النظام"]];
 const REASON: Record<string, string> = {
   no_show: "لم يحضر / ألغى متأخراً", inappropriate: "تصرّف غير لائق", safety: "أمان", fake: "معلومات غير صحيحة", overcharge: "سعر مختلف", other: "سبب آخر",
 };
@@ -18,16 +18,17 @@ const STATUS: Record<string, string> = { active: "فعّال", suspended: "مو�
 
 export default async function Admin({ searchParams }: { searchParams: Promise<Record<string, string | undefined>> }) {
   const sp = await searchParams;
-  const tab = sp.tab ?? "reports";
+  const tab = sp.tab ?? "review";
   const { supabase, profile } = await requireUser("/admin");
   if (!profile?.roles?.includes("admin")) {
     return <div className="wrap"><div className="empty stack"><h1>هذه الصفحة للمدير فقط</h1><Link className="btn" href="/">الرئيسية</Link></div></div>;
   }
-  const [{ data: reports }, { data: chatReports }, { count: pendingT }, { count: pendingI }] = await Promise.all([
+  const [{ data: reports }, { data: chatReports }, { count: pendingT }, { count: pendingI }, { data: queue }] = await Promise.all([
     supabase.rpc("admin_reports"),
     supabase.from("conversation_reports").select("id,conversation_id,reason,created_at").eq("resolved", false).order("created_at"),
     supabase.from("teachers").select("id", { count: "exact", head: true }).eq("verify", "pending"),
     supabase.from("institutes").select("id", { count: "exact", head: true }).eq("verify", "pending"),
+    supabase.rpc("admin_review_queue"),
   ]);
   const openCount = (reports ?? []).length + (chatReports ?? []).length;
   const back = `/admin?tab=${tab}`;
@@ -42,6 +43,7 @@ export default async function Admin({ searchParams }: { searchParams: Promise<Re
           {TABS.map(([k, l]) => (
             <Link key={k} href={`/admin?tab=${k}`} aria-current={tab === k ? "page" : undefined}>
               {l}
+              {k === "review" && (queue ?? []).length > 0 ? ` (${(queue ?? []).length})` : ""}
               {k === "reports" && openCount > 0 ? ` (${openCount})` : ""}
               {k === "verify" && (pendingT ?? 0) + (pendingI ?? 0) > 0 ? ` (${(pendingT ?? 0) + (pendingI ?? 0)})` : ""}
             </Link>
@@ -121,6 +123,8 @@ export default async function Admin({ searchParams }: { searchParams: Promise<Re
         </section>
       )}
 
+      {tab === "review" && <ReviewTab queue={(queue ?? []) as QItem[]} />}
+      {tab === "subs" && <SubsTab supabase={supabase} />}
       {tab === "verify" && <VerifyTab supabase={supabase} />}
       {tab === "users" && <UsersTab supabase={supabase} q={sp.q ?? ""} />}
       {tab === "log" && <LogTab supabase={supabase} />}
@@ -142,7 +146,7 @@ async function VerifyTab({ supabase }: { supabase: any }) {
   );
   return (
     <section className="section">
-      <p className="note"><Icon name="shield" />قبل التوثيق: تأكد من الهوية والشهادات، وإذن العمل مع القاصرين لمن يدرّس طلاباً تحت 18.</p>
+      <p className="note"><Icon name="shield" />قبل التوثيق: تأكد من الهوية والشهادات وصحة المعلومات في الملف.</p>
       <h2>معلمون</h2>
       {(teachers ?? []).length === 0 && <div className="empty">لا معلمين بانتظار التوثيق.</div>}
       {(teachers ?? []).map((t: any) => (
@@ -249,6 +253,187 @@ async function HealthTab() {
         </div>
       )}
       <p className="small muted">يُفحص النظام تلقائياً كل صباح، ويصلك بريد إذا تعطّلت خدمة.</p>
+    </section>
+  );
+}
+
+type QItem = { kind: "offering" | "teacher" | "institute"; id: string; owner_name: string; title: string; what: "new" | "edit"; current: Record<string, any>; changes: Record<string, any> | null; created_at: string };
+
+const FIELD: Record<string, string> = {
+  title: "العنوان", name: "الاسم", bio: "النبذة", photo_url: "الصورة", logo_url: "الشعار", intro_video_url: "الفيديو التعريفي", town: "البلد",
+  years: "سنوات الخبرة", subject_id: "المادة", level_id: "المرحلة", places: "المكان", schedule_note: "الموعد", trial_price: "الحصة التجريبية",
+  package_enabled: "رزمة الحصص", package_size: "عدد حصص الرزمة", package_price: "سعر الرزمة", lessons_count: "عدد الدروس", is_school_teacher: "معلم مدرسة",
+  sessions_count: "عدد اللقاءات", minutes: "مدة الحصة", type: "النوع", price: "السعر", subject: "المادة", level: "المرحلة",
+};
+const TYPE_AR: Record<string, string> = { private: "درس خصوصي", group: "مجموعة", course: "دورة معهد", recorded: "محتوى مسجّل" };
+const PLACE_AR: Record<string, string> = { home: "حضوري", online: "أونلاين", center: "في المعهد" };
+
+function show(k: string, v: any) {
+  if (v === null || v === undefined || v === "") return "—";
+  if (k === "photo_url" || k === "logo_url") return <img src={String(v)} alt="" style={{ width: 56, height: 56, borderRadius: 12, objectFit: "cover" }} />;
+  if (k === "intro_video_url") return <a className="link" href={String(v)} target="_blank" rel="noopener noreferrer" dir="ltr">{String(v)}</a>;
+  if (k === "places" && Array.isArray(v)) return v.map((p) => PLACE_AR[p] ?? p).join("، ");
+  if (k === "type") return TYPE_AR[v] ?? v;
+  if (typeof v === "boolean") return v ? "نعم" : "لا";
+  if (k === "price" || k === "package_price" || k === "trial_price") return `${v} ₪`;
+  return String(v);
+}
+
+/** Everything teachers and institutes want to publish, waiting for the admin. */
+function ReviewTab({ queue }: { queue: QItem[] }) {
+  return (
+    <section className="section">
+      <p className="note"><Icon name="shield" />لا يظهر للطلاب أي عرض جديد، ولا أي تعديل على عرض أو ملف معلم أو معهد، قبل موافقتك هنا.</p>
+      {queue.length === 0 && <div className="empty">لا شيء بانتظار المراجعة.</div>}
+      {queue.map((q) => (
+        <div key={`${q.kind}${q.id}`} className="card">
+          <div className="row between">
+            <b>{q.title}</b>
+            <span className="badge">{q.what === "new" ? "عرض جديد" : q.kind === "offering" ? "تعديل عرض" : q.kind === "teacher" ? "تعديل ملف معلم" : "تعديل ملف معهد"}</span>
+          </div>
+          <span className="small muted">{q.owner_name} · {dayLong(q.created_at)}</span>
+          {q.what === "new" ? (
+            <div className="summary">
+              {Object.entries(q.current).filter(([, v]) => v !== null && v !== false && v !== "").map(([k, v]) => (
+                <div key={k}><span>{FIELD[k] ?? k}</span><span>{show(k, v)}</span></div>
+              ))}
+            </div>
+          ) : (
+            <div className="summary">
+              {Object.entries(q.changes ?? {}).map(([k, v]) => (
+                <div key={k} style={{ alignItems: "flex-start" }}>
+                  <span>{FIELD[k] ?? k}</span>
+                  <span className="stack" style={{ gap: 4, alignItems: "flex-end" }}>
+                    <span className="small muted" style={{ textDecoration: "line-through" }}>{show(k, q.current[k])}</span>
+                    <b>{show(k, v)}</b>
+                  </span>
+                </div>
+              ))}
+            </div>
+          )}
+          <div className="row" style={{ gap: 8, flexWrap: "wrap" }}>
+            <form action={adminReviewAction}>
+              <input type="hidden" name="kind" value={q.kind} /><input type="hidden" name="id" value={q.id} /><input type="hidden" name="approve" value="1" />
+              <button className="btn sm okb">موافقة ونشر</button>
+            </form>
+            <details>
+              <summary className="link small" style={{ color: "var(--bad)" }}>رفض</summary>
+              <form action={adminReviewAction} className="row" style={{ marginTop: 6, flexWrap: "wrap" }}>
+                <input type="hidden" name="kind" value={q.kind} /><input type="hidden" name="id" value={q.id} /><input type="hidden" name="approve" value="0" />
+                <input className="inline-input" name="note" placeholder="السبب (يصل لصاحب العرض)" maxLength={300} style={{ flex: 1, minWidth: 180 }} />
+                <button className="btn sm badb">رفض</button>
+              </form>
+            </details>
+          </div>
+        </div>
+      ))}
+    </section>
+  );
+}
+
+type SubRow = { kind: string; owner_id: string; owner_name: string; has_account: boolean; paid_until: string | null; request_id: string | null; request_status: string | null; request_price: number | null; request_months: number | null; requested_at: string | null };
+const fmtDate = (d: string) => new Date(d).toLocaleDateString("ar-u-nu-latn", { timeZone: "Asia/Jerusalem", day: "numeric", month: "short", year: "numeric" });
+
+/** Subscriptions, launch switches and recent ratings. */
+async function SubsTab({ supabase }: { supabase: any }) {
+  const [{ data: rows }, { data: settings }, { data: plans }, { data: revs }] = await Promise.all([
+    supabase.rpc("admin_subscriptions"),
+    supabase.from("app_settings").select("key,value"),
+    supabase.from("plans").select("code,name,months,price,active").order("sort"),
+    supabase.from("reviews").select("id,stars,body,author_name,hidden,created_at,teacher:teachers(name),institute:institutes(name)").order("created_at", { ascending: false }).limit(20),
+  ]);
+  const set = (k: string) => ((settings ?? []) as { key: string; value: string }[]).find((x) => x.key === k)?.value ?? "";
+  const list = (rows ?? []) as SubRow[];
+  const requests = list.filter((r) => r.request_id);
+  const owners = list.filter((r) => r.has_account);
+  const required = set("subscriptions_required") === "true";
+  const demoVisible = set("demo_visible") !== "false";
+  const now = new Date().toISOString();
+  return (
+    <section className="section">
+      <h2>الإطلاق</h2>
+      <div className="card formstack">
+        <div className="row between" style={{ flexWrap: "wrap", gap: 8 }}>
+          <span><b>المعلمون والمعاهد التجريبيون</b><br /><span className="small muted">{demoVisible ? "ظاهرون للطلاب الآن." : "مخفيون عن الطلاب."}</span></span>
+          <form action={adminSubscriptionAction}><input type="hidden" name="op" value="demo" /><input type="hidden" name="visible" value={demoVisible ? "0" : "1"} />
+            <button className={`btn sm ${demoVisible ? "badb" : ""}`}>{demoVisible ? "إخفاء البيانات التجريبية" : "إظهارها مجدداً"}</button></form>
+        </div>
+        <div className="row between" style={{ flexWrap: "wrap", gap: 8 }}>
+          <span><b>الاشتراك إلزامي للظهور</b><br /><span className="small muted">{required ? "من لا يملك اشتراكاً فعّالاً لا يظهر للطلاب." : "فترة إطلاق: الجميع يظهر مجاناً."}</span></span>
+          <form action={adminSubscriptionAction}><input type="hidden" name="op" value="setting" /><input type="hidden" name="key" value="subscriptions_required" /><input type="hidden" name="value" value={required ? "false" : "true"} />
+            <button className="btn sm">{required ? "إيقاف الإلزام" : "تفعيل الإلزام"}</button></form>
+        </div>
+        <form action={adminSubscriptionAction} className="row" style={{ flexWrap: "wrap", gap: 8 }}>
+          <input type="hidden" name="op" value="setting" /><input type="hidden" name="key" value="platform_bit" />
+          <label className="field" style={{ flex: 1, minWidth: 200 }}>رقم Bit لاستلام الاشتراكات
+            <input name="value" type="tel" dir="ltr" defaultValue={set("platform_bit").replace(/^\+972/, "0")} placeholder="050-1234567" /></label>
+          <button className="btn sm" style={{ alignSelf: "flex-end" }}>حفظ</button>
+        </form>
+      </div>
+
+      <h2>الباقات</h2>
+      <div className="plans">
+        {((plans ?? []) as { code: string; name: string; months: number; price: number; active: boolean }[]).map((p) => (
+          <form key={p.code} action={adminSubscriptionAction} className="plan">
+            <input type="hidden" name="op" value="plan" /><input type="hidden" name="code" value={p.code} />
+            <b>{p.name}</b>
+            <label className="field">السعر (₪)<input name="price" type="number" min={0} defaultValue={p.price} /></label>
+            <label className="row small"><input type="checkbox" name="active" defaultChecked={p.active} /> متاحة</label>
+            <button className="btn sm ghost">حفظ</button>
+          </form>
+        ))}
+      </div>
+
+      <h2>طلبات بانتظارك {requests.length > 0 && <span className="badge num">{requests.length}</span>}</h2>
+      {requests.length === 0 && <div className="empty">لا طلبات اشتراك.</div>}
+      {requests.map((r) => (
+        <div key={r.request_id!} className="card">
+          <div className="row between"><b>{r.owner_name}</b><b className="num">{r.request_price} ₪</b></div>
+          <span className="small muted">{r.kind === "teacher" ? "معلم" : "معهد"} · {r.request_months} {r.request_months === 1 ? "شهر" : "أشهر"} · {r.request_status === "reported" ? "يقول إنه حوّل عبر Bit" : "اختار باقة ولم يحوّل بعد"}{r.requested_at ? ` · ${fmtDate(r.requested_at)}` : ""}</span>
+          <div className="row" style={{ gap: 8, flexWrap: "wrap" }}>
+            <form action={adminSubscriptionAction}><input type="hidden" name="op" value="activate" /><input type="hidden" name="id" value={r.request_id!} /><button className="btn sm okb">وصل المبلغ، فعّل</button></form>
+            <details><summary className="link small" style={{ color: "var(--bad)" }}>لم يصل</summary>
+              <form action={adminSubscriptionAction} className="row" style={{ marginTop: 6, flexWrap: "wrap" }}>
+                <input type="hidden" name="op" value="reject" /><input type="hidden" name="id" value={r.request_id!} />
+                <input className="inline-input" name="note" placeholder="ملاحظة (اختياري)" style={{ flex: 1, minWidth: 160 }} />
+                <button className="btn sm badb">رفض</button>
+              </form>
+            </details>
+          </div>
+        </div>
+      ))}
+
+      <h2>المشتركون</h2>
+      <form action={adminSubscriptionAction} className="card row" style={{ flexWrap: "wrap", gap: 8 }}>
+        <input type="hidden" name="op" value="grant" />
+        <label className="field" style={{ flex: 2, minWidth: 180 }}>منح أشهر مجانية
+          <select name="owner" required>{owners.map((o) => <option key={o.owner_id} value={`${o.kind}:${o.owner_id}`}>{o.owner_name} ({o.kind === "teacher" ? "معلم" : "معهد"})</option>)}</select></label>
+        <label className="field" style={{ flex: 1, minWidth: 90 }}>أشهر<input name="months" type="number" min={1} max={36} defaultValue={1} /></label>
+        <input className="inline-input" name="note" placeholder="سبب (مثلاً: عرض الإطلاق)" style={{ flex: 2, minWidth: 160 }} />
+        <button className="btn sm" style={{ alignSelf: "flex-end" }}>منح</button>
+      </form>
+      {owners.length === 0 && <div className="empty">لا معلمين أو معاهد بحسابات بعد.</div>}
+      {owners.map((o) => {
+        const ok = !!o.paid_until && o.paid_until > now;
+        return (
+          <div key={`${o.kind}${o.owner_id}`} className="card" style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center", gap: 10 }}>
+            <span><b>{o.owner_name}</b> <span className="small muted">{o.kind === "teacher" ? "معلم" : "معهد"}</span></span>
+            <span className={`badge ${ok ? "ok" : required ? "bad" : ""}`}>{ok ? `حتى ${fmtDate(o.paid_until!)}` : o.paid_until ? `انتهى ${fmtDate(o.paid_until)}` : "بلا اشتراك"}</span>
+          </div>
+        );
+      })}
+
+      <h2>آخر التقييمات</h2>
+      {((revs ?? []) as any[]).length === 0 && <div className="empty">لا تقييمات بعد.</div>}
+      {((revs ?? []) as any[]).map((r) => (
+        <div key={r.id} className="card" style={{ opacity: r.hidden ? 0.55 : 1 }}>
+          <div className="row between"><b>{r.teacher?.name ?? r.institute?.name}</b><span className="review-stars">{"★".repeat(r.stars)}</span></div>
+          {r.body && <p className="small">{r.body}</p>}
+          <span className="small muted">{r.author_name || "ولي أمر"} · {fmtDate(r.created_at)}{r.hidden ? " · مخفي" : ""}</span>
+          <form action={adminHideReviewAction}><input type="hidden" name="id" value={r.id} /><input type="hidden" name="hidden" value={r.hidden ? "0" : "1"} /><input type="hidden" name="back" value="/admin?tab=subs" />
+            <button className="link small" style={{ color: r.hidden ? undefined : "var(--bad)" }}>{r.hidden ? "إظهار التقييم" : "إخفاء التقييم (مسيء أو غير صحيح)"}</button></form>
+        </div>
+      ))}
     </section>
   );
 }

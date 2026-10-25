@@ -369,3 +369,21 @@ a.cal-row{color:inherit;text-decoration:none;border-inline-start:4px solid var(-
 .paybox{display:flex;flex-direction:column;gap:8px;padding:10px;border:1px dashed var(--accent);border-radius:var(--r-sm);background:var(--card)}
 .bitnum{font-size:18px;letter-spacing:.5px}
 .money{display:grid;grid-template-columns:repeat(3,1fr);gap:8px}
+/* ---------- subscriptions & reviews ---------- */
+.sub-warn{border-color:var(--bad);background:var(--bad-soft)}
+.plans{display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:10px}
+.plan{display:flex;flex-direction:column;gap:6px;align-items:flex-start;padding:14px;border:1px solid var(--line);border-radius:var(--r-lg);background:var(--card)}
+.plan.best{border-color:var(--accent);box-shadow:0 0 0 2px var(--soft)}
+.plan .price{font-family:var(--display);font-size:22px;font-weight:700;color:var(--primary)}
+.review-stars{color:var(--accent);letter-spacing:2px;font-size:16px}
+.review-stars i{color:var(--line);font-style:normal}
+.review-reply{background:var(--soft);border-radius:var(--r-sm);padding:8px 10px}
+.star-pick{display:flex;flex-direction:row-reverse;justify-content:flex-end;gap:6px}
+.star-pick input{position:absolute;opacity:0}
+.star-pick label{font-size:38px;line-height:1;color:var(--line);cursor:pointer}
+.star-pick input:checked ~ label,.star-pick label:hover,.star-pick label:hover ~ label{color:var(--accent)}
+.star-pick input:focus-visible + label{outline:2px solid var(--primary);border-radius:6px}
+.checklist{display:flex;flex-direction:column;gap:6px}
+.checklist a,.checklist span{display:flex;gap:8px;align-items:center;color:inherit;text-decoration:none}
+.checklist .done{color:var(--ok)}
+.checklist .todo i{width:18px;height:18px;border:2px solid var(--line);border-radius:50%;display:inline-block}

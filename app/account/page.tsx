@@ -1,5 +1,5 @@
 import { Icon } from "@/components/Icon";
-import { addChildAction, removeChildAction, signOutAction, switchRoleAction, updateProfileAction } from "@/app/actions";
+import { addChildAction, deleteAccountAction, removeChildAction, signOutAction, switchRoleAction, updateProfileAction } from "@/app/actions";
 import { requireUser } from "@/lib/session";
 import { TOWNS, type Role } from "@/lib/types";
 import { PhotoUpload } from "@/components/PhotoUpload";
@@ -86,6 +86,14 @@ export default async function Account({ searchParams }: { searchParams: Promise<
         <form action={signOutAction}>
           <button className="btn ghost block"><Icon name="logout" />تسجيل الخروج</button>
         </form>
+        <details className="card" id="delete">
+          <summary className="link small" style={{ color: "var(--bad)" }}>حذف حسابي نهائياً</summary>
+          <form action={deleteAccountAction} className="formstack" style={{ marginTop: 10 }}>
+            <p className="small">يُحذف حسابك وبياناتك وبيانات أبنائك، وتُلغى حصصك القادمة ويُبلَّغ المعلمون. إذا كنت معلماً أو معهداً، تختفي عروضك ويُبلَّغ طلابك. لا يمكن التراجع.</p>
+            <label className="field">اكتب كلمة «احذف» للتأكيد<input name="confirm" required autoComplete="off" /></label>
+            <button className="btn sm badb">حذف الحساب</button>
+          </form>
+        </details>
         <p className="small muted" style={{ textAlign: "center" }}>
           <Link className="link" href="/terms">شروط الاستخدام</Link> · <Link className="link" href="/privacy">سياسة الخصوصية</Link>
         </p>

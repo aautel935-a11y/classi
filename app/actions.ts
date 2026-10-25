@@ -828,3 +828,97 @@ export async function confirmPaymentAction(form: FormData) {
   revalidatePath(back.split(/[?#]/)[0]);
   redirect(withQ(back, error ? `error=${encodeURIComponent(error.message)}` : "ok=payment"));
 }
+
+// ---------- admin content review ----------
+export async function adminReviewAction(form: FormData) {
+  revalidateTag("catalog");
+  const { supabase } = await client();
+  const { error } = await supabase.rpc("admin_review", {
+    p_kind: str(form, "kind"), p_id: str(form, "id"), p_approve: str(form, "approve") === "1", p_note: str(form, "note") || null,
+  });
+  revalidatePath("/admin");
+  redirect(`/admin?tab=review&${error ? `error=${encodeURIComponent(error.message)}` : "done=1"}`);
+}
+
+// ---------- subscriptions (teachers & institutes pay the platform) ----------
+export async function requestSubscriptionAction(form: FormData) {
+  const { supabase, user } = await client();
+  if (!user) redirect("/login");
+  const back = backTo(form, "/teach#subscription");
+  const { error } = await supabase.rpc("request_subscription", { p_plan: str(form, "plan") });
+  revalidatePath(back.split(/[?#]/)[0]);
+  redirect(withQ(back, error ? `error=${encodeURIComponent(error.message)}` : "sub=chosen"));
+}
+
+export async function reportSubscriptionAction(form: FormData) {
+  const { supabase, user } = await client();
+  if (!user) redirect("/login");
+  const back = backTo(form, "/teach#subscription");
+  const { error } = await supabase.rpc("report_subscription_payment", { p_id: str(form, "id") });
+  revalidatePath(back.split(/[?#]/)[0]);
+  redirect(withQ(back, error ? `error=${encodeURIComponent(error.message)}` : "sub=reported"));
+}
+
+export async function adminSubscriptionAction(form: FormData) {
+  revalidateTag("catalog");
+  const { supabase } = await client();
+  const op = str(form, "op");
+  let error: { message: string } | null = null;
+  if (op === "activate" || op === "reject") {
+    ({ error } = await supabase.rpc("admin_activate_subscription", { p_id: str(form, "id"), p_approve: op === "activate", p_note: str(form, "note") || null }));
+  } else if (op === "grant") {
+    const [kind, id] = str(form, "owner").split(":");
+    ({ error } = await supabase.rpc("admin_grant_subscription", {
+      p_teacher: kind === "teacher" ? id : null, p_institute: kind === "institute" ? id : null, p_months: num(form, "months"), p_note: str(form, "note") || null,
+    }));
+  } else if (op === "setting") {
+    ({ error } = await supabase.rpc("admin_set_setting", { p_key: str(form, "key"), p_value: str(form, "value") }));
+  } else if (op === "plan") {
+    ({ error } = await supabase.rpc("admin_set_plan", { p_code: str(form, "code"), p_price: num(form, "price"), p_active: form.get("active") === "on" }));
+  } else if (op === "demo") {
+    ({ error } = await supabase.rpc("admin_demo_visible", { p_visible: str(form, "visible") === "1" }));
+  }
+  revalidatePath("/admin");
+  revalidatePath("/");
+  redirect(`/admin?tab=subs&${error ? `error=${encodeURIComponent(error.message)}` : "done=1"}`);
+}
+
+// ---------- ratings ----------
+export async function leaveReviewAction(form: FormData) {
+  revalidateTag("catalog");
+  const { supabase, user } = await client();
+  const booking = str(form, "booking_id");
+  if (!user) redirect(`/login?next=/review?booking=${booking}`);
+  const { error } = await supabase.rpc("leave_review", { p_booking: booking, p_stars: num(form, "stars"), p_body: str(form, "body") || null });
+  if (error) redirect(`/review?booking=${booking}&error=${encodeURIComponent(error.message)}`);
+  redirect(`/review?booking=${booking}&done=1`);
+}
+
+export async function replyReviewAction(form: FormData) {
+  revalidateTag("catalog");
+  const { supabase, user } = await client();
+  if (!user) redirect("/login");
+  const back = backTo(form, "/teach#reviews");
+  const { error } = await supabase.rpc("reply_review", { p_review: str(form, "id"), p_reply: str(form, "reply") });
+  revalidatePath(back.split(/[?#]/)[0]);
+  redirect(withQ(back, error ? `error=${encodeURIComponent(error.message)}` : "ok=reply"));
+}
+
+export async function adminHideReviewAction(form: FormData) {
+  revalidateTag("catalog");
+  const { supabase } = await client();
+  const { error } = await supabase.rpc("admin_hide_review", { p_review: str(form, "id"), p_hidden: str(form, "hidden") === "1" });
+  const back = backTo(form, "/admin");
+  redirect(withQ(back, error ? `error=${encodeURIComponent(error.message)}` : "done=1"));
+}
+
+// ---------- delete my account ----------
+export async function deleteAccountAction(form: FormData) {
+  revalidateTag("catalog");
+  const { supabase, user } = await client();
+  if (!user) redirect("/login");
+  const { error } = await supabase.rpc("delete_my_account", { p_confirm: str(form, "confirm") });
+  if (error) redirect(`/account?error=${encodeURIComponent(error.message)}#delete`);
+  await supabase.auth.signOut();
+  redirect("/?deleted=1");
+}

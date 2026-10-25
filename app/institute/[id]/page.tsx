@@ -1,3 +1,5 @@
+import { instituteMeta } from "@/lib/meta";
+import { ReviewsList, type ReviewRow } from "@/components/ReviewsList";
 import { notFound } from "next/navigation";
 import { Icon } from "@/components/Icon";
 import { OfferCard } from "@/components/OfferCard";
@@ -10,17 +12,22 @@ import { MessageButton } from "@/components/MessageButton";
 
 export const dynamic = "force-dynamic";
 
+export async function generateMetadata({ params }: { params: Promise<{ id: string }> }) {
+  return instituteMeta((await params).id);
+}
+
 export default async function InstitutePage({ params, searchParams }: { params: Promise<{ id: string }>; searchParams: Promise<Record<string, string | undefined>> }) {
   const { id } = await params;
   const sp = await searchParams;
   if (!/^[0-9a-f-]{36}$/i.test(id)) notFound();
   const { supabase, user, profile } = await getSession();
   const isAdmin = !!profile?.roles?.includes("admin");
-  const [{ data: ins }, { data: offers }, { count: staff }, { data: seats }] = await Promise.all([
+  const [{ data: ins }, { data: offers }, { count: staff }, { data: seats }, { data: revs }] = await Promise.all([
     supabase.from("institutes").select("id,owner_id,name,town,bio,rating,reviews_count,verify,logo_url,moderation_hidden").eq("id", id).maybeSingle(),
     supabase.from("offerings").select(OFFERING_SELECT).eq("institute_id", id).eq("active", true),
     supabase.from("institute_teachers").select("teacher_id", { count: "exact", head: true }).eq("institute_id", id),
     supabase.rpc("seats_overview"),
+    supabase.from("reviews").select("id,stars,body,author_name,reply,created_at").eq("institute_id", id).order("created_at", { ascending: false }).limit(20),
   ]);
   if (!ins) notFound();
   const list = (offers ?? []) as unknown as Offering[];
@@ -58,6 +65,7 @@ export default async function InstitutePage({ params, searchParams }: { params: 
         </div>
         {ins.owner_id !== user?.id && <ReportButton type="institute" id={ins.id} back={`/institute/${ins.id}`} flash={{ ok: sp.reported, error: sp.report_error }} />}
       </section>
+      <ReviewsList rows={(revs ?? []) as ReviewRow[]} />
     </div>
   );
 }

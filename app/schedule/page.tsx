@@ -162,6 +162,9 @@ export default async function Schedule({ searchParams }: { searchParams: Promise
                 <PayBadge status={r.pay_status} method={r.pay_method} />
                 {r.price != null && r.price > 0 && <span className="badge num">{r.price} ₪</span>}
               </div>
+              {r.status === "confirmed" && at && at < now && r.offering.type !== "recorded" && (
+                <Link className="link small" href={`/review?booking=${r.id}`}>★ قيّم {r.offering.teacher ? `أ. ${r.offering.teacher.name}` : r.offering.institute?.name}</Link>
+              )}
               {r.status === "confirmed" && (
                 <PayForStudent bookingId={r.id} status={r.pay_status} method={r.pay_method} amount={r.price} bit={payOf(r.offering.id)?.bit_phone} owner={payOf(r.offering.id)?.owner_name} back="/schedule" />
               )}

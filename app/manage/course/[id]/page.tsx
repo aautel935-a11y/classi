@@ -21,7 +21,7 @@ export default async function ManageOffer({ params, searchParams }: { params: Pr
   const { supabase } = await requireUser(path);
   const { data: o } = await supabase
     .from("offerings")
-    .select("id,type,title,price,seats,places,lessons_count,subject_id,level_id,course_teacher_id,institute_id,teacher_id,auto_confirm,allow_weekly,trial_price,package_enabled,package_size,package_price,course_teacher:teachers!offerings_course_teacher_id_fkey(name)")
+    .select("id,type,title,price,seats,places,lessons_count,subject_id,level_id,course_teacher_id,institute_id,teacher_id,auto_confirm,allow_weekly,trial_price,package_enabled,package_size,package_price,review_status,review_note,pending_changes,course_teacher:teachers!offerings_course_teacher_id_fkey(name)")
     .eq("id", id)
     .maybeSingle();
   if (!o) notFound();
@@ -63,7 +63,10 @@ export default async function ManageOffer({ params, searchParams }: { params: Pr
         {sp.saved === "link" && <p className="okmsg">حُفظ الرابط. يراه الطلاب المؤكَّدون في جدولهم.</p>}
         {sp.ok === "payment" && <p className="okmsg">حُدّثت حالة الدفع.</p>}
         {sp.saved === "package" && <p className="okmsg">أُلغيت الرزمة ووصل ولي الأمر إشعار. الحصص القادمة بقيت محجوزة بالسعر العادي.</p>}
-        {sp.saved === "offer" && <p className="okmsg">حُفظت التعديلات. السعر الجديد يسري على الحجوزات القادمة فقط.</p>}
+        {sp.saved === "offer" && <p className="okmsg">حُفظت التعديلات. السعر والمقاعد وطريقة الحجز تسري فوراً؛ تعديل العنوان والمادة والعروض الاختيارية يظهر بعد موافقة الإدارة.</p>}
+        {(o as any).review_status === "pending" && <p className="note"><Icon name="clock" />العرض بانتظار موافقة الإدارة ولا يظهر للطلاب بعد.</p>}
+        {(o as any).review_status === "rejected" && <p className="err">لم تتم الموافقة على العرض{(o as any).review_note ? `: ${(o as any).review_note}` : ""}. عدّل العرض ليُراجع من جديد.</p>}
+        {(o as any).review_status === "approved" && (o as any).pending_changes && <p className="note"><Icon name="clock" />لديك تعديلات بانتظار موافقة الإدارة. يرى الطلاب النسخة الحالية حتى الموافقة.</p>}
         {sp.error && <p className="err">{sp.error}</p>}
       </div>
 

@@ -4,6 +4,8 @@ import { addStaffAction, instituteSetupAction, updateInstituteAction } from "@/a
 import { PhotoUpload } from "@/components/PhotoUpload";
 import { WaitlistOwner, type WRow } from "@/components/WaitlistOwner";
 import { PaymentsOwner, type MoneySummary, type PayRow } from "@/components/PaymentsOwner";
+import { SubscriptionBox, type Plan, type SubRequest } from "@/components/SubscriptionBox";
+import { ReviewsList, type ReviewRow } from "@/components/ReviewsList";
 import { requireUser } from "@/lib/session";
 import { TOWNS } from "@/lib/types";
 import { dayLong, time } from "@/lib/format";
@@ -34,8 +36,8 @@ export default async function Manage({ searchParams }: { searchParams: Promise<R
     );
   }
 
-  const [{ data: courses }, { data: seats }, { data: rooms }, { data: staff }, { data: allTeachers }, { data: log }, { data: wl }, { data: pays }, { data: money }, { data: bitRow }] = await Promise.all([
-    supabase.from("offerings").select("id,title,seats,schedule_note,course_teacher:teachers!offerings_course_teacher_id_fkey(name)").eq("institute_id", inst.id).eq("type", "course").order("created_at"),
+  const [{ data: courses }, { data: seats }, { data: rooms }, { data: staff }, { data: allTeachers }, { data: log }, { data: wl }, { data: pays }, { data: money }, { data: bitRow }, { data: plans }, { data: subReq }, { data: paid }, { data: settings }, { data: myReviews }] = await Promise.all([
+    supabase.from("offerings").select("id,title,seats,schedule_note,review_status,course_teacher:teachers!offerings_course_teacher_id_fkey(name)").eq("institute_id", inst.id).eq("type", "course").order("created_at"),
     supabase.rpc("seats_overview"),
     supabase.from("rooms").select("id,name").eq("institute_id", inst.id).order("name"),
     supabase.from("institute_teachers").select("teacher:teachers(id,name)").eq("institute_id", inst.id),
@@ -45,7 +47,13 @@ export default async function Manage({ searchParams }: { searchParams: Promise<R
     supabase.rpc("owner_payments"),
     supabase.rpc("owner_money_summary"),
     supabase.from("pay_numbers").select("bit_phone").eq("institute_id", inst.id).maybeSingle(),
+    supabase.from("plans").select("code,name,months,price,active").order("sort"),
+    supabase.from("subscriptions").select("id,status,price,months").eq("institute_id", inst.id).in("status", ["pending", "reported"]).order("created_at", { ascending: false }).limit(1).maybeSingle(),
+    supabase.rpc("paid_until", { p_teacher: null, p_institute: inst.id }),
+    supabase.from("app_settings").select("key,value"),
+    supabase.from("reviews").select("id,stars,body,author_name,reply,created_at").eq("institute_id", inst.id).order("created_at", { ascending: false }).limit(30),
   ]);
+  const setting = (k: string) => ((settings ?? []) as { key: string; value: string }[]).find((x) => x.key === k)?.value ?? "";
   const bitLocal = bitRow?.bit_phone ? String(bitRow.bit_phone).replace(/^\+972/, "0") : "";
   const ids = (courses ?? []).map((c) => c.id);
   const { data: todaySessions } = ids.length
@@ -80,6 +88,10 @@ export default async function Manage({ searchParams }: { searchParams: Promise<R
 
       <WaitlistOwner rows={waitlist} back="/manage" flash={sp.wl} error={sp.error} />
 
+      <SubscriptionBox required={setting("subscriptions_required") === "true"} paidUntil={paid ? String(paid) : null} plans={(plans ?? []) as Plan[]} request={(subReq ?? null) as SubRequest} platformBit={setting("platform_bit")} back="/manage#subscription" flash={sp.sub} hasAccountOffers={(courses ?? []).length > 0} />
+
+      <ReviewsList rows={(myReviews ?? []) as ReviewRow[]} owner back="/manage#reviews" title="تقييمات العائلات للمعهد" />
+
       <section className="section">
         <h2>ملف المعهد</h2>
         {sp.ok === "profile" && <p className="okmsg">حُفظ ملف المعهد.</p>}
@@ -109,7 +121,7 @@ export default async function Manage({ searchParams }: { searchParams: Promise<R
           const n = taken(c.id);
           return (
             <Link key={c.id} href={`/manage/course/${c.id}`} className="card">
-              <div className="row between"><b>{c.title}</b>{c.seats && n >= c.seats && <span className="badge bad">ممتلئ</span>}</div>
+              <div className="row between"><b>{c.title}</b>{c.review_status === "pending" ? <span className="badge warn">بانتظار موافقة الإدارة</span> : c.review_status === "rejected" ? <span className="badge bad">مرفوض</span> : c.seats && n >= c.seats && <span className="badge bad">ممتلئ</span>}</div>
               <p className="small muted">{c.course_teacher ? `أ. ${c.course_teacher.name} · ` : ""}{c.schedule_note}</p>
               <div className="row between small num"><span>{n} من {c.seats} مقعد</span><span className="link">المواعيد والحضور</span></div>
               <div className="seats"><i style={{ width: `${Math.min(100, (n / (c.seats || 1)) * 100)}%` }} /></div>

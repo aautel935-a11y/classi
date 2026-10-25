@@ -1,3 +1,4 @@
+import { offerMeta } from "@/lib/meta";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { Icon, Stars } from "@/components/Icon";
@@ -17,6 +18,10 @@ import { IntroVideo } from "@/components/IntroVideo";
 import { PayBadge, PayForStudent } from "@/components/Pay";
 
 export const dynamic = "force-dynamic";
+
+export async function generateMetadata({ params }: { params: Promise<{ id: string }> }) {
+  return offerMeta((await params).id);
+}
 
 export default async function OfferPage({ params, searchParams }: { params: Promise<{ id: string }>; searchParams: Promise<Record<string, string | undefined>> }) {
   const { id } = await params;

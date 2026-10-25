@@ -21,7 +21,7 @@ insert into offerings (type,teacher_id,title,subject_id,level_id,places,price,se
   values ('group',my_teacher_id(),'مجموعة زوم للبجروت',2,5,'{online}',45,8,'كل اثنين 19:00',90);
 insert into sessions (offering_id,seq,starts_at,minutes)
   select id,1,now()+interval '3 days',90 from offerings where title='مجموعة زوم للبجروت';
-reset role;
+reset role; select test_approve_all();
 
 \echo '===== 2. VISITOR before approval'
 set role anon; reset request.jwt.claim.sub;
@@ -57,7 +57,7 @@ insert into offerings (type,institute_id,course_teacher_id,title,subject_id,leve
 insert into sessions (offering_id,seq,starts_at,minutes,room_id)
   select o.id,g,(current_date+5+7*(g-1)+time '18:00') at time zone 'Asia/Jerusalem',90,o.default_room_id from offerings o, generate_series(1,3) g where o.title='دورة إنجليزي مكثفة';
 select 'course sessions' t, count(*) from sessions s join offerings o on o.id=s.offering_id where o.title='دورة إنجليزي مكثفة';
-reset role;
+reset role; select test_approve_all();
 
 \echo '===== 6. ADMIN approves the institute'
 set role authenticated; set request.jwt.claim.sub='10000000-0000-0000-0000-000000000001';

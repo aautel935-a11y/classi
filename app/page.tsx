@@ -8,7 +8,8 @@ import { TYPES, subjectLook, type OfferingType } from "@/lib/types";
 
 export const dynamic = "force-dynamic";
 
-export default async function Home() {
+export default async function Home({ searchParams }: { searchParams: Promise<Record<string, string | undefined>> }) {
+  const sp = await searchParams;
   const { profile } = await getSession();
   const town = profile?.town || "باقة الغربية";
   const { offerings, taken, subjects, teachers: allTeachers } = await loadCatalog();
@@ -19,6 +20,7 @@ export default async function Home() {
 
   return (
     <div className="wrap">
+      {sp.deleted && <p className="okmsg">حُذف حسابك وبياناتك. نتمنى أن نراك مجدداً.</p>}
       <section className="board" aria-labelledby="hero-title">
         <span className="eq" aria-hidden="true">a² + b² = c²</span>
         <h1 id="hero-title">{first ? `أهلاً ${first}، ماذا نتعلّم اليوم؟` : "ماذا نتعلّم اليوم؟"}</h1>

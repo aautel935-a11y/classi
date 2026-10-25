@@ -16,8 +16,8 @@ grant select on ids to authenticated;
 set role authenticated; set request.jwt.claim.sub='40000000-0000-0000-0000-000000000002';
 update offerings set trial_price = 0, package_enabled = true, package_size = 10, package_price = 1500 where id = (select priv from ids);
 update teachers set intro_video_url = 'https://youtu.be/abc123' where user_id = auth.uid();
+reset role; select test_approve_all();
 select 'saved' t, trial_price, package_enabled, package_size, package_price from offerings where id = (select priv from ids);
-reset role;
 
 \echo '===== 2. Mom books a free trial for Yousef; a second trial is refused'
 set role authenticated; set request.jwt.claim.sub='40000000-0000-0000-0000-000000000004';

@@ -4,6 +4,8 @@ import { OfferCard } from "@/components/OfferCard";
 import { deleteOfferingAction, respondAction, startBookingConversationAction, saveAvailabilityAction, teacherSetupAction, toggleOfferingAction, updateTeacherAction } from "@/app/actions";
 import { PhotoUpload } from "@/components/PhotoUpload";
 import { PushToggle } from "@/components/PushToggle";
+import { SubscriptionBox, type Plan, type SubRequest } from "@/components/SubscriptionBox";
+import { ReviewsList, type ReviewRow } from "@/components/ReviewsList";
 import { PaymentsOwner, type MoneySummary, type PayRow } from "@/components/PaymentsOwner";
 import { WaitlistOwner, type WRow } from "@/components/WaitlistOwner";
 import { requireUser } from "@/lib/session";
@@ -19,7 +21,7 @@ const modeLabel = (m: string | null) => (m === "online" ? "أونلاين" : m =
 export default async function Teach({ searchParams }: { searchParams: Promise<Record<string, string | undefined>> }) {
   const sp = await searchParams;
   const { supabase, user, profile } = await requireUser("/teach");
-  const { data: t } = await supabase.from("teachers").select("id,name,verify,town,bio,years,is_school_teacher,subject_id,photo_url,buffer_minutes,intro_video_url").eq("user_id", user.id).maybeSingle();
+  const { data: t } = await supabase.from("teachers").select("id,name,verify,town,bio,years,is_school_teacher,subject_id,photo_url,buffer_minutes,intro_video_url,pending_changes,review_note").eq("user_id", user.id).maybeSingle();
 
   if (!t) {
     const { data: subjects } = await supabase.from("subjects").select("id,name").order("id");
@@ -43,7 +45,7 @@ export default async function Teach({ searchParams }: { searchParams: Promise<Re
     );
   }
 
-  const [{ data: bookings }, { data: offers }, { data: courseSessions }, { data: subjectList }, { data: hours }, { data: links }, { data: wl }, { data: pend }, { data: pays }, { data: money }, { data: bitRow }] = await Promise.all([
+  const [{ data: bookings }, { data: offers }, { data: courseSessions }, { data: subjectList }, { data: hours }, { data: links }, { data: wl }, { data: pend }, { data: pays }, { data: money }, { data: bitRow }, { data: reviewRows }, { data: plans }, { data: subReq }, { data: paid }, { data: settings }, { data: myReviews }] = await Promise.all([
     supabase.rpc("owner_bookings"),
     supabase.from("offerings").select(OFFERING_SELECT).eq("teacher_id", t.id).order("created_at"),
     supabase
@@ -61,7 +63,17 @@ export default async function Teach({ searchParams }: { searchParams: Promise<Re
     supabase.rpc("owner_payments"),
     supabase.rpc("owner_money_summary"),
     supabase.from("pay_numbers").select("bit_phone").eq("teacher_id", t.id).maybeSingle(),
+    supabase.from("offerings").select("id,review_status,review_note,pending_changes").eq("teacher_id", t.id),
+    supabase.from("plans").select("code,name,months,price,active").order("sort"),
+    supabase.from("subscriptions").select("id,status,price,months").eq("teacher_id", t.id).in("status", ["pending", "reported"]).order("created_at", { ascending: false }).limit(1).maybeSingle(),
+    supabase.rpc("paid_until", { p_teacher: t.id, p_institute: null }),
+    supabase.from("app_settings").select("key,value"),
+    supabase.from("reviews").select("id,stars,body,author_name,reply,created_at").eq("teacher_id", t.id).order("created_at", { ascending: false }).limit(30),
   ]);
+  const setting = (k: string) => ((settings ?? []) as { key: string; value: string }[]).find((x) => x.key === k)?.value ?? "";
+  const subsRequired = setting("subscriptions_required") === "true";
+  const subActive = !!paid && new Date(String(paid)) > new Date();
+  const reviewOf = (id: string) => ((reviewRows ?? []) as { id: string; review_status: string; review_note: string | null; pending_changes: unknown }[]).find((r) => r.id === id);
   const bitLocal = bitRow?.bit_phone ? String(bitRow.bit_phone).replace(/^\+972/, "0") : "";
   const hasLink = new Set((links ?? []).map((l) => l.offering_id));
   const hourDays = new Set((hours ?? []).map((h) => h.weekday));
@@ -93,7 +105,7 @@ export default async function Teach({ searchParams }: { searchParams: Promise<Re
         )}
         {sp.ok && (
           <p className="okmsg">
-            {({ profile: "حُفظ ملفك.", hours: "حُفظت أوقاتك المتاحة.", hidden: "أُخفي العرض. لم يعد يظهر للطلاب.", shown: "العرض ظاهر الآن للطلاب.", deleted: "حُذف العرض.", report: "أُرسل التقرير ووصل ولي الأمر إشعار.", payment: "حُدّثت حالة الدفع." } as Record<string, string>)[sp.ok] ?? "نُشر العرض."}
+            {({ profile: "حُفظ ملفك. التعديلات على الاسم والنبذة والصورة والفيديو تظهر للطلاب بعد موافقة الإدارة.", hours: "حُفظت أوقاتك المتاحة.", hidden: "أُخفي العرض. لم يعد يظهر للطلاب.", shown: "العرض ظاهر الآن للطلاب.", deleted: "حُذف العرض.", published: "أُرسل العرض للمراجعة. يظهر للطلاب بعد موافقة الإدارة، ويصلك إشعار.", report: "أُرسل التقرير ووصل ولي الأمر إشعار.", payment: "حُدّثت حالة الدفع.", reply: "حُفظ ردّك على التقييم." } as Record<string, string>)[sp.ok] ?? "تم."}
           </p>
         )}
         {sp.error && <p className="err">{sp.error}</p>}
@@ -108,8 +120,10 @@ export default async function Teach({ searchParams }: { searchParams: Promise<Re
         </div>
       </div>
 
-      <section className="section">
+      <section className="section" id="profile">
         <h2>ملفي</h2>
+        {t.pending_changes && <p className="note"><Icon name="clock" />تعديلات ملفك بانتظار موافقة الإدارة. يرى الطلاب النسخة السابقة حتى الموافقة.</p>}
+        {!t.pending_changes && t.review_note && <p className="err small">لم تتم الموافقة على آخر تعديل لملفك: {t.review_note}</p>}
         <div className="card">
           <PhotoUpload kind="teacher" name={t.name} current={t.photo_url} />
           <details>
@@ -139,6 +153,33 @@ export default async function Teach({ searchParams }: { searchParams: Promise<Re
           <Link className="link small" href={`/teacher/${t.id}`}>كيف يرى الطلاب ملفي</Link>
         </div>
       </section>
+
+      {(() => {
+        const steps: [boolean, string, string][] = [
+          [!!t.photo_url, "أضف صورة شخصية", "#profile"],
+          [(t.bio ?? "").trim().length >= 30, "اكتب نبذة عن أسلوبك (30 حرفاً على الأقل)", "#profile"],
+          [(hours ?? []).length > 0, "حدّد أوقاتك المتاحة", "#hours"],
+          [!!bitLocal, "أضف رقم Bit لاستلام الدفعات", "#profile"],
+          [mine.length > 0, "انشر أول عرض", "/teach/new"],
+          [t.verify === "verified", "انتظر توثيق الإدارة لملفك", "#profile"],
+          ...(subsRequired ? [[subActive, "فعّل اشتراكاً ليظهر ملفك للطلاب", "#subscription"] as [boolean, string, string]] : []),
+        ];
+        const done = steps.filter((x) => x[0]).length;
+        if (done === steps.length) return null;
+        return (
+          <section className="section">
+            <div className="card">
+              <div className="row between"><b>جهّز ملفك للطلاب</b><span className="badge num">{done} من {steps.length}</span></div>
+              <div className="seats"><i style={{ width: `${(done / steps.length) * 100}%` }} /></div>
+              <div className="checklist">
+                {steps.map(([ok, label, href]) => ok
+                  ? <span key={label} className="done small"><Icon name="check" />{label}</span>
+                  : <Link key={label} className="todo small" href={href}><i />{label}</Link>)}
+              </div>
+            </div>
+          </section>
+        );
+      })()}
 
       <Link className="card cal-cta" href="/teach/calendar">
         <span className="row" style={{ gap: 10 }}><Icon name="cal" /><b>جدولي وإدارة الساعات</b></span>
@@ -243,6 +284,10 @@ export default async function Teach({ searchParams }: { searchParams: Promise<Re
         </form>
       </section>
 
+      <SubscriptionBox required={subsRequired} paidUntil={paid ? String(paid) : null} plans={(plans ?? []) as Plan[]} request={(subReq ?? null) as SubRequest} platformBit={setting("platform_bit")} back="/teach#subscription" flash={sp.sub} hasAccountOffers={mine.length > 0} />
+
+      <ReviewsList rows={(myReviews ?? []) as ReviewRow[]} owner back="/teach#reviews" title="تقييمات العائلات لك" />
+
       <section className="section">
         <div className="row between">
           <h2>عروضي</h2>
@@ -252,6 +297,9 @@ export default async function Teach({ searchParams }: { searchParams: Promise<Re
         {mine.map((o) => (
           <div key={o.id} className="stack" style={{ gap: 6, opacity: o.active === false ? 0.6 : 1 }}>
             {o.active === false && <span className="badge bad" style={{ alignSelf: "flex-start" }}>مخفي عن الطلاب</span>}
+            {reviewOf(o.id)?.review_status === "pending" && <span className="badge warn" style={{ alignSelf: "flex-start" }}>بانتظار موافقة الإدارة، لا يظهر للطلاب بعد</span>}
+            {reviewOf(o.id)?.review_status === "rejected" && <span className="badge bad" style={{ alignSelf: "flex-start" }}>مرفوض{reviewOf(o.id)?.review_note ? `: ${reviewOf(o.id)?.review_note}` : ""}. عدّل العرض ليُراجع من جديد.</span>}
+            {reviewOf(o.id)?.review_status === "approved" && !!reviewOf(o.id)?.pending_changes && <span className="badge warn" style={{ alignSelf: "flex-start" }}>تعديل بانتظار الموافقة، يظهر بعدها</span>}
             <OfferCard o={o} showOwner={false} />
             {(o.type === "recorded" || o.places.includes("online")) && !hasLink.has(o.id) && (
               <p className="err small">لم تضف رابط {o.type === "recorded" ? "المحتوى" : "زوم"} بعد. الطلاب لن يعرفوا أين يدخلون.</p>
