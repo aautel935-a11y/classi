@@ -43,7 +43,12 @@ export async function runHealthChecks() {
       const resend = process.env.RESEND_API_KEY;
       if (!resend) throw new Error("SKIP: أضف RESEND_API_KEY في Vercel لتفعيل هذا الفحص");
       const r = await fetch("https://api.resend.com/domains", { headers: { Authorization: `Bearer ${resend}` }, cache: "no-store" });
-      if (r.status === 401 || r.status === 403) throw new Error("مفتاح Resend غير صالح");
+      if (r.status === 401 || r.status === 403) {
+        // A "Sending access" key may not list domains, which proves it is a valid sending key.
+        const err = (await r.json().catch(() => ({}))) as { name?: string; message?: string };
+        if (err.name === "restricted_api_key" || /restricted|only send/i.test(err.message ?? "")) return "مفتاح الإرسال صالح";
+        throw new Error("مفتاح Resend غير صالح");
+      }
       if (!r.ok) throw new Error(`رمز الاستجابة ${r.status}`);
       const body = (await r.json()) as { data?: { name: string; status: string }[] };
       const domains = body.data ?? [];
