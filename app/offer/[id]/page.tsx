@@ -4,7 +4,7 @@ import { notFound } from "next/navigation";
 import { Icon, Stars } from "@/components/Icon";
 import { TypeBadge } from "@/components/OfferCard";
 import { getSession } from "@/lib/session";
-import { OFFERING_SELECT, PLACES, TYPES, ownerName, ownerOf, ownerPhoto, type Offering } from "@/lib/types";
+import { OFFERING_SELECT, PLACES, TYPES, ownerName, ownerOf, ownerPhoto, type Offering, durationLabel } from "@/lib/types";
 import { Avatar } from "@/components/Avatar";
 import { MessageButton } from "@/components/MessageButton";
 import { ReportButton } from "@/components/ReportButton";
@@ -135,7 +135,7 @@ export default async function OfferPage({ params, searchParams }: { params: Prom
           <div className="total">
             <span>السعر</span>
             <span className="num">
-              {shekel(o.price)} {TYPES[o.type].unit}
+              {shekel(o.price)} {TYPES[o.type].unit}{o.type !== "recorded" && o.minutes ? ` (${durationLabel(o.minutes)})` : ""}
             </span>
           </div>
         </div>

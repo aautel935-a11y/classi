@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { Icon, Stars } from "./Icon";
-import { PLACES, TYPES, ownerName, ownerOf, ownerPhoto, subjectLook, type Offering } from "@/lib/types";
+import { PLACES, TYPES, ownerName, ownerOf, ownerPhoto, subjectLook, type Offering, durationLabel } from "@/lib/types";
 import { Avatar } from "./Avatar";
 import { shekel } from "@/lib/format";
 
@@ -29,7 +29,7 @@ export function OfferCard({ o, taken, showOwner = true }: { o: Offering; taken?:
           {full && <span className="badge bad">ممتلئ</span>}
         </div>
         <div className="price num">
-          {shekel(o.price)} <small>{TYPES[o.type].unit}</small>
+          {shekel(o.price)} <small>{TYPES[o.type].unit}{o.type === "private" && o.minutes && o.minutes !== 60 ? ` · ${durationLabel(o.minutes)}` : ""}</small>
         </div>
       </div>
       <div className="offer-title">

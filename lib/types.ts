@@ -3,7 +3,7 @@ export type Place = "home" | "online" | "center";
 export type Role = "guardian" | "student" | "teacher" | "institute" | "admin";
 
 export const TYPES: Record<OfferingType, { name: string; icon: IconName; desc: string; unit: string }> = {
-  private: { name: "درس خصوصي", icon: "person", desc: "معلم لك وحدك، بالساعة", unit: "للساعة" },
+  private: { name: "درس خصوصي", icon: "person", desc: "معلم لك وحدك، حصة بحصة", unit: "للحصة" },
   group: { name: "مجموعة تقوية", icon: "users", desc: "مقاعد محدودة وسعر للطالب", unit: "للقاء" },
   course: { name: "دورة معهد", icon: "building", desc: "تسجيل في دورة كاملة", unit: "للدورة" },
   recorded: { name: "محتوى مسجّل", icon: "play", desc: "شاهد متى شئت", unit: "مرة واحدة" },
@@ -79,3 +79,9 @@ export const subjectLook = (name?: string | null) => SUBJECT_LOOK[name ?? ""] ??
 
 /** Report scale, 1–5. */
 export const LEVELS = ["", "ضعيف", "مقبول", "جيد", "جيد جداً", "ممتاز"];
+
+/** "ساعة", "45 دقيقة", "ساعة ونصف"… */
+export function durationLabel(m: number | null | undefined) {
+  if (!m) return "";
+  return m === 60 ? "ساعة" : m === 90 ? "ساعة ونصف" : m === 120 ? "ساعتان" : m === 150 ? "ساعتان ونصف" : `${m} دقيقة`;
+}
