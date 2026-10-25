@@ -117,3 +117,14 @@ where id = (select id from auth.users where email = 'you@example.com');
 - فحص يومي تلقائي `/api/health/cron` يرسل بريداً عند الخلل. متغيرات Vercel المطلوبة له:
   `RESEND_API_KEY`، `ADMIN_EMAIL`، `ALERT_FROM_EMAIL` (مثل `alerts@نطاقك`)، و`CRON_SECRET` (أي نص عشوائي).
 - لوحة الإدارة: البلاغات، التوثيق، الحسابات (إيقاف مؤقت، حظر، إعادة تفعيل)، إخفاء المحتوى، سجلّ الإجراءات، حالة النظام.
+
+## رسائل SMS (019)
+
+تُرسل فقط: تذكير قبل الحصة بيوم، وتغيير موعد أو إلغاء حصة، لمن أضاف رقم جوال ووافق على الرسائل.
+متغيرات Vercel:
+
+- `SMS_019_TOKEN`: من 019، ثم Settings، ثم API Token Management، ثم Create New Token.
+- `SMS_019_USER`: اسم المستخدم في حساب 019.
+- `SMS_SENDER` (اختياري): اسم المرسل، حتى 11 حرفاً إنجليزياً أو رقماً. الافتراضي `Classi`.
+
+بعد إضافتها: Redeploy، ثم افحص `/api/health` (سطر sms).

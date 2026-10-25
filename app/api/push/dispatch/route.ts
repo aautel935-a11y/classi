@@ -1,12 +1,13 @@
 import { NextResponse, type NextRequest } from "next/server";
 import webpush from "web-push";
 import { publicClient } from "@/lib/supabase/public";
+import { sendSms, smsConfigured } from "@/lib/sms";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 30;
 
 type Sub = { endpoint: string; keys: { p256dh: string; auth: string } };
-type Item = { id: string; kind: string; body: string; link: string | null; email: string | null; name: string | null; subs: Sub[] };
+type Item = { id: string; kind: string; body: string; link: string | null; email: string | null; phone: string | null; name: string | null; subs: Sub[] };
 type Claim = { vapid_public: string | null; vapid_private: string | null; subject: string; items: Item[] };
 
 const SITE = "https://classi-nine.vercel.app";
@@ -76,7 +77,19 @@ export async function POST(request: NextRequest) {
     );
   }
 
-  return NextResponse.json({ ok: true, items: items.length, pushed, removed: dead.length, emailed });
+  // Day-before reminders, moved and cancelled lessons also go by SMS (019) to people who allowed it.
+  let texted = 0;
+  if (smsConfigured()) {
+    const log: { id: string; phone: string; ok: boolean; detail: string }[] = [];
+    for (const it of items.filter((x) => x.phone)) {
+      const res = await sendSms(it.phone!, `Classi: ${it.body}`);
+      log.push({ id: it.id, phone: it.phone!, ok: res.ok, detail: res.detail });
+      if (res.ok) texted++;
+    }
+    if (log.length) await db.rpc("log_sms", { p_secret: secret, p_rows: log });
+  }
+
+  return NextResponse.json({ ok: true, items: items.length, pushed, removed: dead.length, emailed, texted });
 }
 
 function escapeHtml(s: string) {

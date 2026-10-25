@@ -1,3 +1,4 @@
+import { createClient } from "@/lib/supabase/server";
 import Link from "next/link";
 import { Avatar } from "@/components/Avatar";
 import { Icon } from "@/components/Icon";
@@ -226,7 +227,8 @@ async function LogTab({ supabase }: { supabase: any }) {
 }
 
 async function HealthTab() {
-  const r = await runHealthChecks();
+  const [r, { data: smsRows }] = await Promise.all([runHealthChecks(), (await createClient()).rpc("admin_sms_stats")]);
+  const sms = (Array.isArray(smsRows) ? smsRows[0] : smsRows) as { sent_month: number; failed_month: number; sent_total: number } | null;
   return (
     <section className="section">
       <p className={r.ok ? "okmsg" : "err"}>{r.ok ? "كل الخدمات تعمل." : "يوجد خلل في خدمة أو أكثر."}</p>
@@ -239,6 +241,13 @@ async function HealthTab() {
           <span className="small muted num">{c.ms} ms</span>
         </div>
       ))}
+      {sms && (
+        <div className="card">
+          <b>رسائل SMS</b>
+          <span className="small">هذا الشهر: <b className="num">{sms.sent_month}</b> رسالة{sms.failed_month ? ` · فشل ${sms.failed_month}` : ""} · المجموع <span className="num">{sms.sent_total}</span></span>
+          <span className="small muted">تُرسل فقط: تذكير قبل الحصة بيوم، وتغيير موعد أو إلغاء حصة، لمن أضاف رقمه ووافق.</span>
+        </div>
+      )}
       <p className="small muted">يُفحص النظام تلقائياً كل صباح، ويصلك بريد إذا تعطّلت خدمة.</p>
     </section>
   );

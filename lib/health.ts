@@ -1,3 +1,4 @@
+import { sendSms, smsConfigured } from "@/lib/sms";
 import { publicClient } from "./supabase/public";
 
 export type Check = { name: string; label: string; status: "ok" | "fail" | "skipped"; detail: string; ms: number };
@@ -55,6 +56,13 @@ export async function runHealthChecks() {
       const verified = domains.filter((d) => d.status === "verified");
       if (!verified.length) throw new Error("لا يوجد نطاق موثّق في Resend، الرسائل لن تصل للمستخدمين");
       return `النطاق موثّق: ${verified.map((d) => d.name).join("، ")}`;
+    }),
+    timed("sms", "رسائل SMS (019)", async () => {
+      if (!smsConfigured()) throw new Error("SKIP: أضف SMS_019_TOKEN وSMS_019_USER في Vercel لتفعيل الرسائل");
+      // 019's test endpoint checks the token and request without sending anything.
+      const r = await sendSms("0500000000", "Classi health check", true);
+      if (!r.ok) throw new Error(`019 رفض الطلب: ${r.detail}`);
+      return "الحساب والمفتاح سليمان";
     }),
   ]);
   return { ok: checks.every((c) => c.status !== "fail"), checked_at: new Date().toISOString(), checks };
