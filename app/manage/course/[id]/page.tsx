@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { Icon } from "@/components/Icon";
-import { cancelPackageAction, cancelSessionAction, enrollWalkInAction, saveLinkAction, startBookingConversationAction, updateOfferingAction } from "@/app/actions";
+import { cancelPackageAction, cancelSessionAction, enrollWalkInAction, linkWalkInAction, saveLinkAction, startBookingConversationAction, updateOfferingAction } from "@/app/actions";
 import { requireUser } from "@/lib/session";
 import { PAY_LABEL, PLACES, TYPES, type OfferingType, type Place } from "@/lib/types";
 import { dayLong, isoDay, time } from "@/lib/format";
@@ -63,6 +63,7 @@ export default async function ManageOffer({ params, searchParams }: { params: Pr
         {sp.saved === "link" && <p className="okmsg">حُفظ الرابط. يراه الطلاب المؤكَّدون في جدولهم.</p>}
         {sp.ok === "payment" && <p className="okmsg">حُدّثت حالة الدفع.</p>}
         {sp.ok === "cancelled" && <p className="okmsg">أُلغي اللقاء ووصل إشعار للمعلم ولكل المشتركين.</p>}
+        {sp.ok === "linked" && <p className="okmsg">رُبط التسجيل بحساب ولي الأمر. يرى الآن المواعيد والتقارير والدفعات في جدوله.</p>}
         {sp.ok === "enrolled" && <p className="okmsg">سُجّل الطالب. {sp.linked === "1" ? "رقمه مسجّل في Classi فوصله إشعار ويرى الدورة في جدوله." : "يظهر في قائمة الطلاب ويُحسب من المقاعد."}</p>}
         {sp.saved === "package" && <p className="okmsg">أُلغيت الرزمة ووصل ولي الأمر إشعار. الحصص القادمة بقيت محجوزة بالسعر العادي.</p>}
         {sp.saved === "offer" && <p className="okmsg">حُفظت التعديلات. السعر والمقاعد وطريقة الحجز تسري فوراً؛ تعديل العنوان والمادة والعروض الاختيارية يظهر بعد موافقة الإدارة.</p>}
@@ -185,6 +186,7 @@ export default async function ManageOffer({ params, searchParams }: { params: Pr
                       <input type="hidden" name="session_id" value={s.id} />
                       <input type="hidden" name="back" value={path} />
                       <input name="reason" placeholder="السبب (مثلاً: عطلة العيد)" maxLength={120} />
+                      {type === "course" && <label className="row small"><input type="checkbox" name="makeup" defaultChecked /> أضف لقاءً تعويضياً بعد آخر لقاء</label>}
                       <button className="btn sm badb">إلغاء هذا اللقاء وإبلاغ الطلاب</button>
                     </form>
                   </details>
@@ -281,6 +283,13 @@ export default async function ManageOffer({ params, searchParams }: { params: Pr
               <span className={`badge ${b.status === "confirmed" ? "ok" : ""}`}>{b.status === "confirmed" ? "مؤكد" : "بانتظار ردّك"}</span>
               {b.status === "confirmed" && b.pay_status && <PayBadge status={b.pay_status} method={b.pay_method} teacherView inst={b.installments_total > 1 ? [b.installments_paid, b.installments_total] : undefined} />}
               {owner && b.status === "confirmed" && <ConfirmPay bookingId={b.booking_id} status={b.pay_status} back={path} installment={b.installments_total > 1 ? [b.installments_paid + 1, b.installments_total] : undefined} />}
+              {b.can_link && (
+                <form action={linkWalkInAction}>
+                  <input type="hidden" name="booking_id" value={b.booking_id} />
+                  <input type="hidden" name="back" value={path} />
+                  <button className="btn sm okb" title="هذا الرقم انضم إلى Classi">اربط بحساب ولي الأمر</button>
+                </form>
+              )}
               {owner && !b.offline && (
                 <form action={startBookingConversationAction}>
                   <input type="hidden" name="booking_id" value={b.booking_id} />

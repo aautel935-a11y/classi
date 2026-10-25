@@ -938,7 +938,7 @@ export async function cancelSessionAction(form: FormData) {
   const { supabase, user } = await client();
   if (!user) redirect("/login");
   const back = backTo(form, "/manage");
-  const { error } = await supabase.rpc("cancel_session", { p_session: str(form, "session_id"), p_reason: str(form, "reason") || null });
+  const { error } = await supabase.rpc("cancel_session", { p_session: str(form, "session_id"), p_reason: str(form, "reason") || null, p_makeup: form.get("makeup") === "on" });
   revalidatePath(back.split(/[?#]/)[0]);
   revalidatePath("/schedule");
   redirect(withQ(back, error ? `error=${encodeURIComponent(error.message)}` : "ok=cancelled"));
@@ -957,6 +957,15 @@ export async function enrollWalkInAction(form: FormData) {
   if (error) redirect(withQ(back, `enroll=1&error=${encodeURIComponent(error.message)}`));
   const { data: b } = await supabase.from("bookings").select("booked_by").eq("id", data as string).maybeSingle();
   redirect(withQ(back, `ok=enrolled&linked=${b?.booked_by ? "1" : "0"}`));
+}
+
+export async function linkWalkInAction(form: FormData) {
+  const { supabase, user } = await client();
+  if (!user) redirect("/login");
+  const back = backTo(form, "/manage");
+  const { error } = await supabase.rpc("institute_link_booking", { p_booking: str(form, "booking_id") });
+  revalidatePath(back.split(/[?#]/)[0]);
+  redirect(withQ(back, error ? `error=${encodeURIComponent(error.message)}` : "ok=linked"));
 }
 
 export async function removeStaffAction(form: FormData) {
