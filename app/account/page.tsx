@@ -3,6 +3,7 @@ import { addChildAction, deleteAccountAction, removeChildAction, signOutAction, 
 import { requireUser } from "@/lib/session";
 import { TOWNS, type Role } from "@/lib/types";
 import { PhotoUpload } from "@/components/PhotoUpload";
+import { PhoneLink } from "@/components/PhoneLink";
 import Link from "next/link";
 
 export const dynamic = "force-dynamic";
@@ -16,14 +17,13 @@ export default async function Account({ searchParams }: { searchParams: Promise<
     supabase.from("children").select("id,name,grade").order("created_at"),
     supabase.from("profiles").select("phone,sms_ok").eq("id", user.id).maybeSingle(),
   ]);
-  const phoneLocal = me?.phone ? String(me.phone).replace(/^\+972/, "0") : "";
   const smsOk = me?.sms_ok !== false;
   const active = profile?.active_role === "student" ? "guardian" : profile?.active_role ?? "guardian";
   return (
     <div className="wrap">
       <div className="section">
         <h1 style={{ fontSize: 22 }}>{profile?.full_name || "حسابي"}</h1>
-        <span className="muted small" dir="ltr" style={{ textAlign: "right" }}>{user.email}</span>
+        <span className="muted small num" dir="ltr" style={{ textAlign: "right" }}>{user.email || (user.phone ? `0${String(user.phone).replace(/^\+?972/, "")}` : "")}</span>
         <PhotoUpload kind="profile" name={profile?.full_name || user.email || "؟"} current={profile?.avatar_url ?? null} />
         {profile?.roles?.includes("admin") && <Link className="btn ghost block" href="/admin">لوحة الإدارة: توثيق المعلمين والمعاهد</Link>}
 
@@ -66,12 +66,9 @@ export default async function Account({ searchParams }: { searchParams: Promise<
 
         <h2>بياناتي</h2>
         {sp.error && <p className="err">{sp.error}</p>}
+        <PhoneLink loginPhone={user.phone ? `+${String(user.phone).replace(/^\+/, "")}` : null} profilePhone={me?.phone ?? null} />
         <form action={updateProfileAction} className="card formstack">
           <label className="field" htmlFor="full_name">الاسم<input id="full_name" name="full_name" defaultValue={profile?.full_name ?? ""} /></label>
-          <label className="field" htmlFor="phone">
-            رقم الجوال (اختياري)
-            <input id="phone" name="phone" type="tel" dir="ltr" inputMode="tel" placeholder="050-1234567" defaultValue={phoneLocal} />
-          </label>
           <label className="row small"><input type="checkbox" name="sms_ok" defaultChecked={smsOk} /> أوافق على استلام تذكيرات الحصص برسالة SMS أو واتساب</label>
           <label className="field" htmlFor="town">
             البلد

@@ -137,10 +137,8 @@ export async function switchRoleAction(form: FormData) {
 export async function updateProfileAction(form: FormData) {
   const { supabase, user } = await client();
   if (!user) redirect("/login");
-  const rawPhone = str(form, "phone").replace(/[^0-9+]/g, "");
-  const phone = rawPhone ? (/^(\+?972|0)5\d{8}$/.test(rawPhone) ? rawPhone.replace(/^(\+?972|0)/, "+972") : "bad") : null;
-  if (phone === "bad") redirect(`/account?error=${encodeURIComponent("رقم الهاتف غير صحيح. اكتب رقم جوال مثل 0501234567.")}`);
-  await supabase.from("profiles").update({ full_name: str(form, "full_name"), town: str(form, "town") || null, phone, sms_ok: form.get("sms_ok") === "on" }).eq("id", user.id);
+  // The phone is changed only through a verified SMS code (PhoneLink), never typed in here.
+  await supabase.from("profiles").update({ full_name: str(form, "full_name"), town: str(form, "town") || null, sms_ok: form.get("sms_ok") === "on" }).eq("id", user.id);
   revalidatePath("/account");
 }
 
