@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 
@@ -17,6 +17,23 @@ export function PhoneLink({ loginPhone, profilePhone }: { loginPhone: string | n
   const [phone, setPhone] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState<{ ok: boolean; text: string } | null>(null);
+  const [wait, setWait] = useState(0);
+  useEffect(() => {
+    if (wait <= 0) return;
+    const t = setTimeout(() => setWait(wait - 1), 1000);
+    return () => clearTimeout(t);
+  }, [wait]);
+
+  async function resend() {
+    if (!phone) return;
+    setMsg(null);
+    setBusy(true);
+    const { error } = await createClient().auth.updateUser({ phone });
+    setBusy(false);
+    if (error) return setMsg({ ok: false, text: /rate|seconds/i.test(error.message) ? "انتظر دقيقة ثم حاول مرة أخرى." : "تعذّر إرسال الرمز الآن. حاول بعد قليل." });
+    setWait(60);
+    setMsg({ ok: true, text: "أرسلنا رمزاً جديداً." });
+  }
 
   async function send(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
@@ -30,6 +47,7 @@ export function PhoneLink({ loginPhone, profilePhone }: { loginPhone: string | n
       return setMsg({ ok: false, text: /already|registered|exists/i.test(error.message) ? "هذا الرقم مربوط بحساب آخر في Classi. ادخل به مباشرة من صفحة الدخول." : /rate|seconds/i.test(error.message) ? "انتظر دقيقة ثم حاول مرة أخرى." : "تعذّر إرسال الرمز الآن. حاول بعد قليل." });
     }
     setPhone(e164);
+    setWait(60);
   }
 
   async function verify(e: React.FormEvent<HTMLFormElement>) {
@@ -69,6 +87,13 @@ export function PhoneLink({ loginPhone, profilePhone }: { loginPhone: string | n
           <input name="code" inputMode="numeric" autoComplete="one-time-code" maxLength={6} placeholder="الرمز" dir="ltr" className="otp" style={{ flex: 1, minWidth: 0, fontSize: 20 }} aria-label="رمز التأكيد" autoFocus />
           <button className="btn sm okb" disabled={busy}>تأكيد</button>
         </form>
+      )}
+      {phone && (
+        <div className="row between small" style={{ flexWrap: "wrap", gap: 8 }}>
+          <span className="muted">لم تصل الرسالة؟ نرسل الرمز أيضاً إلى بريدك الإلكتروني.</span>
+          {wait > 0 ? <span className="muted num">إعادة الإرسال بعد {wait} ث</span> : <button type="button" className="link" onClick={resend} disabled={busy}>أرسل الرمز مرة أخرى</button>}
+          <button type="button" className="link" onClick={() => { setPhone(null); setMsg(null); }}>تغيير الرقم</button>
+        </div>
       )}
     </div>
   );

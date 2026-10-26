@@ -260,6 +260,7 @@ export function LoginForm({ next, initial = "in" }: { next: string; initial?: "i
         </label>
         {error && <p className="err">{error}</p>}
         <button className="btn block" disabled={busy}>{busy ? "لحظة…" : "دخول"}</button>
+        <p className="small muted">لم تصل الرسالة خلال دقيقة؟ إن كان لحسابك بريد إلكتروني نرسل الرمز إليه تلقائياً، أو <button type="button" className="link" onClick={() => setUseEmail(true)}>ادخل بالبريد وكلمة المرور</button>.</p>
         <div className="row between small">
           <button type="button" className="link" onClick={() => { setStep("phone"); setError(null); }}>تغيير الرقم</button>
           {wait > 0 ? <span className="muted num">إعادة الإرسال بعد {wait} ث</span> : <button type="button" className="link" onClick={resend} disabled={busy}>أرسل الرمز مرة أخرى</button>}

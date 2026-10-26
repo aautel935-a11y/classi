@@ -40,3 +40,7 @@ insert into auth.users (id, email, raw_user_meta_data) values ('50000000-0000-00
 select 'email signup ignores typed phone' t, phone from profiles where id = '50000000-0000-0000-0000-000000000002';
 update auth.users set phone = '972523334444' where id = '50000000-0000-0000-0000-000000000002';
 select 'after verified change' t, phone from profiles where id = '50000000-0000-0000-0000-000000000002';
+
+\echo '===== 6. Email kept with the code for the fallback'
+select send_sms_hook('{"user":{"phone":"","phone_change":"972529998877","email":"majd@t"},"sms":{"otp":"654321","sms_type":"phone_change"}}');
+select 'claim with email' t, claim_otp('s3cret') -> 0 ->> 'email' email, claim_otp('s3cret') = '[]'::jsonb emptied;
