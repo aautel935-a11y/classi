@@ -12,6 +12,9 @@ insert into app_secrets (key, value) values ('dispatch_url', 'https://classi-nin
 select 'hook result' t, send_sms_hook('{"user":{"phone":"972501112233"},"sms":{"otp":"482913"}}');
 select 'queued' t, phone, body from otp_outbox;
 select 'site woken at' t, url, body->>'secret' = 's3cret' secret_ok from net.calls;
+select 'phone change goes to the new number' t, send_sms_hook('{"user":{"phone":"","phone_change":"972524445555"},"sms":{"otp":"111222","sms_type":"phone_change"}}');
+select 'queued for' t, phone from otp_outbox order by id desc limit 1;
+delete from otp_outbox where phone = '972524445555';
 select 'bad event' t, send_sms_hook('{"user":{"phone":""},"sms":{"otp":"1"}}') -> 'error' ->> 'http_code';
 
 \echo '===== 2. The site collects it once'

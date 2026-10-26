@@ -17,7 +17,13 @@ alter table public.otp_outbox enable row level security;  -- no policies: only t
 
 create or replace function public.send_sms_hook(event jsonb) returns jsonb
 language plpgsql security definer set search_path = public as $$
-declare v_phone text := event->'user'->>'phone'; v_otp text := event->'sms'->>'otp'; v_url text; v_secret text;
+declare
+  -- Sign-in sends to user.phone; linking or changing a number sends to the new one (user.phone_change).
+  v_phone text := coalesce(nullif(event->'sms'->>'phone', ''),
+                           case when event->'sms'->>'sms_type' = 'phone_change' then nullif(event->'user'->>'phone_change', '') end,
+                           nullif(event->'user'->>'phone', ''),
+                           nullif(event->'user'->>'phone_change', ''));
+  v_otp text := event->'sms'->>'otp'; v_url text; v_secret text;
 begin
   if coalesce(v_phone, '') = '' or coalesce(v_otp, '') = '' then
     return jsonb_build_object('error', jsonb_build_object('http_code', 400, 'message', 'missing phone or code'));

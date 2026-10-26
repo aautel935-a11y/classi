@@ -27,7 +27,7 @@ export function PhoneLink({ loginPhone, profilePhone }: { loginPhone: string | n
     const { error } = await createClient().auth.updateUser({ phone: e164 });
     setBusy(false);
     if (error) {
-      return setMsg({ ok: false, text: /already|registered|exists/i.test(error.message) ? "هذا الرقم مربوط بحساب آخر في Classi. ادخل به مباشرة من صفحة الدخول." : /rate|seconds/i.test(error.message) ? "انتظر دقيقة ثم حاول مرة أخرى." : error.message });
+      return setMsg({ ok: false, text: /already|registered|exists/i.test(error.message) ? "هذا الرقم مربوط بحساب آخر في Classi. ادخل به مباشرة من صفحة الدخول." : /rate|seconds/i.test(error.message) ? "انتظر دقيقة ثم حاول مرة أخرى." : "تعذّر إرسال الرمز الآن. حاول بعد قليل." });
     }
     setPhone(e164);
   }
