@@ -994,3 +994,37 @@ export async function teacherVacationAction(form: FormData) {
   revalidatePath("/teach/calendar");
   redirect(`/teach/calendar?day=${from}&${error ? `error=${encodeURIComponent(error.message)}` : `ok=vacation&n=${data ?? 0}`}`);
 }
+
+// ---------- admin operations ----------
+export async function adminCancelBookingAction(form: FormData) {
+  revalidateTag("catalog");
+  const { supabase } = await client();
+  const back = str(form, "back") || "/admin?tab=ops";
+  const { error } = await supabase.rpc("admin_cancel_booking", { p_booking: str(form, "booking_id"), p_reason: str(form, "reason") });
+  revalidatePath("/admin");
+  redirect(withQ(back, error ? `error=${encodeURIComponent(error.message)}` : "done=cancel"));
+}
+
+export async function adminSetPaymentAction(form: FormData) {
+  const { supabase } = await client();
+  const back = str(form, "back") || "/admin?tab=ops";
+  const { error } = await supabase.rpc("admin_set_payment", { p_booking: str(form, "booking_id"), p_status: str(form, "status"), p_reason: str(form, "reason") });
+  revalidatePath("/admin");
+  redirect(withQ(back, error ? `error=${encodeURIComponent(error.message)}` : "done=payment"));
+}
+
+export async function adminMessageAction(form: FormData) {
+  const { supabase } = await client();
+  const back = str(form, "back") || "/admin";
+  const { error } = await supabase.rpc("admin_message", { p_user: str(form, "user_id"), p_body: str(form, "body") });
+  redirect(withQ(back, error ? `error=${encodeURIComponent(error.message)}` : "done=message"));
+}
+
+export async function adminEditOfferAction(form: FormData) {
+  revalidateTag("catalog");
+  const { supabase } = await client();
+  const back = str(form, "back") || "/admin";
+  const { error } = await supabase.rpc("admin_edit_offer", { p_offering: str(form, "id"), p_title: str(form, "title"), p_reason: str(form, "reason") || null });
+  revalidatePath(back.split("?")[0]);
+  redirect(withQ(back, error ? `error=${encodeURIComponent(error.message)}` : "done=edit"));
+}

@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { Icon } from "@/components/Icon";
-import { adminHideAction, adminSetStatusAction } from "@/app/actions";
+import { adminHideAction, adminMessageAction, adminSetStatusAction } from "@/app/actions";
 import { requireUser } from "@/lib/session";
 import { dayLong, time } from "@/lib/format";
 import { TYPES, type OfferingType } from "@/lib/types";
@@ -60,6 +60,20 @@ export default async function AdminUser({ params, searchParams }: { params: Prom
           <div><span>بلاغات مفتوحة</span><span className="num">{u.open_reports}</span></div>
         </div>
       </div>
+
+      {!self && (
+        <section className="section">
+          <h2>رسالة مباشرة</h2>
+          {sp.done === "message" && <p className="okmsg">أُرسلت الرسالة: تظهر في إشعاراته وعلى هاتفه.</p>}
+          <form action={adminMessageAction} className="card formstack">
+            <input type="hidden" name="user_id" value={id} />
+            <input type="hidden" name="back" value={back} />
+            <textarea name="body" rows={2} maxLength={300} required placeholder="مثلاً: يرجى تحديث جدولك قبل الغد، أو تواصل مع الإدارة بخصوص بلاغ" />
+            <p className="small muted">تصله كإشعار في التطبيق وعلى الهاتف، وبرسالة SMS إن وافق على الرسائل.</p>
+            <button className="btn sm">إرسال</button>
+          </form>
+        </section>
+      )}
 
       <section className="section">
         <h2>الحساب</h2>

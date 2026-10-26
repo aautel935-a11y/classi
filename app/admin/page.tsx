@@ -6,14 +6,15 @@ import { adminCloseReportAction, adminHideAction, adminHideReviewAction, adminRe
 import { requireUser } from "@/lib/session";
 import { dayLong, time } from "@/lib/format";
 import { runHealthChecks } from "@/lib/health";
+import { OpsTab } from "./OpsTab";
 
 export const dynamic = "force-dynamic";
 
-const TABS: [string, string][] = [["review", "المراجعة"], ["subs", "الاشتراكات والإطلاق"], ["reports", "البلاغات"], ["verify", "التوثيق"], ["users", "الحسابات"], ["log", "سجلّ الإجراءات"], ["health", "حالة النظام"]];
+const TABS: [string, string][] = [["ops", "العمليات"], ["review", "المراجعة"], ["subs", "الاشتراكات والإطلاق"], ["reports", "البلاغات"], ["verify", "التوثيق"], ["users", "الحسابات"], ["log", "سجلّ الإجراءات"], ["health", "حالة النظام"]];
 const REASON: Record<string, string> = {
   no_show: "لم يحضر / ألغى متأخراً", inappropriate: "تصرّف غير لائق", safety: "أمان", fake: "معلومات غير صحيحة", overcharge: "سعر مختلف", other: "سبب آخر",
 };
-const KIND: Record<string, string> = { teacher: "معلم", institute: "معهد", offering: "عرض", user: "حساب" };
+const KIND: Record<string, string> = { teacher: "معلم", institute: "معهد", offering: "عرض", user: "حساب", booking: "حجز" };
 const STATUS: Record<string, string> = { active: "فعّال", suspended: "موقوف مؤقتاً", banned: "محظور" };
 
 export default async function Admin({ searchParams }: { searchParams: Promise<Record<string, string | undefined>> }) {
@@ -38,7 +39,7 @@ export default async function Admin({ searchParams }: { searchParams: Promise<Re
       <div className="section">
         <h1>لوحة الإدارة</h1>
         {sp.error && <p className="err">{sp.error}</p>}
-        {sp.done && <p className="okmsg">تم.</p>}
+        {sp.done && <p className="okmsg">{sp.done === "cancel" ? "أُلغي الحجز ووصل الطرفين إشعار بالسبب." : sp.done === "payment" ? "حُسمت حالة الدفع ووصل الطرفين إشعار." : sp.done === "message" ? "أُرسلت الرسالة." : "تم."}</p>}
         <nav className="tabs" aria-label="أقسام الإدارة">
           {TABS.map(([k, l]) => (
             <Link key={k} href={`/admin?tab=${k}`} aria-current={tab === k ? "page" : undefined}>
@@ -123,6 +124,7 @@ export default async function Admin({ searchParams }: { searchParams: Promise<Re
         </section>
       )}
 
+      {tab === "ops" && <OpsTab supabase={supabase} q={sp.q ?? ""} />}
       {tab === "review" && <ReviewTab queue={(queue ?? []) as QItem[]} />}
       {tab === "subs" && <SubsTab supabase={supabase} />}
       {tab === "verify" && <VerifyTab supabase={supabase} />}
@@ -213,7 +215,7 @@ async function UsersTab({ supabase, q }: { supabase: any; q: string }) {
 async function LogTab({ supabase }: { supabase: any }) {
   const { data } = await supabase.from("moderation_actions").select("id,target_type,target_id,action,reason,created_at").order("created_at", { ascending: false }).limit(60);
   const label = (a: string) =>
-    a === "hide" ? "إخفاء" : a === "show" ? "إظهار" : a.startsWith("suspended") ? `إيقاف ${a.replace("suspended", "").replace("d", " يوم")}` : a === "banned" ? "حظر" : a === "active" ? "إعادة تفعيل" : a === "resolved" ? "إغلاق بلاغ" : a === "dismissed" ? "رفض بلاغ" : a;
+    a === "hide" ? "إخفاء" : a === "show" ? "إظهار" : a.startsWith("suspended") ? `إيقاف ${a.replace("suspended", "").replace("d", " يوم")}` : a === "banned" ? "حظر" : a === "active" ? "إعادة تفعيل" : a === "resolved" ? "إغلاق بلاغ" : a === "dismissed" ? "رفض بلاغ" : a === "cancel_booking" ? "إلغاء حجز" : a === "pay_paid" ? "حسم الدفع: مدفوع" : a === "pay_unpaid" ? "حسم الدفع: غير مدفوع" : a === "pay_free" ? "حسم الدفع: مجاني" : a === "message" ? "رسالة مباشرة" : a === "edit_title" ? "تعديل عنوان" : a;
   return (
     <section className="section">
       {(data ?? []).length === 0 && <div className="empty">لا إجراءات بعد.</div>}

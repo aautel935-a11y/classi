@@ -208,7 +208,7 @@ export default async function OfferPage({ params, searchParams }: { params: Prom
             )}
           </div>
         )}
-        {isAdmin && <AdminQuick kind="offering" id={o.id} hidden={!!(o as any).moderation_hidden} back={`/offer/${o.id}`} userId={ownerAccount?.user_id ?? ownerAccount?.owner_id} />}
+        {isAdmin && <AdminQuick kind="offering" id={o.id} hidden={!!(o as any).moderation_hidden} back={`/offer/${o.id}`} userId={ownerAccount?.user_id ?? ownerAccount?.owner_id} title={o.title} />}
         {canMessage && (
           <MessageButton
             teacherId={o.teacher?.id}
