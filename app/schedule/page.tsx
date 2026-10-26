@@ -5,7 +5,9 @@ import { requireUser } from "@/lib/session";
 import { PushToggle } from "@/components/PushToggle";
 import { PayBadge, PayForStudent, installmentAmount } from "@/components/Pay";
 import { PAY_LABEL, PLACES, type Place } from "@/lib/types";
-import { dayNum, dayShort, monthName, time } from "@/lib/format";
+import { dayLong, dayNum, dayShort, monthName, time } from "@/lib/format";
+import { googleCalLink } from "@/lib/contact";
+import { WhatsAppButton } from "@/components/WhatsAppButton";
 
 export const dynamic = "force-dynamic";
 
@@ -13,15 +15,15 @@ type Row = {
   id: string; status: string; pay_method: string; starts_at: string | null; session_id: string | null; mode: Place | null; price: number | null; series_id: string | null; pay_status: string; installments_total: number; installments_paid: number;
   child: { name: string } | null;
   session: { starts_at: string } | null;
-  offering: { id: string; type: string; title: string; places: Place[]; teacher: { name: string } | null; institute: { name: string } | null };
+  offering: { id: string; type: string; title: string; minutes: number; places: Place[]; teacher: { name: string; whatsapp: string | null } | null; institute: { name: string; whatsapp: string | null } | null };
 };
 
 export default async function Schedule({ searchParams }: { searchParams: Promise<Record<string, string | undefined>> }) {
   const sp = await searchParams;
-  const { supabase, user } = await requireUser("/schedule");
+  const { supabase, user, profile } = await requireUser("/schedule");
   const { data } = await supabase
     .from("bookings")
-    .select("id,status,pay_method,starts_at,session_id,mode,price,series_id,pay_status,installments_total,installments_paid,child:children(name),session:sessions(starts_at),offering:offerings(id,type,title,places,teacher:teachers!offerings_teacher_id_fkey(name),institute:institutes(name))")
+    .select("id,status,pay_method,starts_at,session_id,mode,price,series_id,pay_status,installments_total,installments_paid,child:children(name),session:sessions(starts_at),offering:offerings(id,type,title,minutes,places,teacher:teachers!offerings_teacher_id_fkey(name,whatsapp),institute:institutes(name,whatsapp))")
     .eq("booked_by", user.id)
     .in("status", ["pending", "confirmed"])
     .order("created_at", { ascending: false });
@@ -165,6 +167,25 @@ export default async function Schedule({ searchParams }: { searchParams: Promise
               {r.status === "confirmed" && at && at < now && r.offering.type !== "recorded" && (
                 <Link className="link small" href={`/review?booking=${r.id}`}>★ قيّم {r.offering.teacher ? `أ. ${r.offering.teacher.name}` : r.offering.institute?.name}</Link>
               )}
+              {at && at > now && r.offering.type !== "recorded" && (() => {
+                const who = r.offering.teacher ? `أ. ${r.offering.teacher.name}` : r.offering.institute?.name ?? "";
+                const wa = r.offering.teacher?.whatsapp ?? r.offering.institute?.whatsapp ?? null;
+                const student = r.child?.name ?? profile?.full_name ?? "";
+                const msg = `مرحباً ${who}، ${r.status === "confirmed" ? "حجزت" : "طلبت حجز"} «${r.offering.title}» يوم ${dayLong(at)} الساعة ${time(at)}${student ? ` باسم ${student}` : ""} عبر Classi.`;
+                return (
+                  <div className="row" style={{ gap: 12, flexWrap: "wrap", alignItems: "center" }}>
+                    <details>
+                      <summary className="link small"><Icon name="cal" /> أضف إلى التقويم</summary>
+                      <div className="row" style={{ gap: 8, marginTop: 6, flexWrap: "wrap" }}>
+                        <a className="btn sm ghost" href={googleCalLink(`${r.offering.title} · ${who}`, at, r.offering.minutes || 60, "حجز عبر Classi\nhttps://classi-nine.vercel.app/schedule")} target="_blank" rel="noopener noreferrer">Google</a>
+                        <a className="btn sm ghost" href={`/api/ics/${r.id}`}>iPhone / Outlook</a>
+                      </div>
+                      {(r.series_id || r.offering.type === "course") && <span className="small muted">ملف iPhone / Outlook يضيف كل المواعيد القادمة دفعة واحدة.</span>}
+                    </details>
+                    <WhatsAppButton phone={wa} text={msg} label="أرسل التفاصيل على واتساب" small />
+                  </div>
+                );
+              })()}
               {r.status === "confirmed" && (
                 <PayForStudent bookingId={r.id} status={r.pay_status} method={r.pay_method} amount={r.price != null ? installmentAmount(r.price, r.installments_total, r.installments_paid) : null} bit={payOf(r.offering.id)?.bit_phone} owner={payOf(r.offering.id)?.owner_name} back="/schedule" />
               )}

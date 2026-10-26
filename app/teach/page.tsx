@@ -10,6 +10,7 @@ import { PaymentsOwner, type MoneySummary, type PayRow } from "@/components/Paym
 import { WaitlistOwner, type WRow } from "@/components/WaitlistOwner";
 import { requireUser } from "@/lib/session";
 import { OFFERING_SELECT, TOWNS, type Offering } from "@/lib/types";
+import { ShareProfile } from "@/components/ShareProfile";
 import { dayLong, isoDay, time } from "@/lib/format";
 
 export const dynamic = "force-dynamic";
@@ -21,7 +22,7 @@ const modeLabel = (m: string | null) => (m === "online" ? "أونلاين" : m =
 export default async function Teach({ searchParams }: { searchParams: Promise<Record<string, string | undefined>> }) {
   const sp = await searchParams;
   const { supabase, user, profile } = await requireUser("/teach");
-  const { data: t } = await supabase.from("teachers").select("id,name,verify,town,bio,years,is_school_teacher,subject_id,photo_url,buffer_minutes,intro_video_url,pending_changes,review_note").eq("user_id", user.id).maybeSingle();
+  const { data: t } = await supabase.from("teachers").select("id,name,verify,town,bio,years,is_school_teacher,subject_id,photo_url,buffer_minutes,intro_video_url,pending_changes,review_note,whatsapp").eq("user_id", user.id).maybeSingle();
 
   if (!t) {
     const { data: subjects } = await supabase.from("subjects").select("id,name").order("id");
@@ -119,6 +120,8 @@ export default async function Teach({ searchParams }: { searchParams: Promise<Re
         </div>
       </div>
 
+      <ShareProfile url={`https://classi-nine.vercel.app/teacher/${t.id}`} name={`أ. ${t.name}`} />
+
       <section className="section" id="profile">
         <h2>ملفي</h2>
         {t.pending_changes && <p className="note"><Icon name="clock" />تعديلات ملفك بانتظار موافقة الإدارة. يرى الطلاب النسخة السابقة حتى الموافقة.</p>}
@@ -140,6 +143,11 @@ export default async function Teach({ searchParams }: { searchParams: Promise<Re
                 رقم Bit لاستلام الدفعات
                 <input id="e-bit" name="bit_phone" type="tel" dir="ltr" inputMode="tel" placeholder="050-1234567" defaultValue={bitLocal} />
                 <span className="small muted">يظهر فقط لمن حجز عندك، ليحوّل لك ثمن الحصة.</span>
+              </label>
+              <label className="field" htmlFor="e-wa">
+                رقم واتساب للتواصل (اختياري)
+                <input id="e-wa" name="whatsapp" type="tel" dir="ltr" inputMode="tel" placeholder="050-1234567" defaultValue={(t as any).whatsapp ? String((t as any).whatsapp).replace(/^\+972/, "0") : ""} />
+                <span className="small muted">يظهر زر «واتساب» في صفحتك ليسألك الأهالي قبل الحجز. اتركه فارغاً لإخفائه.</span>
               </label>
               <label className="field" htmlFor="e-video">
                 فيديو تعريفي قصير (اختياري)

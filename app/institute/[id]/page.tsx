@@ -8,6 +8,7 @@ import { ReportButton } from "@/components/ReportButton";
 import { AdminQuick } from "@/components/AdminQuick";
 import { OFFERING_SELECT, type Offering } from "@/lib/types";
 import { Avatar } from "@/components/Avatar";
+import { WhatsAppButton } from "@/components/WhatsAppButton";
 import { MessageButton } from "@/components/MessageButton";
 
 export const dynamic = "force-dynamic";
@@ -23,7 +24,7 @@ export default async function InstitutePage({ params, searchParams }: { params: 
   const { supabase, user, profile } = await getSession();
   const isAdmin = !!profile?.roles?.includes("admin");
   const [{ data: ins }, { data: offers }, { count: staff }, { data: seats }, { data: revs }] = await Promise.all([
-    supabase.from("institutes").select("id,owner_id,name,town,bio,rating,reviews_count,verify,logo_url,moderation_hidden").eq("id", id).maybeSingle(),
+    supabase.from("institutes").select("id,owner_id,name,town,bio,rating,reviews_count,verify,logo_url,moderation_hidden,whatsapp").eq("id", id).maybeSingle(),
     supabase.from("offerings").select(OFFERING_SELECT).eq("institute_id", id).eq("active", true),
     supabase.from("institute_teachers").select("teacher_id", { count: "exact", head: true }).eq("institute_id", id),
     supabase.rpc("seats_overview"),
@@ -47,6 +48,7 @@ export default async function InstitutePage({ params, searchParams }: { params: 
       </div>
       {isAdmin && <AdminQuick kind="institute" id={ins.id} hidden={ins.moderation_hidden} back={`/institute/${ins.id}`} userId={ins.owner_id} />}
       {ins.owner_id && ins.owner_id !== user?.id && <MessageButton instituteId={ins.id} back={`/institute/${ins.id}`} label="راسل المعهد" />}
+      {ins.owner_id !== user?.id && <WhatsAppButton phone={(ins as any).whatsapp} text={`مرحباً، رأيت ${ins.name} في Classi وعندي سؤال:`} />}
       <div className="facts" style={{ marginTop: 12 }}>
         <div className="fact"><b className="num">{Number(ins.rating).toFixed(1)}</b><span>التقييم</span></div>
         <div className="fact"><b className="num">{staff ?? 0}</b><span>معلمين</span></div>

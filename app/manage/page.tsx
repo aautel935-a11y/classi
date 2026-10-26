@@ -8,6 +8,7 @@ import { SubscriptionBox, type Plan, type SubRequest } from "@/components/Subscr
 import { ReviewsList, type ReviewRow } from "@/components/ReviewsList";
 import { requireUser } from "@/lib/session";
 import { TOWNS } from "@/lib/types";
+import { ShareProfile } from "@/components/ShareProfile";
 import { dayLong, time } from "@/lib/format";
 
 export const dynamic = "force-dynamic";
@@ -15,7 +16,7 @@ export const dynamic = "force-dynamic";
 export default async function Manage({ searchParams }: { searchParams: Promise<Record<string, string | undefined>> }) {
   const sp = await searchParams;
   const { supabase, user, profile } = await requireUser("/manage");
-  const { data: inst } = await supabase.from("institutes").select("id,name,town,verify,bio,logo_url").eq("owner_id", user.id).maybeSingle();
+  const { data: inst } = await supabase.from("institutes").select("id,name,town,verify,bio,logo_url,whatsapp").eq("owner_id", user.id).maybeSingle();
 
   if (!inst) {
     return (
@@ -88,6 +89,8 @@ export default async function Manage({ searchParams }: { searchParams: Promise<R
 
       <WaitlistOwner rows={waitlist} back="/manage" flash={sp.wl} error={sp.error} />
 
+      <ShareProfile url={`https://classi-nine.vercel.app/institute/${inst.id}`} name={inst.name} />
+
       <SubscriptionBox required={setting("subscriptions_required") === "true"} paidUntil={paid ? String(paid) : null} plans={(plans ?? []) as Plan[]} request={(subReq ?? null) as SubRequest} platformBit={setting("platform_bit")} back="/manage#subscription" flash={sp.sub} hasAccountOffers={(courses ?? []).length > 0} />
 
       <ReviewsList rows={(myReviews ?? []) as ReviewRow[]} owner back="/manage#reviews" title="تقييمات العائلات للمعهد" />
@@ -104,6 +107,7 @@ export default async function Manage({ searchParams }: { searchParams: Promise<R
               <label className="field" htmlFor="i-town">البلد<select id="i-town" name="town" defaultValue={inst.town}>{TOWNS.map((x) => <option key={x}>{x}</option>)}</select></label>
               <label className="field" htmlFor="i-bio">نبذة<textarea id="i-bio" name="bio" rows={3} defaultValue={inst.bio} /></label>
               <label className="field" htmlFor="i-bit">رقم Bit لاستلام الدفعات<input id="i-bit" name="bit_phone" type="tel" dir="ltr" inputMode="tel" placeholder="050-1234567" defaultValue={bitLocal} /><span className="small muted">يظهر فقط لمن سجّل عندكم.</span></label>
+              <label className="field" htmlFor="i-wa">رقم واتساب للتواصل (اختياري)<input id="i-wa" name="whatsapp" type="tel" dir="ltr" inputMode="tel" placeholder="050-1234567" defaultValue={(inst as any).whatsapp ? String((inst as any).whatsapp).replace(/^\+972/, "0") : ""} /><span className="small muted">يظهر زر «واتساب» في صفحة المعهد. اتركه فارغاً لإخفائه.</span></label>
               <button className="btn">حفظ</button>
             </form>
           </details>

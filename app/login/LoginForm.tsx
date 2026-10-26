@@ -211,6 +211,7 @@ export function LoginForm({ next, initial = "in" }: { next: string; initial?: "i
     const err = await sendCode(e164, mode === "up");
     setBusy(false);
     if (err === "NOT_FOUND") {
+      setPhone(e164);
       setMode("up");
       return setError("هذا الرقم غير مسجّل بعد. أكمل بياناتك لإنشاء حساب جديد.");
     }

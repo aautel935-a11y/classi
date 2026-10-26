@@ -15,6 +15,7 @@ import { BookingFlow } from "./BookingFlow";
 import { WaitlistJoin } from "./WaitlistJoin";
 import { buyPackageAction, leaveWaitlistAction } from "@/app/actions";
 import { IntroVideo } from "@/components/IntroVideo";
+import { WhatsAppButton } from "@/components/WhatsAppButton";
 import { PayBadge, PayForStudent } from "@/components/Pay";
 
 export const dynamic = "force-dynamic";
@@ -40,8 +41,8 @@ export default async function OfferPage({ params, searchParams }: { params: Prom
   const [mineR, ownerR, avR, busyR, ssR, seatsR, kidsR, bufR, wlR, pkR] = await Promise.all([
     user ? supabase.rpc("is_offering_owner", { p_offering: o.id }) : empty,
     o.teacher
-      ? supabase.from("teachers").select("user_id,intro_video_url").eq("id", o.teacher.id).maybeSingle()
-      : supabase.from("institutes").select("owner_id").eq("id", o.institute!.id).maybeSingle(),
+      ? supabase.from("teachers").select("user_id,intro_video_url,whatsapp").eq("id", o.teacher.id).maybeSingle()
+      : supabase.from("institutes").select("owner_id,whatsapp").eq("id", o.institute!.id).maybeSingle(),
     o.type === "private" && o.teacher_id ? supabase.from("availability").select("weekday,start_time,end_time").eq("teacher_id", o.teacher_id) : empty,
     o.type === "private" && o.teacher_id
       ? supabase.rpc("teacher_busy", { p_teacher: o.teacher_id, p_from: now, p_to: new Date(Date.now() + 9 * 864e5).toISOString() })
@@ -216,6 +217,7 @@ export default async function OfferPage({ params, searchParams }: { params: Prom
             label={o.teacher ? "اسأل المعلم قبل الحجز" : "اسأل المعهد قبل التسجيل"}
           />
         )}
+        {!mine && <WhatsAppButton phone={ownerAccount?.whatsapp} text={`مرحباً، بخصوص «${o.title}» في Classi:`} />}
         {mine ? (
           <Link className="btn ghost block" href={`/manage/course/${o.id}`}>هذا عرضك: إدارة العرض</Link>
         ) : user && waiting ? (

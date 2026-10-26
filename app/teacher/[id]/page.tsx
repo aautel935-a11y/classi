@@ -9,6 +9,7 @@ import { ReportButton } from "@/components/ReportButton";
 import { AdminQuick } from "@/components/AdminQuick";
 import { OFFERING_SELECT, type Offering } from "@/lib/types";
 import { Avatar } from "@/components/Avatar";
+import { WhatsAppButton } from "@/components/WhatsAppButton";
 import { MessageButton } from "@/components/MessageButton";
 
 export const dynamic = "force-dynamic";
@@ -24,7 +25,7 @@ export default async function TeacherPage({ params, searchParams }: { params: Pr
   const { supabase, user, profile } = await getSession();
   const isAdmin = !!profile?.roles?.includes("admin");
   const [{ data: t }, { data: offers }, { data: revs }] = await Promise.all([
-    supabase.from("teachers").select("id,user_id,name,town,bio,years,is_school_teacher,rating,reviews_count,verify,photo_url,moderation_hidden,intro_video_url,subject:subjects(name)").eq("id", id).maybeSingle(),
+    supabase.from("teachers").select("id,user_id,name,town,bio,years,is_school_teacher,rating,reviews_count,verify,photo_url,moderation_hidden,intro_video_url,whatsapp,subject:subjects(name)").eq("id", id).maybeSingle(),
     supabase.from("offerings").select(OFFERING_SELECT).eq("teacher_id", id).eq("active", true),
     supabase.from("reviews").select("id,stars,body,author_name,reply,created_at").eq("teacher_id", id).order("created_at", { ascending: false }).limit(20),
   ]);
@@ -49,6 +50,7 @@ export default async function TeacherPage({ params, searchParams }: { params: Pr
       </div>
       {isAdmin && <AdminQuick kind="teacher" id={teacher.id} hidden={teacher.moderation_hidden} back={`/teacher/${teacher.id}`} userId={teacher.user_id} />}
       {teacher.user_id && teacher.user_id !== user?.id && <MessageButton teacherId={teacher.id} back={`/teacher/${teacher.id}`} label="راسل المعلم" />}
+      {teacher.user_id !== user?.id && <WhatsAppButton phone={teacher.whatsapp} text={`مرحباً أ. ${teacher.name}، رأيت صفحتك في Classi وعندي سؤال:`} />}
       <div className="facts" style={{ marginTop: 12 }}>
         <div className="fact"><b className="num">{Number(teacher.rating).toFixed(1)}</b><span>التقييم</span></div>
         <div className="fact"><b className="num">{teacher.reviews_count}</b><span>تقييماً</span></div>

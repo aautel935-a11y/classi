@@ -5,6 +5,7 @@ import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { fromLocal } from "@/lib/format";
 import { WEEKDAYS, datesOn, nextDays } from "@/lib/dates";
+import { cleanMobile } from "@/lib/contact";
 import type { OfferingType, Place, Role } from "@/lib/types";
 
 type Result = { error?: string; ok?: boolean; count?: number; created?: number; skipped?: string[] };
@@ -378,6 +379,11 @@ export async function updateTeacherAction(form: FormData) {
     })
     .eq("user_id", user.id);
   if (str(form, "intro_video") && !/^https:\/\//.test(str(form, "intro_video"))) redirect(`/teach?error=${encodeURIComponent("رابط الفيديو يجب أن يبدأ بـ https://")}`);
+  if (form.has("whatsapp")) {
+    const wa = str(form, "whatsapp") ? cleanMobile(str(form, "whatsapp")) : null;
+    if (str(form, "whatsapp") && !wa) redirect(`/teach?error=${encodeURIComponent("رقم الواتساب غير صحيح. اكتب رقم جوال مثل 050-1234567.")}#profile`);
+    await supabase.from("teachers").update({ whatsapp: wa }).eq("user_id", user.id);
+  }
   if (form.has("bit_phone")) {
     const { error: bitErr } = await supabase.rpc("set_bit_phone", { p_phone: str(form, "bit_phone"), p_institute: false });
     if (bitErr) redirect(`/teach?error=${encodeURIComponent(bitErr.message)}`);
@@ -391,6 +397,11 @@ export async function updateInstituteAction(form: FormData) {
   const { supabase, user } = await client();
   if (!user) redirect("/login?next=/manage");
   await supabase.from("institutes").update({ name: str(form, "name"), town: str(form, "town"), bio: str(form, "bio") }).eq("owner_id", user.id);
+  if (form.has("whatsapp")) {
+    const wa = str(form, "whatsapp") ? cleanMobile(str(form, "whatsapp")) : null;
+    if (str(form, "whatsapp") && !wa) redirect(`/manage?error=${encodeURIComponent("رقم الواتساب غير صحيح. اكتب رقم جوال مثل 050-1234567.")}`);
+    await supabase.from("institutes").update({ whatsapp: wa }).eq("owner_id", user.id);
+  }
   if (form.has("bit_phone")) {
     const { error: bitErr } = await supabase.rpc("set_bit_phone", { p_phone: str(form, "bit_phone"), p_institute: true });
     if (bitErr) redirect(`/manage?error=${encodeURIComponent(bitErr.message)}`);
