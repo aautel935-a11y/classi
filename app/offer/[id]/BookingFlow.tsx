@@ -98,6 +98,7 @@ export function BookingFlow({ offering: o, slots, groupSessions, kids, trialFor 
               {st === "slot" && (
                 <>
                   <h2>اختر الموعد</h2>
+                  <p className="hint">اختر يوماً ثم ساعة من المواعيد المتاحة. الرمادية محجوزة.</p>
                   {days.length === 0 ? (
                     <p className="empty">لا توجد أوقات فارغة هذا الأسبوع. راسل المعلم أو جرّب لاحقاً.</p>
                   ) : (
@@ -126,6 +127,7 @@ export function BookingFlow({ offering: o, slots, groupSessions, kids, trialFor 
               {st === "session" && (
                 <>
                   <h2>اختر اللقاء</h2>
+                  <p className="hint">كل لقاء يُحجز وحده، ويمكنك الاشتراك في كل اللقاءات القادمة إن سمح المعلم.</p>
                   {groupSessions.length === 0 && <p className="empty">لا لقاءات قادمة لهذه المجموعة.</p>}
                   {groupSessions.map((g) => {
                     const full = o.seats != null && g.taken >= o.seats;
@@ -145,6 +147,7 @@ export function BookingFlow({ offering: o, slots, groupSessions, kids, trialFor 
               {st === "freq" && chosenAt && (
                 <>
                   <h2>حصة واحدة أم كل أسبوع؟</h2>
+                  <p className="hint">الأسبوعي يحجز لك نفس الموعد كل أسبوع تلقائياً، ويمكنك إيقافه متى شئت.</p>
                   <button className="opt" aria-pressed={!weekly} onClick={() => setWeekly(false)}>
                     <span className="dot" />
                     <span>{o.type === "group" ? "هذا اللقاء فقط" : "حصة واحدة"} <span className="muted small">· {dayLong(chosenAt)} {time(chosenAt)}</span></span>
@@ -203,6 +206,7 @@ export function BookingFlow({ offering: o, slots, groupSessions, kids, trialFor 
               {st === "pay" && (
                 <>
                   <h2>الدفع</h2>
+                  <p className="hint">الدفع مباشرة للمعلم أو المعهد، لا يمر أي مبلغ عبر Classi.</p>
                   {canTrial && (
                     <label className="switch-row">
                       <input type="checkbox" checked={trial} onChange={(e) => { setTrial(e.target.checked); setPay(null); }} />

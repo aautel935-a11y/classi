@@ -371,6 +371,13 @@ async function SubsTab({ supabase }: { supabase: any }) {
             <input name="value" type="tel" dir="ltr" defaultValue={set("platform_bit").replace(/^\+972/, "0")} placeholder="050-1234567" /></label>
           <button className="btn sm" style={{ alignSelf: "flex-end" }}>حفظ</button>
         </form>
+        <form action={adminSubscriptionAction} className="row" style={{ flexWrap: "wrap", gap: 8 }}>
+          <input type="hidden" name="op" value="setting" /><input type="hidden" name="key" value="support_whatsapp" />
+          <label className="field" style={{ flex: 1, minWidth: 200 }}>رقم واتساب الدعم (زر «؟» أسفل الشاشة)
+            <input name="value" type="tel" dir="ltr" defaultValue={set("support_whatsapp").replace(/^\+972/, "0")} placeholder="050-1234567" />
+            <span className="small muted">اتركه فارغاً لإخفاء زر المساعدة.</span></label>
+          <button className="btn sm" style={{ alignSelf: "flex-end" }}>حفظ</button>
+        </form>
       </div>
 
       <h2>الباقات</h2>

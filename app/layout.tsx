@@ -2,6 +2,7 @@ import type { Metadata, Viewport } from "next";
 import Link from "next/link";
 import "./globals.css";
 import { BottomNav } from "@/components/BottomNav";
+import { SupportButton } from "@/components/SupportButton";
 import { Icon, Logo } from "@/components/Icon";
 import { isConfigured } from "@/lib/supabase/server";
 import { getSession, isBlocked } from "@/lib/session";
@@ -56,6 +57,7 @@ async function Shell({ children }: { children: React.ReactNode }) {
     unread = row?.notifications ?? 0;
     unreadMessages = row?.messages ?? 0;
   }
+  const { data: support } = await supabase.rpc("setting", { p_key: "support_whatsapp" });
   if (isBlocked(profile)) return <Blocked status={profile!.status} until={profile!.suspended_until} reason={profile!.status_reason} />;
   const kind = navFor(profile?.active_role ?? "guardian");
   return (
@@ -84,6 +86,7 @@ async function Shell({ children }: { children: React.ReactNode }) {
         <main>{children}</main>
       </div>
       <BottomNav kind={kind} unread={unreadMessages} />
+      <SupportButton phone={(support as string | null) || null} />
     </>
   );
 }

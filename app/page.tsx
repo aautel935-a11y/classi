@@ -4,6 +4,7 @@ import { Icon, Stars } from "@/components/Icon";
 import { OfferCard } from "@/components/OfferCard";
 import { loadCatalog } from "@/lib/catalog";
 import { getSession } from "@/lib/session";
+import { HowToBook } from "@/components/HowToBook";
 import { TYPES, subjectLook, type OfferingType } from "@/lib/types";
 
 export const dynamic = "force-dynamic";
@@ -30,6 +31,8 @@ export default async function Home({ searchParams }: { searchParams: Promise<Rec
           <span>ابحث عن مادة، معلم، أو معهد</span>
         </Link>
       </section>
+
+      <HowToBook />
 
       <section className="section">
         <h2>المواد</h2>

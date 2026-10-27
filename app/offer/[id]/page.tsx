@@ -209,6 +209,7 @@ export default async function OfferPage({ params, searchParams }: { params: Prom
           </div>
         )}
         {isAdmin && <AdminQuick kind="offering" id={o.id} hidden={!!(o as any).moderation_hidden} back={`/offer/${o.id}`} userId={ownerAccount?.user_id ?? ownerAccount?.owner_id} title={o.title} />}
+        {canMessage && !mine && <p className="hint" style={{ margin: 0 }}>عندك سؤال عن المستوى أو المكان؟ راسل {o.teacher ? "المعلم" : "المعهد"} قبل الحجز، يصله إشعار فوراً.</p>}
         {canMessage && (
           <MessageButton
             teacherId={o.teacher?.id}

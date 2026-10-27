@@ -2,6 +2,7 @@ import Link from "next/link";
 import { OfferCard } from "@/components/OfferCard";
 import { loadCatalog } from "@/lib/catalog";
 import { PLACES, TOWNS, TYPES, ownerOf, type OfferingType, type Place } from "@/lib/types";
+import { HowToBook } from "@/components/HowToBook";
 import { AutoSubmit } from "./AutoSubmit";
 
 export const dynamic = "force-dynamic";
@@ -30,6 +31,7 @@ export default async function Search({ searchParams }: { searchParams: SP }) {
     <div className="wrap">
       <div className="section">
         <h1>بحث</h1>
+        <HowToBook />
         <div className="hscroll">
           <Link className="chip" href={link("")} aria-pressed={!f.type}>
             كل الأنواع
