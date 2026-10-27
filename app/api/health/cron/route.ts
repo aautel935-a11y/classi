@@ -1,6 +1,5 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { runHealthChecks } from "@/lib/health";
-import { publicClient } from "@/lib/supabase/public";
 
 export const dynamic = "force-dynamic";
 
@@ -10,13 +9,12 @@ export async function GET(request: NextRequest) {
   if (secret && request.headers.get("authorization") !== `Bearer ${secret}`) {
     return NextResponse.json({ error: "unauthorized" }, { status: 401 });
   }
-  // Keep weekly bookings filled for the coming weeks.
-  const { data: extended } = await publicClient().rpc("extend_recurring");
+  // Weekly bookings and group meetings are extended by the database itself every night (classi-group-sessions).
   const result = await runHealthChecks();
   let emailed = false;
   const resend = process.env.RESEND_API_KEY;
   const to = process.env.ADMIN_EMAIL;
-  const from = process.env.ALERT_FROM_EMAIL;
+  const from = process.env.ALERT_FROM_EMAIL ?? (process.env.REMINDER_FROM_EMAIL ? `Classi <${process.env.REMINDER_FROM_EMAIL.replace(/^.*<|>.*$/g, "")}>` : undefined);
   if (!result.ok && resend && to && from) {
     const failed = result.checks.filter((c) => c.status === "fail");
     const r = await fetch("https://api.resend.com/emails", {
@@ -33,5 +31,5 @@ export async function GET(request: NextRequest) {
     });
     emailed = r.ok;
   }
-  return NextResponse.json({ ok: result.ok, emailed, extended, checks: result.checks }, { status: result.ok ? 200 : 503 });
+  return NextResponse.json({ ok: result.ok, emailed, checks: result.checks }, { status: result.ok ? 200 : 503 });
 }
