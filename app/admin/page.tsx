@@ -285,13 +285,13 @@ function show(k: string, v: any) {
 function ReviewTab({ queue }: { queue: QItem[] }) {
   return (
     <section className="section">
-      <p className="note"><Icon name="shield" />لا يظهر للطلاب أي عرض جديد، ولا أي تعديل على عرض أو ملف معلم أو معهد، قبل موافقتك هنا.</p>
+      <p className="note"><Icon name="shield" />لا يظهر للطلاب أي عرض أو ملف جديد، ولا أي تعديل، قبل موافقتك هنا. الموافقة على أول عرض لمعلم أو معهد جديد توافق على ملفه أيضاً.</p>
       {queue.length === 0 && <div className="empty">لا شيء بانتظار المراجعة.</div>}
       {queue.map((q) => (
         <div key={`${q.kind}${q.id}`} className="card">
           <div className="row between">
             <b>{q.title}</b>
-            <span className="badge">{q.what === "new" ? "عرض جديد" : q.kind === "offering" ? "تعديل عرض" : q.kind === "teacher" ? "تعديل ملف معلم" : "تعديل ملف معهد"}</span>
+            <span className="badge">{q.what === "new" ? (q.kind === "offering" ? "عرض جديد" : q.kind === "teacher" ? "معلم جديد" : "معهد جديد") : q.kind === "offering" ? "تعديل عرض" : q.kind === "teacher" ? "تعديل ملف معلم" : "تعديل ملف معهد"}</span>
           </div>
           <span className="small muted">{q.owner_name} · {dayLong(q.created_at)}</span>
           {q.what === "new" ? (
