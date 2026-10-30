@@ -11,6 +11,7 @@ import { WaitlistOwner, type WRow } from "@/components/WaitlistOwner";
 import { requireUser } from "@/lib/session";
 import { OFFERING_SELECT, TOWNS, type Offering } from "@/lib/types";
 import { ShareProfile } from "@/components/ShareProfile";
+import { SITE } from "@/lib/site";
 import { dayLong, isoDay, time } from "@/lib/format";
 
 export const dynamic = "force-dynamic";
@@ -120,7 +121,7 @@ export default async function Teach({ searchParams }: { searchParams: Promise<Re
         </div>
       </div>
 
-      <ShareProfile url={`https://classi-nine.vercel.app/teacher/${t.id}`} name={`أ. ${t.name}`} />
+      <ShareProfile url={`${SITE}/teacher/${t.id}`} name={`أ. ${t.name}`} />
 
       <section className="section" id="profile">
         <h2>ملفي</h2>

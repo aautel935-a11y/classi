@@ -8,9 +8,9 @@ import { isConfigured } from "@/lib/supabase/server";
 import { getSession, isBlocked } from "@/lib/session";
 import { signOutAction } from "@/app/actions";
 import { navFor } from "@/lib/types";
+import { SITE } from "@/lib/site";
 import { Splash, splashScript } from "@/components/Splash";
 
-const SITE = "https://classi-nine.vercel.app";
 export const metadata: Metadata = {
   metadataBase: new URL(SITE),
   title: { default: "Classi · كل التعليم في مكان واحد", template: "%s · Classi" },

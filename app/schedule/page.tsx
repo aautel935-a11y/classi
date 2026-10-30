@@ -7,6 +7,7 @@ import { PayBadge, PayForStudent, installmentAmount } from "@/components/Pay";
 import { PAY_LABEL, PLACES, type Place } from "@/lib/types";
 import { dayLong, dayNum, dayShort, monthName, time } from "@/lib/format";
 import { googleCalLink } from "@/lib/contact";
+import { SITE } from "@/lib/site";
 import { WhatsAppButton } from "@/components/WhatsAppButton";
 
 export const dynamic = "force-dynamic";
@@ -177,7 +178,7 @@ export default async function Schedule({ searchParams }: { searchParams: Promise
                     <details>
                       <summary className="link small"><Icon name="cal" /> أضف إلى التقويم</summary>
                       <div className="row" style={{ gap: 8, marginTop: 6, flexWrap: "wrap" }}>
-                        <a className="btn sm ghost" href={googleCalLink(`${r.offering.title} · ${who}`, at, r.offering.minutes || 60, "حجز عبر Classi\nhttps://classi-nine.vercel.app/schedule")} target="_blank" rel="noopener noreferrer">Google</a>
+                        <a className="btn sm ghost" href={googleCalLink(`${r.offering.title} · ${who}`, at, r.offering.minutes || 60, `حجز عبر Classi\n${SITE}/schedule`)} target="_blank" rel="noopener noreferrer">Google</a>
                         <a className="btn sm ghost" href={`/api/ics/${r.id}`}>iPhone / Outlook</a>
                       </div>
                       {(r.series_id || r.offering.type === "course") && <span className="small muted">ملف iPhone / Outlook يضيف كل المواعيد القادمة دفعة واحدة.</span>}

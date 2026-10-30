@@ -1,8 +1,8 @@
 import type { MetadataRoute } from "next";
+import { SITE } from "@/lib/site";
 import { publicClient } from "@/lib/supabase/public";
 
 export const revalidate = 3600;
-const SITE = "https://classi-nine.vercel.app";
 
 /** Public pages for search engines: only what visitors can already see. */
 export default async function sitemap(): Promise<MetadataRoute.Sitemap> {

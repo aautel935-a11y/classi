@@ -9,6 +9,7 @@ import { ReviewsList, type ReviewRow } from "@/components/ReviewsList";
 import { requireUser } from "@/lib/session";
 import { TOWNS } from "@/lib/types";
 import { ShareProfile } from "@/components/ShareProfile";
+import { SITE } from "@/lib/site";
 import { dayLong, time } from "@/lib/format";
 
 export const dynamic = "force-dynamic";
@@ -89,7 +90,7 @@ export default async function Manage({ searchParams }: { searchParams: Promise<R
 
       <WaitlistOwner rows={waitlist} back="/manage" flash={sp.wl} error={sp.error} />
 
-      <ShareProfile url={`https://classi-nine.vercel.app/institute/${inst.id}`} name={inst.name} />
+      <ShareProfile url={`${SITE}/institute/${inst.id}`} name={inst.name} />
 
       <SubscriptionBox required={setting("subscriptions_required") === "true"} paidUntil={paid ? String(paid) : null} plans={(plans ?? []) as Plan[]} request={(subReq ?? null) as SubRequest} platformBit={setting("platform_bit")} back="/manage#subscription" flash={sp.sub} hasAccountOffers={(courses ?? []).length > 0} />
 

@@ -1,6 +1,7 @@
 import { NextResponse, type NextRequest } from "next/server";
 import webpush from "web-push";
 import { publicClient } from "@/lib/supabase/public";
+import { SITE } from "@/lib/site";
 import { sendSms, smsConfigured } from "@/lib/sms";
 
 export const dynamic = "force-dynamic";
@@ -10,7 +11,6 @@ type Sub = { endpoint: string; keys: { p256dh: string; auth: string } };
 type Item = { id: string; kind: string; body: string; link: string | null; email: string | null; phone: string | null; name: string | null; subs: Sub[] };
 type Claim = { vapid_public: string | null; vapid_private: string | null; subject: string; items: Item[] };
 
-const SITE = "https://classi-nine.vercel.app";
 
 // Woken by the database (pg_net) when notifications are waiting. The secret is checked
 // inside the database; this route only delivers what the database hands over.

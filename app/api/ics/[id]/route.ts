@@ -1,10 +1,10 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { createClient } from "@/lib/supabase/server";
+import { SITE } from "@/lib/site";
 import { icsFile } from "@/lib/contact";
 
 export const dynamic = "force-dynamic";
 
-const SITE = "https://classi-nine.vercel.app";
 
 // A booking (or a whole course / weekly series) as a calendar file. Only the person who booked can open it.
 export async function GET(_req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
