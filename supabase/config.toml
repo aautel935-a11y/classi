@@ -50,6 +50,14 @@ enable_confirmations = true
 template = "Your code is {{ .Code }}"
 max_frequency = "1s"
 
+# The local stack only turns phone sign-in on when a provider is listed. These values are placeholders (no account,
+# nothing is ever sent through Twilio): the send_sms hook below takes over delivery.
+[auth.sms.twilio]
+enabled = true
+account_sid = "AC00000000000000000000000000000000"
+message_service_sid = "MG00000000000000000000000000000000"
+auth_token = "local-placeholder-not-a-secret"
+
 # Sign-in codes go through Classi's own Postgres hook (as in production); E2E tests read the code from otp_outbox.
 [auth.hook.send_sms]
 enabled = true
