@@ -47,6 +47,13 @@ test("9. teacher: sign up, profile, hours with Saturday, new offer (and the form
   await page.getByRole("button", { name: "حفظ الملف" }).click();
   await expect(page.locator("#hours")).toBeVisible({ timeout: 15_000 }).catch(async () => {
     console.log("[page] STUCK after teacher setup action; reloading to continue the diagnosis");
+    console.log(`[diag] pending: ${[...page.__pending.values()].map((u) => u.slice(0, 140)).join(" , ")}`);
+    console.log(`[diag] dom: ${await page.evaluate(() => JSON.stringify({
+      sheets: [...document.querySelectorAll('link[rel="stylesheet"]')].map((l) => `${l.getAttribute("href")?.slice(0, 60)}|prec=${l.getAttribute("data-precedence") ?? ""}|loaded=${!!l.sheet}`),
+      imgs: [...document.images].filter((i) => !i.complete).map((i) => i.src.slice(0, 80)),
+      unfinished: performance.getEntriesByType("resource").filter((e) => !e.responseEnd).map((e) => e.name.slice(0, 80)),
+      scripts: document.scripts.length,
+    })).catch((e) => e.message)}`);
     console.log(`[page] pending requests: ${[...page.__pending.values()].map((u) => u.slice(0, 120)).join(" , ")}`);
     console.log(`[page] next router: ${await page.evaluate(() => typeof window.next?.router?.push).catch((e) => e.message)}`);
     await page.evaluate(() => window.next?.router?.push("/teach?probe=1")).catch(() => {});
