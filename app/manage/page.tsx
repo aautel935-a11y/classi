@@ -13,6 +13,7 @@ import { SITE } from "@/lib/site";
 import { dayLong, time } from "@/lib/format";
 import { ErrorNote } from "@/components/ErrorNote";
 import { errorText } from "@/lib/safe";
+import { KeepForm } from "@/components/KeepForm";
 
 export const dynamic = "force-dynamic";
 
@@ -24,7 +25,8 @@ export default async function Manage({ searchParams }: { searchParams: Promise<R
   if (!inst) {
     return (
       <div className="wrap">
-        <form action={instituteSetupAction} className="section">
+        <form id="kf-instituteSetup" action={instituteSetupAction} className="section">
+            <KeepForm formId="kf-instituteSetup" />
           <h1>حساب المعهد</h1>
           <p className="muted">يظهر المعهد للطلاب بعد مراجعة الوثائق.</p>
           <ErrorNote msg={sp.error} />
@@ -105,7 +107,8 @@ export default async function Manage({ searchParams }: { searchParams: Promise<R
           <PhotoUpload kind="institute" name={inst.name} current={inst.logo_url} />
           <details>
             <summary className="link small">تعديل الاسم والنبذة</summary>
-            <form action={updateInstituteAction} className="formstack" style={{ marginTop: 12 }}>
+            <form id="kf-updateInstitute" action={updateInstituteAction} className="formstack" style={{ marginTop: 12 }}>
+            <KeepForm formId="kf-updateInstitute" />
               <label className="field" htmlFor="i-name">اسم المعهد<input id="i-name" name="name" required defaultValue={inst.name} /></label>
               <label className="field" htmlFor="i-town">البلد<select id="i-town" name="town" defaultValue={inst.town}>{TOWNS.map((x) => <option key={x}>{x}</option>)}</select></label>
               <label className="field" htmlFor="i-bio">نبذة<textarea id="i-bio" name="bio" rows={3} defaultValue={inst.bio} /></label>

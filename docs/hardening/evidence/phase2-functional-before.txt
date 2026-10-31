@@ -1,0 +1,33 @@
+===== BUG-04 saving hours is all-or-nothing
+PASS: hours before = 5
+PASS: bad hours (end before start) are refused (refused: function replace_availability(unknown, integer) does not exist)
+PASS: bad time format is refused (refused: function replace_availability(unknown, integer) does not exist)
+PASS: overlapping ranges on one day are refused (refused: function replace_availability(unknown, integer) does not exist)
+PASS: after refused saves, every hour is still there = 5
+FAIL: a good save replaces the hours and reports how many ranges -> function replace_availability(unknown, integer) does not exist
+FAIL: saved exactly -> got 0 15:00-21:00, 1 15:00-21:00, 2 15:00-21:00, 3 15:00-21:00, 4 15:00-21:00, expected 0 15:00-20:00, 2 08:00-10:00, 2 16:00-21:00, 6 09:00-12:00
+FAIL: break saved with the hours -> got 0, expected 10
+FAIL: clearing all hours is allowed (the teacher pauses) -> function replace_availability(unknown, integer) does not exist
+FAIL: no hours now -> got 5, expected 0
+PASS: a parent cannot save a teacher's hours (refused: function replace_availability(unknown, integer) does not exist)
+===== BUG-13 "set your hours" is done only when the teacher saved them
+PASS: new teacher creates a profile
+FAIL: default hours exist but are not confirmed -> column "hours_confirmed_at" does not exist
+FAIL: teacher saves hours -> function replace_availability(unknown, integer) does not exist
+FAIL: now confirmed -> column "hours_confirmed_at" does not exist
+===== BUG-02 same-day private lessons, at least 2 hours ahead
+PASS: a lesson 30 minutes from now is too soon (refused: هذا الموعد خارج ساعات المعلم المتاحة)
+FAIL: a lesson later today (3 hours ahead) can be booked -> هذا الموعد خارج ساعات المعلم المتاحة
+===== BUG-05 removing a child never moves their bookings to the parent
+PASS: book a group seat for يوسف
+FAIL: removing يوسف while he has an upcoming lesson is refused -> it was allowed
+FAIL: the booking still belongs to يوسف -> got 0, expected 1
+PASS: removing سلمى (no bookings) works
+FAIL: cancel يوسف's lesson -> الحجز غير موجود
+PASS: now يوسف can be removed
+===== BUG-26 one attendance record: the teacher's report and the institute's register agree
+PASS: institute marks the student absent
+PASS: a lesson report for that meeting
+PASS: the register follows the report = true
+PASS: institute corrects the register to absent
+FAIL: the report follows the register -> got true, expected false

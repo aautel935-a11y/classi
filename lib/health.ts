@@ -44,7 +44,12 @@ export async function runHealthChecks({ external = true }: { external?: boolean 
       if (!r.ok) throw new Error(`رمز الاستجابة ${r.status}`);
       return "تعمل";
     }),
-    ...(!external ? [] : [timed("email", "إرسال البريد (Resend)", async () => {
+    ...(!external ? [] : [timed("alerts", "تنبيه الفحص اليومي", async () => {
+      // BUG-06: without these the daily check runs but nobody hears about a failure.
+      const missing = ["ADMIN_EMAIL", "CRON_SECRET"].filter((k) => !process.env[k]);
+      if (missing.length) throw new Error(`أضف ${missing.join(" و")} في إعدادات Vercel، وإلا لن يصلك بريد عند تعطل خدمة`);
+      return "مفعّل: يصل بريد إلى المسؤول عند أي خلل";
+    }), timed("email", "إرسال البريد (Resend)", async () => {
       const resend = process.env.RESEND_API_KEY;
       if (!resend) throw new Error("SKIP: أضف RESEND_API_KEY في Vercel لتفعيل هذا الفحص");
       const r = await fetch("https://api.resend.com/domains", { headers: { Authorization: `Bearer ${resend}` }, cache: "no-store" });

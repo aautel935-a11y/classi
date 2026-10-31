@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import { savePhotoAction } from "@/app/actions";
 import { Avatar } from "./Avatar";
+import { friendlyError } from "@/lib/errors";
 
 type Kind = "teacher" | "institute" | "profile";
 
@@ -52,7 +53,7 @@ export function PhotoUpload({ kind, name, current }: { kind: Kind; name: string;
       setPreview(url);
       router.refresh();
     } catch (err) {
-      setError(err instanceof Error && err.message ? err.message : "تعذّر رفع الصورة، حاول مرة أخرى.");
+      setError(err instanceof Error && err.message ? friendlyError({ message: err.message }) : "تعذّر رفع الصورة، حاول مرة أخرى.");
     } finally {
       setBusy(false);
       if (input.current) input.current.value = "";

@@ -7,6 +7,7 @@ import { dayLong, time } from "@/lib/format";
 import { LEVELS } from "@/lib/types";
 import { ErrorNote } from "@/components/ErrorNote";
 import { safePath } from "@/lib/safe";
+import { KeepForm } from "@/components/KeepForm";
 
 export const dynamic = "force-dynamic";
 
@@ -49,7 +50,8 @@ export default async function ReportPage({ searchParams }: { searchParams: Promi
     const at = x.starts_at ?? x.session?.starts_at;
     return (
       <div className="wrap">
-        <form action={writeReportAction} className="section formstack">
+        <form id="kf-writeReport" action={writeReportAction} className="section formstack">
+            <KeepForm formId="kf-writeReport" />
           <Link className="back" href={back}><Icon name="back" />رجوع</Link>
           <h1>تقرير الحصة</h1>
           <p className="muted">{x.offering?.title} · <b>{who}</b>{at ? ` · ${dayLong(at)} ${time(at)}` : ""}</p>
@@ -80,7 +82,8 @@ export default async function ReportPage({ searchParams }: { searchParams: Promi
   const shared = list.find((l) => l.summary);
   return (
     <div className="wrap">
-      <form action={writeSessionReportsAction} className="section formstack">
+      <form id="kf-writeSessionReports" action={writeSessionReportsAction} className="section formstack">
+            <KeepForm formId="kf-writeSessionReports" />
         <Link className="back" href={back}><Icon name="back" />رجوع</Link>
         <h1>تقرير اللقاء</h1>
         <p className="muted">{x.offering?.title} · اللقاء {x.seq} · {dayLong(x.starts_at)} {time(x.starts_at)}</p>

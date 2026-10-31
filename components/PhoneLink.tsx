@@ -3,11 +3,8 @@
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
+import { digitsOnly, toE164 } from "@/lib/phone";
 
-const toE164 = (raw: string) => {
-  const d = raw.replace(/[^0-9+]/g, "");
-  return /^(\+?972|0)5\d{8}$/.test(d) ? d.replace(/^(\+?972|0)/, "+972") : null;
-};
 const local = (p: string | null) => (p ? p.replace(/^\+?972/, "0") : "");
 
 /** The phone used to sign in. Adding or changing it is confirmed with an SMS code to the new number. */
@@ -53,7 +50,7 @@ export function PhoneLink({ loginPhone, profilePhone }: { loginPhone: string | n
   async function verify(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
     setMsg(null);
-    const token = String(new FormData(e.currentTarget).get("code") ?? "").replace(/\D/g, "");
+    const token = digitsOnly(String(new FormData(e.currentTarget).get("code") ?? ""));
     setBusy(true);
     const { error } = await createClient().auth.verifyOtp({ phone: phone!, token, type: "phone_change" });
     setBusy(false);

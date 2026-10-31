@@ -6,6 +6,8 @@ import { PhotoUpload } from "@/components/PhotoUpload";
 import { PhoneLink } from "@/components/PhoneLink";
 import Link from "next/link";
 import { ErrorNote } from "@/components/ErrorNote";
+import { safePath } from "@/lib/safe";
+import { KeepForm } from "@/components/KeepForm";
 
 export const dynamic = "force-dynamic";
 
@@ -49,18 +51,23 @@ export default async function Account({ searchParams }: { searchParams: Promise<
                   <b>{k.name}</b>
                   {k.grade && <p className="small muted">{k.grade}</p>}
                 </div>
-                <form action={removeChildAction}>
-                  <input type="hidden" name="id" value={k.id} />
-                  <button className="link small" style={{ color: "var(--bad)" }}>حذف</button>
-                </form>
+                <details>
+                  <summary className="link small" style={{ color: "var(--bad)" }}>حذف</summary>
+                  <form action={removeChildAction} style={{ marginTop: 6 }}>
+                    <input type="hidden" name="id" value={k.id} />
+                    <button className="btn sm badb">تأكيد حذف {k.name}</button>
+                  </form>
+                </details>
               </div>
             ))}
+            {sp.ok === "child_removed" && <p className="okmsg">حُذف الاسم من حسابك.</p>}
             <form action={addChildAction} className="card formstack">
+              {sp.back && <input type="hidden" name="back" value={safePath(sp.back, "/account")} />}
               <div className="typeform">
                 <label className="field" htmlFor="kid-name">الاسم<input id="kid-name" name="name" required /></label>
                 <label className="field" htmlFor="kid-grade">الصف<input id="kid-grade" name="grade" placeholder="مثلاً: صف 10" /></label>
               </div>
-              <button className="btn ghost"><Icon name="plus" />إضافة ابن أو ابنة</button>
+              <button className="btn ghost"><Icon name="plus" />{sp.back ? "إضافة والعودة إلى الحجز" : "إضافة ابن أو ابنة"}</button>
             </form>
           </>
         )}
@@ -68,7 +75,8 @@ export default async function Account({ searchParams }: { searchParams: Promise<
         <h2>بياناتي</h2>
         <ErrorNote msg={sp.error} />
         <PhoneLink loginPhone={user.phone ? `+${String(user.phone).replace(/^\+/, "")}` : null} profilePhone={me?.phone ?? null} />
-        <form action={updateProfileAction} className="card formstack">
+        <form id="kf-updateProfile" action={updateProfileAction} className="card formstack">
+            <KeepForm formId="kf-updateProfile" />
           <label className="field" htmlFor="full_name">الاسم<input id="full_name" name="full_name" defaultValue={profile?.full_name ?? ""} /></label>
           <label className="row small"><input type="checkbox" name="sms_ok" defaultChecked={smsOk} /> أوافق على استلام تذكيرات الحصص برسالة SMS أو واتساب</label>
           <label className="field" htmlFor="town">

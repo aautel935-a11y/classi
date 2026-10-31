@@ -14,6 +14,7 @@ import { ShareProfile } from "@/components/ShareProfile";
 import { SITE } from "@/lib/site";
 import { dayLong, isoDay, time } from "@/lib/format";
 import { ErrorNote } from "@/components/ErrorNote";
+import { KeepForm } from "@/components/KeepForm";
 
 export const dynamic = "force-dynamic";
 
@@ -24,13 +25,14 @@ const modeLabel = (m: string | null) => (m === "online" ? "أونلاين" : m =
 export default async function Teach({ searchParams }: { searchParams: Promise<Record<string, string | undefined>> }) {
   const sp = await searchParams;
   const { supabase, user, profile } = await requireUser("/teach");
-  const { data: t } = await supabase.from("teachers").select("id,name,verify,town,bio,years,is_school_teacher,subject_id,photo_url,buffer_minutes,intro_video_url,pending_changes,review_note,whatsapp").eq("user_id", user.id).maybeSingle();
+  const { data: t } = await supabase.from("teachers").select("id,name,verify,town,bio,years,is_school_teacher,subject_id,photo_url,buffer_minutes,intro_video_url,pending_changes,review_note,whatsapp,hours_confirmed_at").eq("user_id", user.id).maybeSingle();
 
   if (!t) {
     const { data: subjects } = await supabase.from("subjects").select("id,name").order("id");
     return (
       <div className="wrap">
-        <form action={teacherSetupAction} className="section">
+        <form id="kf-teacherSetup" action={teacherSetupAction} className="section">
+            <KeepForm formId="kf-teacherSetup" />
           <h1>ملف المعلم</h1>
           <p className="muted">يظهر ملفك للطلاب بعد أن نراجع هويتك وشهاداتك.</p>
           <ErrorNote msg={sp.error} />
@@ -159,7 +161,8 @@ export default async function Teach({ searchParams }: { searchParams: Promise<Re
           <PhotoUpload kind="teacher" name={t.name} current={t.photo_url} />
           <details>
             <summary className="link small">تعديل البيانات والنبذة</summary>
-            <form action={updateTeacherAction} className="formstack" style={{ marginTop: 12 }}>
+            <form id="kf-updateTeacher" action={updateTeacherAction} className="formstack" style={{ marginTop: 12 }}>
+            <KeepForm formId="kf-updateTeacher" />
               <label className="field" htmlFor="e-name">الاسم<input id="e-name" name="name" required defaultValue={t.name} /></label>
               <div className="typeform">
                 <label className="field" htmlFor="e-town">البلد<select id="e-town" name="town" defaultValue={t.town}>{TOWNS.map((x) => <option key={x}>{x}</option>)}</select></label>
@@ -194,7 +197,7 @@ export default async function Teach({ searchParams }: { searchParams: Promise<Re
         const steps: [boolean, string, string][] = [
           [!!t.photo_url, "أضف صورة شخصية", "#profile"],
           [(t.bio ?? "").trim().length >= 30, "اكتب نبذة عن أسلوبك (30 حرفاً على الأقل)", "#profile"],
-          [(hours ?? []).length > 0, "حدّد أوقاتك المتاحة", "#hours"],
+          [!!(t as any).hours_confirmed_at, "حدّد أوقاتك المتاحة", "#hours"],
           [!!bitLocal, "أضف رقم Bit لاستلام الدفعات", "#profile"],
           [mine.length > 0, "انشر أول عرض", "/teach/new"],
           [t.verify === "verified", "انتظر توثيق الإدارة لملفك", "#profile"],
@@ -295,8 +298,10 @@ export default async function Teach({ searchParams }: { searchParams: Promise<Re
 
       <section className="section" id="hours">
         <h2>أوقاتي المتاحة للدروس الخصوصية</h2>
-        <form action={saveAvailabilityAction} className="card formstack">
-          {sp.ok === "hours" && <p className="okmsg">حُفظت الأوقات.</p>}
+        <form id="kf-saveAvailability" action={saveAvailabilityAction} className="card formstack">
+            <KeepForm formId="kf-saveAvailability" />
+          {sp.ok === "hours" && <p className="okmsg">{sp.n === "0" ? "حُفظ: لا أوقات متاحة الآن، فلن تظهر مواعيد للحجز حتى تضيف أوقاتاً." : `حُفظت الأوقات (${sp.n ?? ""} فترة). هذه هي المواعيد التي يراها الطلاب.`}</p>}
+          {!(t as any).hours_confirmed_at && <p className="note">هذه أوقات مقترحة (الأحد–الخميس 15:00–21:00). راجعها واحفظها لتصبح أوقاتك.</p>}
           <div className="hours-grid">
             {DAYS.map((d, i) => {
               const r = dayRanges(i);

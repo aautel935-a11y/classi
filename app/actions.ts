@@ -4,10 +4,11 @@ import { revalidatePath, revalidateTag } from "next/cache";
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { fromLocal } from "@/lib/format";
-import { WEEKDAYS, datesOn, nextDays } from "@/lib/dates";
+import { datesOn, nextDays } from "@/lib/dates";
 import { cleanMobile } from "@/lib/contact";
 import type { OfferingType, Place, Role } from "@/lib/types";
 import { safePath } from "@/lib/safe";
+import { friendlyError } from "@/lib/errors";
 
 type Result = { error?: string; ok?: boolean; count?: number; created?: number; skipped?: string[] };
 
@@ -37,7 +38,7 @@ export async function bookAction(input: {
     const { error } = await supabase.rpc("create_trial_booking", {
       p_offering: input.offeringId, p_child: input.childId || null, p_starts_at: input.startsAt || null, p_pay: input.pay, p_mode: input.mode || null,
     });
-    if (error) return { error: error.message };
+    if (error) return { error: friendlyError(error) };
     revalidatePath("/schedule");
     return { ok: true };
   }
@@ -50,7 +51,7 @@ export async function bookAction(input: {
       p_pay: input.pay,
       p_mode: input.mode || null,
     });
-    if (error) return { error: error.message };
+    if (error) return { error: friendlyError(error) };
     revalidatePath("/schedule");
     const res = data as { created: number; skipped: string[] };
     return { ok: true, created: res.created, skipped: res.skipped };
@@ -64,7 +65,7 @@ export async function bookAction(input: {
     p_weekly: !!input.weekly,
     p_mode: input.mode || null,
   });
-  if (error) return { error: error.message };
+  if (error) return { error: friendlyError(error) };
   revalidatePath("/schedule");
   return { ok: true };
 }
@@ -74,14 +75,14 @@ export async function cancelBookingAction(form: FormData) {
   const { supabase } = await client();
   const { error } = await supabase.rpc("cancel_booking", { p_booking: str(form, "id") });
   revalidatePath("/schedule");
-  if (error) redirect(`/schedule?error=${encodeURIComponent(error.message)}`);
+  if (error) redirect(`/schedule?error=${encodeURIComponent(friendlyError(error))}`);
 }
 
 export async function respondAction(form: FormData) {
   const { supabase } = await client();
   const { error } = await supabase.rpc("respond_booking", { p_booking: str(form, "id"), p_accept: str(form, "accept") === "1" });
   revalidatePath("/teach");
-  if (error) redirect(`/teach?error=${encodeURIComponent(error.message)}`);
+  if (error) redirect(`/teach?error=${encodeURIComponent(friendlyError(error))}`);
 }
 
 // ---------- rescheduling ----------
@@ -104,7 +105,7 @@ export async function rescheduleAction(input: {
     p_scope: input.scope,
     p_reason: input.reason || null,
   });
-  if (error) return { error: error.message };
+  if (error) return { error: friendlyError(error) };
   revalidatePath(safePath(input.path, "/"));
   return { ok: true, count: data as number };
 }
@@ -140,8 +141,9 @@ export async function updateProfileAction(form: FormData) {
   const { supabase, user } = await client();
   if (!user) redirect("/login");
   // The phone is changed only through a verified SMS code (PhoneLink), never typed in here.
-  await supabase.from("profiles").update({ full_name: str(form, "full_name"), town: str(form, "town") || null, sms_ok: form.get("sms_ok") === "on" }).eq("id", user.id);
+  const { error } = await supabase.from("profiles").update({ full_name: str(form, "full_name"), town: str(form, "town") || null, sms_ok: form.get("sms_ok") === "on" }).eq("id", user.id);
   revalidatePath("/account");
+  if (error) redirect(`/account?error=${encodeURIComponent(friendlyError(error))}`);
 }
 
 export async function addChildAction(form: FormData) {
@@ -149,14 +151,21 @@ export async function addChildAction(form: FormData) {
   if (!user) redirect("/login");
   const name = str(form, "name");
   if (!name) return;
-  await supabase.from("children").insert({ guardian_id: user.id, name, grade: str(form, "grade") || null });
+  const { error } = await supabase.from("children").insert({ guardian_id: user.id, name, grade: str(form, "grade") || null });
   revalidatePath("/account");
+  if (error) redirect(`/account?error=${encodeURIComponent(friendlyError(error))}#children`);
+  // Coming from the booking sheet: go back to the offer (UX-11).
+  const back = safePath(str(form, "back"), "");
+  if (back) redirect(back);
 }
 
 export async function removeChildAction(form: FormData) {
-  const { supabase } = await client();
-  await supabase.from("children").delete().eq("id", str(form, "id"));
+  const { supabase, user } = await client();
+  if (!user) redirect("/login?next=/account");
+  // The database refuses while the child has upcoming lessons, a package or a weekly series (BUG-05).
+  const { error } = await supabase.from("children").delete().eq("id", str(form, "id"));
   revalidatePath("/account");
+  redirect(`/account?${error ? `error=${encodeURIComponent(friendlyError(error))}` : "ok=child_removed"}#children`);
 }
 
 // ---------- teacher ----------
@@ -173,7 +182,7 @@ export async function teacherSetupAction(form: FormData) {
     years: num(form, "years"),
     is_school_teacher: form.get("school") === "on",
   });
-  if (error) redirect(`/teach?error=${encodeURIComponent("تعذّر حفظ الملف: " + error.message)}`);
+  if (error) redirect(`/teach?error=${encodeURIComponent("تعذّر حفظ الملف: " + friendlyError(error))}`);
   revalidatePath("/teach");
   redirect("/teach");
 }
@@ -204,6 +213,11 @@ export async function newOfferingAction(form: FormData) {
   const places: Place[] = type === "recorded" ? ["online"] : placeSel === "both" ? ["home", "online"] : [(placeSel || "home") as Place];
   const weekday = num(form, "weekday");
   const tm = str(form, "time") || "18:00";
+  // Validate before writing anything (an invalid time used to fail after the offer was already saved: BUG-09).
+  if (!["private", "group", "recorded"].includes(type)) redirect(`/teach/new?error=${encodeURIComponent("اختر نوع العرض.")}`);
+  if (type === "group" && (!Number.isInteger(weekday) || weekday < 0 || weekday > 6 || !/^([01]\d|2[0-3]):[0-5]\d$/.test(tm))) {
+    redirect(`/teach/new?error=${encodeURIComponent("اختر يوم اللقاء ووقته بصيغة 00:00.")}`);
+  }
   const row: Record<string, unknown> = {
     type,
     teacher_id: t.id,
@@ -219,19 +233,29 @@ export async function newOfferingAction(form: FormData) {
   };
   if (type === "group") {
     row.seats = num(form, "seats") || 6;
-    row.schedule_note = `كل ${["أحد", "اثنين", "ثلاثاء", "أربعاء", "خميس", "جمعة"][weekday]} ${tm}`;
+    row.schedule_note = `كل ${["أحد", "اثنين", "ثلاثاء", "أربعاء", "خميس", "جمعة", "سبت"][weekday]} ${tm}`;
   }
   if (type === "recorded") row.lessons_count = num(form, "lessons") || null;
   const link = str(form, "link");
   if (link && !/^https?:\/\//i.test(link)) redirect(`/teach/new?error=${encodeURIComponent("الرابط يجب أن يبدأ بـ https://")}`);
   const { data: o, error } = await supabase.from("offerings").insert(row).select("id").single();
-  if (error || !o) redirect(`/teach/new?error=${encodeURIComponent(error?.message ?? "تعذّر النشر")}`);
-  if (link) await supabase.from("offering_links").upsert({ offering_id: o.id, url: link });
+  if (error || !o) redirect(`/teach/new?error=${encodeURIComponent(error ? friendlyError(error) : "تعذّر النشر")}`);
+  // The link and the meetings belong to the offer: if either cannot be saved, the new offer is removed again
+  // (it has no bookings yet), so a teacher never ends up with a published group that has no meetings (BUG-09).
+  const fail = async (e: { code?: string; message?: string }) => {
+    await supabase.from("offerings").delete().eq("id", o.id);
+    redirect(`/teach/new?error=${encodeURIComponent(friendlyError(e))}`);
+  };
+  if (link) {
+    const { error: le } = await supabase.from("offering_links").upsert({ offering_id: o.id, url: link });
+    if (le) await fail(le);
+  }
   if (type === "group") {
     const days = datesOn(nextDays(1)[0], [weekday], 8);
-    await supabase.from("sessions").insert(
+    const { error: se } = await supabase.from("sessions").insert(
       days.map((d, i) => ({ offering_id: o.id, seq: i + 1, starts_at: fromLocal(d, tm).toISOString(), minutes: Number(row.minutes) || 90 }))
     );
+    if (se) await fail(se);
   }
   revalidatePath("/teach");
   redirect("/teach?ok=published");
@@ -247,7 +271,7 @@ export async function deleteOfferingAction(form: FormData) {
   // The database refuses to delete an offer that has bookings, packages or reviews (audit SEC-05): 0 rows come back.
   const { data: gone, error } = await supabase.from("offerings").delete().eq("id", id).select("id");
   revalidatePath(back);
-  const msg = error ? error.message : !gone?.length ? "لا يمكن حذف عرض له حجوزات أو رزم أو تقييمات. أخفِه بدلاً من ذلك." : "";
+  const msg = error ? friendlyError(error) : !gone?.length ? "لا يمكن حذف عرض له حجوزات أو رزم أو تقييمات. أخفِه بدلاً من ذلك." : "";
   redirect(withQ(back, msg ? `error=${encodeURIComponent(msg)}` : "ok=deleted"));
 }
 
@@ -258,7 +282,7 @@ export async function toggleOfferingAction(form: FormData) {
   const active = str(form, "active") === "1";
   const { error } = await supabase.from("offerings").update({ active }).eq("id", str(form, "id"));
   revalidatePath(back);
-  redirect(withQ(back, `${error ? `error=${encodeURIComponent(error.message)}` : active ? "ok=shown" : "ok=hidden"}`));
+  redirect(withQ(back, `${error ? `error=${encodeURIComponent(friendlyError(error))}` : active ? "ok=shown" : "ok=hidden"}`));
 }
 
 // ---------- institute ----------
@@ -290,6 +314,9 @@ export async function newCourseAction(form: FormData) {
   const tm = str(form, "time") || "17:00";
   const room = str(form, "room_id") || null;
   if (!weekdays.length || !start) redirect(`/manage/new-course?error=${encodeURIComponent("اختر يوم البداية وأيام اللقاءات.")}`);
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(start) || !/^([01]\d|2[0-3]):[0-5]\d$/.test(tm)) {
+    redirect(`/manage/new-course?error=${encodeURIComponent("اكتب تاريخ البداية والوقت بصيغة صحيحة.")}`);
+  }
   const names = ["الأحد", "الاثنين", "الثلاثاء", "الأربعاء", "الخميس", "الجمعة", "السبت"];
   const { data: o, error } = await supabase
     .from("offerings")
@@ -311,11 +338,16 @@ export async function newCourseAction(form: FormData) {
     })
     .select("id")
     .single();
-  if (error || !o) redirect(`/manage/new-course?error=${encodeURIComponent(error?.message ?? "تعذّر الحفظ")}`);
+  if (error || !o) redirect(`/manage/new-course?error=${encodeURIComponent(error ? friendlyError(error) : "تعذّر الحفظ")}`);
   const days = datesOn(start, weekdays, count);
-  await supabase.from("sessions").insert(
+  const { error: se } = await supabase.from("sessions").insert(
     days.map((d, i) => ({ offering_id: o.id, seq: i + 1, starts_at: fromLocal(d, tm).toISOString(), minutes: [45, 60, 90, 120, 150].includes(num(form, "minutes")) ? num(form, "minutes") : 90, room_id: room }))
   );
+  if (se) {
+    // No course without its meetings (BUG-09): remove the new, unbooked course and report why.
+    await supabase.from("offerings").delete().eq("id", o.id);
+    redirect(`/manage/new-course?error=${encodeURIComponent(friendlyError(se))}`);
+  }
   revalidatePath("/manage");
   redirect(`/manage/course/${o.id}`);
 }
@@ -329,7 +361,7 @@ export async function addStaffAction(form: FormData) {
   // An invitation: the teacher joins the staff only after accepting it (audit SEC-02).
   const { error } = await supabase.from("institute_teachers").insert({ institute_id: inst.id, teacher_id: str(form, "teacher_id") });
   revalidatePath("/manage");
-  const msg = !error ? "" : error.code === "23505" ? "هذا المعلم مدعوّ أو ضمن الطاقم سابقاً." : error.message;
+  const msg = !error ? "" : error.code === "23505" ? "هذا المعلم مدعوّ أو ضمن الطاقم سابقاً." : friendlyError(error);
   redirect(`/manage?${msg ? `error=${encodeURIComponent(msg)}` : "saved=staff_invited"}#staff`);
 }
 
@@ -339,7 +371,7 @@ export async function answerStaffInviteAction(form: FormData) {
   const accept = str(form, "accept") === "1";
   const { error } = await supabase.rpc("answer_staff_invite", { p_institute: str(form, "institute_id"), p_accept: accept });
   revalidatePath("/teach");
-  redirect(`/teach?${error ? `error=${encodeURIComponent(error.message)}` : accept ? "ok=invite_accepted" : "ok=invite_declined"}#invites`);
+  redirect(`/teach?${error ? `error=${encodeURIComponent(friendlyError(error))}` : accept ? "ok=invite_accepted" : "ok=invite_declined"}#invites`);
 }
 
 export async function answerLinkAction(form: FormData) {
@@ -348,7 +380,7 @@ export async function answerLinkAction(form: FormData) {
   const accept = str(form, "accept") === "1";
   const { error } = await supabase.rpc("accept_booking_link", { p_booking: str(form, "booking_id"), p_accept: accept });
   revalidatePath("/schedule");
-  redirect(`/schedule?${error ? `error=${encodeURIComponent(error.message)}` : accept ? "ok=linked" : "ok=link_declined"}#links`);
+  redirect(`/schedule?${error ? `error=${encodeURIComponent(friendlyError(error))}` : accept ? "ok=linked" : "ok=link_declined"}#links`);
 }
 
 export async function saveAttendanceAction(form: FormData) {
@@ -357,10 +389,10 @@ export async function saveAttendanceAction(form: FormData) {
   const rows = [...form.entries()]
     .filter(([k]) => k.startsWith("b_"))
     .map(([k, v]) => ({ session_id: sessionId, booking_id: k.slice(2), present: v === "p" }));
-  if (rows.length) await supabase.from("attendance").upsert(rows);
   const path = safePath(str(form, "path"), "/manage");
+  const { error } = rows.length ? await supabase.from("attendance").upsert(rows) : { error: null };
   revalidatePath(path);
-  redirect(withQ(path, "saved=1"));
+  redirect(withQ(path, error ? `error=${encodeURIComponent(friendlyError(error))}` : `saved=${rows.length}`));
 }
 
 // ---------- photos ----------
@@ -383,7 +415,7 @@ export async function savePhotoAction(kind: "teacher" | "institute" | "profile",
       : kind === "institute"
         ? await supabase.from("institutes").update({ logo_url: url }).eq("owner_id", user.id)
         : await supabase.from("profiles").update({ avatar_url: url }).eq("id", user.id);
-  if (error) return { error: error.message };
+  if (error) return { error: friendlyError(error) };
   revalidatePath("/", "layout");
   return { ok: true };
 }
@@ -392,7 +424,12 @@ export async function updateTeacherAction(form: FormData) {
   revalidateTag("catalog");
   const { supabase, user } = await client();
   if (!user) redirect("/login?next=/teach");
-  await supabase
+  // Check everything first; nothing is written when a field is wrong (BUG-10: a bad video link used to erase the saved one).
+  const video = str(form, "intro_video");
+  if (video && !/^https:\/\/\S{6,290}$/.test(video)) redirect(`/teach?error=${encodeURIComponent("رابط الفيديو يجب أن يبدأ بـ https://")}#profile`);
+  const wa = form.has("whatsapp") && str(form, "whatsapp") ? cleanMobile(str(form, "whatsapp")) : null;
+  if (form.has("whatsapp") && str(form, "whatsapp") && !wa) redirect(`/teach?error=${encodeURIComponent("رقم الواتساب غير صحيح. اكتب رقم جوال مثل 050-1234567.")}#profile`);
+  const { error } = await supabase
     .from("teachers")
     .update({
       name: str(form, "name"),
@@ -401,18 +438,14 @@ export async function updateTeacherAction(form: FormData) {
       bio: str(form, "bio"),
       years: num(form, "years"),
       is_school_teacher: form.get("school") === "on",
-      intro_video_url: /^https:\/\/\S{6,290}$/.test(str(form, "intro_video")) ? str(form, "intro_video") : null,
+      intro_video_url: video || null,
+      ...(form.has("whatsapp") ? { whatsapp: wa } : {}),
     })
     .eq("user_id", user.id);
-  if (str(form, "intro_video") && !/^https:\/\//.test(str(form, "intro_video"))) redirect(`/teach?error=${encodeURIComponent("رابط الفيديو يجب أن يبدأ بـ https://")}`);
-  if (form.has("whatsapp")) {
-    const wa = str(form, "whatsapp") ? cleanMobile(str(form, "whatsapp")) : null;
-    if (str(form, "whatsapp") && !wa) redirect(`/teach?error=${encodeURIComponent("رقم الواتساب غير صحيح. اكتب رقم جوال مثل 050-1234567.")}#profile`);
-    await supabase.from("teachers").update({ whatsapp: wa }).eq("user_id", user.id);
-  }
+  if (error) redirect(`/teach?error=${encodeURIComponent(friendlyError(error))}#profile`);
   if (form.has("bit_phone")) {
     const { error: bitErr } = await supabase.rpc("set_bit_phone", { p_phone: str(form, "bit_phone"), p_institute: false });
-    if (bitErr) redirect(`/teach?error=${encodeURIComponent(bitErr.message)}`);
+    if (bitErr) redirect(`/teach?error=${encodeURIComponent(friendlyError(bitErr))}#profile`);
   }
   revalidatePath("/teach");
   redirect("/teach?ok=profile");
@@ -446,7 +479,7 @@ export async function adminVerifyAction(form: FormData) {
     p_status: str(form, "status"),
   });
   revalidatePath("/admin");
-  if (error) redirect(`/admin?error=${encodeURIComponent(error.message)}`);
+  if (error) redirect(`/admin?error=${encodeURIComponent(friendlyError(error))}`);
 }
 
 // ---------- meeting / content link ----------
@@ -461,7 +494,7 @@ export async function saveLinkAction(form: FormData) {
   } else {
     if (!/^https?:\/\//i.test(url)) redirect(`${path}?error=${encodeURIComponent("الرابط يجب أن يبدأ بـ https://")}`);
     const { error } = await supabase.from("offering_links").upsert({ offering_id: id, url, note: str(form, "note") || null, updated_at: new Date().toISOString() });
-    if (error) redirect(`${path}?error=${encodeURIComponent(error.message)}`);
+    if (error) redirect(`${path}?error=${encodeURIComponent(friendlyError(error))}`);
   }
   revalidatePath(path);
   redirect(`${path}?saved=link`);
@@ -471,29 +504,21 @@ export async function saveLinkAction(form: FormData) {
 export async function saveAvailabilityAction(form: FormData) {
   const { supabase, user } = await client();
   if (!user) redirect("/login?next=/teach");
-  const { data: t } = await supabase.from("teachers").select("id").eq("user_id", user.id).maybeSingle();
-  if (!t) redirect("/teach");
-  const rows: { teacher_id: string; weekday: number; start_time: string; end_time: string }[] = [];
+  // "9:00" or "09:00:00" -> "09:00"; the database validates the rest.
+  const hhmm = (v: string) => (/^\d{1,2}:\d{2}/.test(v) ? v.padStart(5, "0").slice(0, 5) : v);
+  const rows: { weekday: number; start: string; end: string }[] = [];
   for (let w = 0; w <= 6; w++) {
     if (form.get(`on_${w}`) !== "on") continue;
-    const ranges = [[str(form, `from_${w}`), str(form, `to_${w}`)], [str(form, `from2_${w}`), str(form, `to2_${w}`)]].filter(([a, b]) => a && b);
-    for (const [a, b] of ranges) {
-      if (b <= a) redirect(`/teach?error=${encodeURIComponent(`في يوم ${WEEKDAYS[w]}: ساعة النهاية يجب أن تكون بعد البداية.`)}#hours`);
+    for (const [a, b] of [[str(form, `from_${w}`), str(form, `to_${w}`)], [str(form, `from2_${w}`), str(form, `to2_${w}`)]]) {
+      if (a && b) rows.push({ weekday: w, start: hhmm(a), end: hhmm(b) });
     }
-    if (ranges.length === 2 && ranges[1][0] < ranges[0][1] && ranges[0][0] < ranges[1][1]) {
-      redirect(`/teach?error=${encodeURIComponent(`في يوم ${WEEKDAYS[w]}: الفترتان متداخلتان.`)}#hours`);
-    }
-    for (const [a, b] of ranges) rows.push({ teacher_id: t.id, weekday: w, start_time: a, end_time: b });
   }
   const buffer = [0, 5, 10, 15, 30].includes(num(form, "buffer")) ? num(form, "buffer") : 0;
-  await supabase.from("teachers").update({ buffer_minutes: buffer }).eq("id", t.id);
-  await supabase.from("availability").delete().eq("teacher_id", t.id);
-  if (rows.length) await supabase.from("availability").insert(rows);
-  const days = rows;
-  // People waiting for this teacher's private lessons hear about the new hours.
-  if (days.length) await supabase.rpc("waitlist_hours_opened");
+  // One transaction in the database: either all the new hours are saved, or the old ones stay (BUG-04).
+  const { data, error } = await supabase.rpc("replace_availability", { p_rows: rows, p_buffer: buffer });
   revalidatePath("/teach");
-  redirect("/teach?ok=hours#hours");
+  if (error) redirect(`/teach?error=${encodeURIComponent(friendlyError(error))}#hours`);
+  redirect(`/teach?ok=hours&n=${data ?? 0}#hours`);
 }
 
 // ---------- editing an offer ----------
@@ -533,7 +558,7 @@ export async function updateOfferingAction(form: FormData) {
   const { error } = await supabase.from("offerings").update(row).eq("id", id);
   revalidatePath(path);
   revalidatePath(`/offer/${id}`);
-  redirect(`${path}?${error ? `error=${encodeURIComponent(error.message)}` : "saved=offer"}`);
+  redirect(`${path}?${error ? `error=${encodeURIComponent(friendlyError(error))}` : "saved=offer"}`);
 }
 
 // ---------- messages ----------
@@ -593,7 +618,7 @@ export async function submitReportAction(form: FormData) {
     reason: str(form, "reason") || "other",
     details: str(form, "details").slice(0, 1000) || null,
   });
-  redirect(withQ(back, `${error ? `report_error=${encodeURIComponent(error.message)}` : "reported=1"}`));
+  redirect(withQ(back, `${error ? `report_error=${encodeURIComponent(friendlyError(error))}` : "reported=1"}`));
 }
 
 export async function adminSetStatusAction(form: FormData) {
@@ -607,7 +632,7 @@ export async function adminSetStatusAction(form: FormData) {
     p_reason: str(form, "reason") || null,
   });
   revalidatePath(back);
-  redirect(withQ(back, `${error ? `error=${encodeURIComponent(error.message)}` : "done=status"}`));
+  redirect(withQ(back, `${error ? `error=${encodeURIComponent(friendlyError(error))}` : "done=status"}`));
 }
 
 export async function adminHideAction(form: FormData) {
@@ -621,7 +646,7 @@ export async function adminHideAction(form: FormData) {
     p_reason: str(form, "reason") || null,
   });
   revalidatePath(back);
-  redirect(withQ(back, `${error ? `error=${encodeURIComponent(error.message)}` : "done=hide"}`));
+  redirect(withQ(back, `${error ? `error=${encodeURIComponent(friendlyError(error))}` : "done=hide"}`));
 }
 
 export async function adminCloseReportAction(form: FormData) {
@@ -632,7 +657,7 @@ export async function adminCloseReportAction(form: FormData) {
     p_note: str(form, "note") || null,
   });
   revalidatePath("/admin");
-  redirect(`/admin?tab=reports${error ? `&error=${encodeURIComponent(error.message)}` : "&done=report"}`);
+  redirect(`/admin?tab=reports${error ? `&error=${encodeURIComponent(friendlyError(error))}` : "&done=report"}`);
 }
 
 export async function cancelSeriesAction(form: FormData) {
@@ -641,7 +666,7 @@ export async function cancelSeriesAction(form: FormData) {
   const back = safePath(str(form, "back"), "/schedule");
   const { data, error } = await supabase.rpc("cancel_series", { p_series: str(form, "id") });
   revalidatePath(back);
-  redirect(withQ(back, `${error ? `error=${encodeURIComponent(error.message)}` : `cancelled_series=${data}`}`));
+  redirect(withQ(back, `${error ? `error=${encodeURIComponent(friendlyError(error))}` : `cancelled_series=${data}`}`));
 }
 
 // ---------- waiting list ----------
@@ -653,7 +678,7 @@ export async function joinWaitlistAction(input: { offeringId: string; childId?: 
     p_child: input.childId || null,
     p_note: (input.note ?? "").slice(0, 300) || null,
   });
-  if (error) return { error: error.message };
+  if (error) return { error: friendlyError(error) };
   revalidatePath(`/offer/${input.offeringId}`);
   revalidatePath("/schedule");
   return { ok: true, count: Number(data) };
@@ -665,7 +690,7 @@ export async function leaveWaitlistAction(form: FormData) {
   const back = safePath(str(form, "back"), "/schedule");
   const { error } = await supabase.rpc("leave_waitlist", { p_id: str(form, "id") });
   revalidatePath(back);
-  redirect(withQ(back, `${error ? `error=${encodeURIComponent(error.message)}` : "left=1"}`));
+  redirect(withQ(back, `${error ? `error=${encodeURIComponent(friendlyError(error))}` : "left=1"}`));
 }
 
 export async function respondWaitlistAction(form: FormData) {
@@ -676,7 +701,7 @@ export async function respondWaitlistAction(form: FormData) {
   const { data, error } = await supabase.rpc("respond_waitlist", { p_id: str(form, "id"), p_accept: accept, p_reply: str(form, "reply") || null });
   revalidateTag("catalog");
   revalidatePath(back);
-  if (error) redirect(withQ(back, `error=${encodeURIComponent(error.message)}`) + "#waitlist");
+  if (error) redirect(withQ(back, `error=${encodeURIComponent(friendlyError(error))}`) + "#waitlist");
   if (data) redirect(`/messages/${data}`);
   redirect(withQ(back, `wl=${accept ? "accepted" : "declined"}`) + "#waitlist");
 }
@@ -686,7 +711,7 @@ export async function savePushSubscriptionAction(sub: { endpoint: string; p256dh
   const { supabase, user } = await client();
   if (!user) return { error: "سجّل الدخول أولاً." };
   const { error } = await supabase.rpc("save_push_subscription", { p_endpoint: sub.endpoint, p_p256dh: sub.p256dh, p_auth: sub.auth });
-  return error ? { error: error.message } : { ok: true };
+  return error ? { error: friendlyError(error) } : { ok: true };
 }
 
 export async function removePushSubscriptionAction(endpoint: string): Promise<Result> {
@@ -726,7 +751,7 @@ export async function teacherBlockAction(form: FormData) {
     p_starts_at: at, p_minutes: Math.min(Math.max(num(form, "minutes") || 60, 15), 600), p_note: str(form, "note") || null, p_weeks: str(form, "weekly") === "1" ? 8 : 1,
   });
   revalidateTag("catalog");
-  if (error) redirect(calBack(form, { error: error.message }));
+  if (error) redirect(calBack(form, { error: friendlyError(error) }));
   redirect(calBack(form, { ok: Number(data) > 1 ? `blocked:${data}` : "blocked" }));
 }
 
@@ -735,7 +760,7 @@ export async function teacherUnblockAction(form: FormData) {
   if (!user) redirect("/login?next=/teach/calendar");
   const { error } = await supabase.rpc("teacher_unblock", { p_block: str(form, "id"), p_all: str(form, "all") === "1" });
   revalidateTag("catalog");
-  redirect(calBack(form, error ? { error: error.message } : { ok: "opened" }));
+  redirect(calBack(form, error ? { error: friendlyError(error) } : { ok: "opened" }));
 }
 
 export async function teacherAddBookingAction(form: FormData) {
@@ -748,7 +773,7 @@ export async function teacherAddBookingAction(form: FormData) {
     p_offering: str(form, "offering_id"), p_student: student, p_child: child || null, p_starts_at: at, p_weekly: str(form, "weekly") === "1",
   });
   revalidateTag("catalog");
-  if (error) redirect(calBack(form, { error: error.message }));
+  if (error) redirect(calBack(form, { error: friendlyError(error) }));
   const r = data as { created: number; skipped: string[] };
   redirect(calBack(form, { ok: "added", n: String(r.created), ...(r.skipped?.length ? { skipped: r.skipped.join("، ") } : {}) }));
 }
@@ -762,7 +787,7 @@ export async function teacherMoveBookingAction(form: FormData) {
     p_booking: str(form, "id"), p_new_start: at, p_scope: str(form, "scope") === "following" ? "following" : "one", p_note: str(form, "note") || null,
   });
   revalidateTag("catalog");
-  if (error) redirect(calBack(form, { error: error.message }));
+  if (error) redirect(calBack(form, { error: friendlyError(error) }));
   redirect(calBack(form, { ok: "moved", day: str(form, "date") }));
 }
 
@@ -774,7 +799,7 @@ export async function teacherCancelBookingAction(form: FormData) {
   });
   revalidateTag("catalog");
   revalidatePath("/teach");
-  redirect(calBack(form, error ? { error: error.message } : { ok: "cancelled" }));
+  redirect(calBack(form, error ? { error: friendlyError(error) } : { ok: "cancelled" }));
 }
 
 // ---------- lesson packages ----------
@@ -785,7 +810,7 @@ export async function buyPackageAction(form: FormData) {
   const who = str(form, "who");
   const { error } = await supabase.rpc("buy_package", { p_offering: id, p_child: who && who !== "self" ? who : null, p_pay: str(form, "pay") || "bit" });
   revalidatePath(`/offer/${id}`);
-  redirect(`/offer/${id}?${error ? `package_error=${encodeURIComponent(error.message)}` : "package=1"}`);
+  redirect(`/offer/${id}?${error ? `package_error=${encodeURIComponent(friendlyError(error))}` : "package=1"}`);
 }
 
 export async function cancelPackageAction(form: FormData) {
@@ -794,7 +819,7 @@ export async function cancelPackageAction(form: FormData) {
   const back = safePath(str(form, "back"), "/teach");
   const { error } = await supabase.rpc("cancel_package", { p_package: str(form, "id") });
   revalidatePath(back);
-  redirect(withQ(back, `${error ? `error=${encodeURIComponent(error.message)}` : "saved=package"}`));
+  redirect(withQ(back, `${error ? `error=${encodeURIComponent(friendlyError(error))}` : "saved=package"}`));
 }
 
 // ---------- lesson reports ----------
@@ -818,7 +843,7 @@ export async function writeReportAction(form: FormData) {
     p_note: str(form, "note") || null,
     p_present: str(form, "absent") !== "on",
   });
-  if (error) redirect(`/teach/report?booking=${booking}&error=${encodeURIComponent(error.message)}`);
+  if (error) redirect(`/teach/report?booking=${booking}&error=${encodeURIComponent(friendlyError(error))}`);
   revalidatePath("/teach");
   redirect(withQ(back, `ok=report`));
 }
@@ -839,7 +864,7 @@ export async function writeSessionReportsAction(form: FormData) {
   const { error } = await supabase.rpc("write_session_reports", {
     p_session: session, p_summary: str(form, "summary"), p_homework: str(form, "homework") || null, p_items: items,
   });
-  if (error) redirect(`/teach/report?session=${session}&error=${encodeURIComponent(error.message)}`);
+  if (error) redirect(`/teach/report?session=${session}&error=${encodeURIComponent(friendlyError(error))}`);
   revalidatePath("/teach");
   redirect(withQ(back, `ok=report`));
 }
@@ -859,7 +884,7 @@ export async function reportPaymentAction(form: FormData) {
   const back = backTo(form, "/schedule");
   const { error } = await supabase.rpc("report_payment", { p_booking: str(form, "booking_id") || null, p_package: str(form, "package_id") || null });
   revalidatePath(back.split("?")[0]);
-  redirect(withQ(back, error ? `error=${encodeURIComponent(error.message)}` : "paid_reported=1"));
+  redirect(withQ(back, error ? `error=${encodeURIComponent(friendlyError(error))}` : "paid_reported=1"));
 }
 
 export async function confirmPaymentAction(form: FormData) {
@@ -870,7 +895,7 @@ export async function confirmPaymentAction(form: FormData) {
     p_booking: str(form, "booking_id") || null, p_package: str(form, "package_id") || null, p_received: str(form, "received") !== "0",
   });
   revalidatePath(back.split(/[?#]/)[0]);
-  redirect(withQ(back, error ? `error=${encodeURIComponent(error.message)}` : "ok=payment"));
+  redirect(withQ(back, error ? `error=${encodeURIComponent(friendlyError(error))}` : "ok=payment"));
 }
 
 // ---------- admin content review ----------
@@ -881,7 +906,7 @@ export async function adminReviewAction(form: FormData) {
     p_kind: str(form, "kind"), p_id: str(form, "id"), p_approve: str(form, "approve") === "1", p_note: str(form, "note") || null,
   });
   revalidatePath("/admin");
-  redirect(`/admin?tab=review&${error ? `error=${encodeURIComponent(error.message)}` : "done=1"}`);
+  redirect(`/admin?tab=review&${error ? `error=${encodeURIComponent(friendlyError(error))}` : "done=1"}`);
 }
 
 // ---------- subscriptions (teachers & institutes pay the platform) ----------
@@ -891,7 +916,7 @@ export async function requestSubscriptionAction(form: FormData) {
   const back = backTo(form, "/teach#subscription");
   const { error } = await supabase.rpc("request_subscription", { p_plan: str(form, "plan") });
   revalidatePath(back.split(/[?#]/)[0]);
-  redirect(withQ(back, error ? `error=${encodeURIComponent(error.message)}` : "sub=chosen"));
+  redirect(withQ(back, error ? `error=${encodeURIComponent(friendlyError(error))}` : "sub=chosen"));
 }
 
 export async function reportSubscriptionAction(form: FormData) {
@@ -900,7 +925,7 @@ export async function reportSubscriptionAction(form: FormData) {
   const back = backTo(form, "/teach#subscription");
   const { error } = await supabase.rpc("report_subscription_payment", { p_id: str(form, "id") });
   revalidatePath(back.split(/[?#]/)[0]);
-  redirect(withQ(back, error ? `error=${encodeURIComponent(error.message)}` : "sub=reported"));
+  redirect(withQ(back, error ? `error=${encodeURIComponent(friendlyError(error))}` : "sub=reported"));
 }
 
 export async function adminSubscriptionAction(form: FormData) {
@@ -924,7 +949,7 @@ export async function adminSubscriptionAction(form: FormData) {
   }
   revalidatePath("/admin");
   revalidatePath("/");
-  redirect(`/admin?tab=subs&${error ? `error=${encodeURIComponent(error.message)}` : "done=1"}`);
+  redirect(`/admin?tab=subs&${error ? `error=${encodeURIComponent(friendlyError(error))}` : "done=1"}`);
 }
 
 // ---------- ratings ----------
@@ -934,7 +959,7 @@ export async function leaveReviewAction(form: FormData) {
   const booking = str(form, "booking_id");
   if (!user) redirect(`/login?next=/review?booking=${booking}`);
   const { error } = await supabase.rpc("leave_review", { p_booking: booking, p_stars: num(form, "stars"), p_body: str(form, "body") || null });
-  if (error) redirect(`/review?booking=${booking}&error=${encodeURIComponent(error.message)}`);
+  if (error) redirect(`/review?booking=${booking}&error=${encodeURIComponent(friendlyError(error))}`);
   redirect(`/review?booking=${booking}&done=1`);
 }
 
@@ -945,7 +970,7 @@ export async function replyReviewAction(form: FormData) {
   const back = backTo(form, "/teach#reviews");
   const { error } = await supabase.rpc("reply_review", { p_review: str(form, "id"), p_reply: str(form, "reply") });
   revalidatePath(back.split(/[?#]/)[0]);
-  redirect(withQ(back, error ? `error=${encodeURIComponent(error.message)}` : "ok=reply"));
+  redirect(withQ(back, error ? `error=${encodeURIComponent(friendlyError(error))}` : "ok=reply"));
 }
 
 export async function adminHideReviewAction(form: FormData) {
@@ -953,7 +978,7 @@ export async function adminHideReviewAction(form: FormData) {
   const { supabase } = await client();
   const { error } = await supabase.rpc("admin_hide_review", { p_review: str(form, "id"), p_hidden: str(form, "hidden") === "1" });
   const back = backTo(form, "/admin");
-  redirect(withQ(back, error ? `error=${encodeURIComponent(error.message)}` : "done=1"));
+  redirect(withQ(back, error ? `error=${encodeURIComponent(friendlyError(error))}` : "done=1"));
 }
 
 // ---------- delete my account ----------
@@ -962,7 +987,7 @@ export async function deleteAccountAction(form: FormData) {
   const { supabase, user } = await client();
   if (!user) redirect("/login");
   const { error } = await supabase.rpc("delete_my_account", { p_confirm: str(form, "confirm") });
-  if (error) redirect(`/account?error=${encodeURIComponent(error.message)}#delete`);
+  if (error) redirect(`/account?error=${encodeURIComponent(friendlyError(error))}#delete`);
   await supabase.auth.signOut();
   redirect("/?deleted=1");
 }
@@ -975,7 +1000,7 @@ export async function cancelSessionAction(form: FormData) {
   const { error } = await supabase.rpc("cancel_session", { p_session: str(form, "session_id"), p_reason: str(form, "reason") || null, p_makeup: form.get("makeup") === "on" });
   revalidatePath(back.split(/[?#]/)[0]);
   revalidatePath("/schedule");
-  redirect(withQ(back, error ? `error=${encodeURIComponent(error.message)}` : "ok=cancelled"));
+  redirect(withQ(back, error ? `error=${encodeURIComponent(friendlyError(error))}` : "ok=cancelled"));
 }
 
 export async function enrollWalkInAction(form: FormData) {
@@ -988,7 +1013,7 @@ export async function enrollWalkInAction(form: FormData) {
     p_pay: str(form, "pay") || "cash", p_paid: form.get("paid") === "on",
   });
   revalidatePath(back.split(/[?#]/)[0]);
-  if (error) redirect(withQ(back, `enroll=1&error=${encodeURIComponent(error.message)}`));
+  if (error) redirect(withQ(back, `enroll=1&error=${encodeURIComponent(friendlyError(error))}`));
   // Whether the phone has a Classi account is not revealed (audit SEC-03); the parent links it from their side.
   redirect(withQ(back, `ok=enrolled&id=${data}`));
 }
@@ -999,7 +1024,7 @@ export async function linkWalkInAction(form: FormData) {
   const back = backTo(form, "/manage");
   const { error } = await supabase.rpc("institute_link_booking", { p_booking: str(form, "booking_id") });
   revalidatePath(back.split(/[?#]/)[0]);
-  redirect(withQ(back, error ? `error=${encodeURIComponent(error.message)}` : "ok=link_requested"));
+  redirect(withQ(back, error ? `error=${encodeURIComponent(friendlyError(error))}` : "ok=link_requested"));
 }
 
 export async function removeStaffAction(form: FormData) {
@@ -1007,7 +1032,7 @@ export async function removeStaffAction(form: FormData) {
   if (!user) redirect("/login");
   const { error } = await supabase.rpc("institute_remove_staff", { p_teacher: str(form, "teacher_id") });
   revalidatePath("/manage");
-  redirect(`/manage?${error ? `error=${encodeURIComponent(error.message)}` : "saved=staff_removed"}#staff`);
+  redirect(`/manage?${error ? `error=${encodeURIComponent(friendlyError(error))}` : "saved=staff_removed"}#staff`);
 }
 
 export async function teacherVacationAction(form: FormData) {
@@ -1017,7 +1042,7 @@ export async function teacherVacationAction(form: FormData) {
   const to = str(form, "to") || from;
   const { data, error } = await supabase.rpc("teacher_vacation", { p_from: from, p_to: to, p_note: str(form, "note") || null });
   revalidatePath("/teach/calendar");
-  redirect(`/teach/calendar?day=${from}&${error ? `error=${encodeURIComponent(error.message)}` : `ok=vacation&n=${data ?? 0}`}`);
+  redirect(`/teach/calendar?day=${from}&${error ? `error=${encodeURIComponent(friendlyError(error))}` : `ok=vacation&n=${data ?? 0}`}`);
 }
 
 // ---------- admin operations ----------
@@ -1027,7 +1052,7 @@ export async function adminCancelBookingAction(form: FormData) {
   const back = safePath(str(form, "back"), "/admin?tab=ops");
   const { error } = await supabase.rpc("admin_cancel_booking", { p_booking: str(form, "booking_id"), p_reason: str(form, "reason") });
   revalidatePath("/admin");
-  redirect(withQ(back, error ? `error=${encodeURIComponent(error.message)}` : "done=cancel"));
+  redirect(withQ(back, error ? `error=${encodeURIComponent(friendlyError(error))}` : "done=cancel"));
 }
 
 export async function adminSetPaymentAction(form: FormData) {
@@ -1035,14 +1060,14 @@ export async function adminSetPaymentAction(form: FormData) {
   const back = safePath(str(form, "back"), "/admin?tab=ops");
   const { error } = await supabase.rpc("admin_set_payment", { p_booking: str(form, "booking_id"), p_status: str(form, "status"), p_reason: str(form, "reason") });
   revalidatePath("/admin");
-  redirect(withQ(back, error ? `error=${encodeURIComponent(error.message)}` : "done=payment"));
+  redirect(withQ(back, error ? `error=${encodeURIComponent(friendlyError(error))}` : "done=payment"));
 }
 
 export async function adminMessageAction(form: FormData) {
   const { supabase } = await client();
   const back = safePath(str(form, "back"), "/admin");
   const { error } = await supabase.rpc("admin_message", { p_user: str(form, "user_id"), p_body: str(form, "body") });
-  redirect(withQ(back, error ? `error=${encodeURIComponent(error.message)}` : "done=message"));
+  redirect(withQ(back, error ? `error=${encodeURIComponent(friendlyError(error))}` : "done=message"));
 }
 
 export async function adminEditOfferAction(form: FormData) {
@@ -1051,5 +1076,5 @@ export async function adminEditOfferAction(form: FormData) {
   const back = safePath(str(form, "back"), "/admin");
   const { error } = await supabase.rpc("admin_edit_offer", { p_offering: str(form, "id"), p_title: str(form, "title"), p_reason: str(form, "reason") || null });
   revalidatePath(back.split("?")[0]);
-  redirect(withQ(back, error ? `error=${encodeURIComponent(error.message)}` : "done=edit"));
+  redirect(withQ(back, error ? `error=${encodeURIComponent(friendlyError(error))}` : "done=edit"));
 }

@@ -83,3 +83,17 @@ select t_is('the register follows the report', $$select present::text from atten
 select t_ok('institute corrects the register to absent', $$update attendance set present = false where booking_id = (select id from bookings where offering_id = (select crs from ids) and booked_by = '90000000-0000-0000-0000-00000000000d')$$);
 select t_is('the report follows the register', $$select present::text from lesson_reports where booking_id = (select id from bookings where offering_id = (select crs from ids) and booked_by = '90000000-0000-0000-0000-00000000000d')$$, 'false');
 reset role;
+
+\echo '===== BUG-03 a long conversation: the newest messages come first, older ones page back'
+insert into conversations (user_id, teacher_id) values ('90000000-0000-0000-0000-00000000000d', (select samer from ids));
+insert into messages (conversation_id, sender_id, body, created_at)
+select (select id from conversations where user_id = '90000000-0000-0000-0000-00000000000d'),
+       case when g % 2 = 0 then '90000000-0000-0000-0000-00000000000d'::uuid else '90000000-0000-0000-0000-00000000000b'::uuid end,
+       'رسالة ' || g, now() - interval '1 day' + g * interval '1 minute'
+  from generate_series(1, 310) g;
+set role authenticated; set request.jwt.claim.sub='90000000-0000-0000-0000-00000000000d';
+select t_is('the old query (oldest 300) never reaches message 310', $$select bool_or(body = 'رسالة 310')::text from (select body from messages order by created_at limit 300) x$$, 'false');
+select t_is('the page query (newest 50) shows message 310', $$select (array_agg(body order by created_at desc))[1] from (select body, created_at from messages order by created_at desc, id desc limit 50) x$$, 'رسالة 310');
+select t_is('"load older" before message 261 returns 261 back to 211', $$select min(body) || ' .. ' || max(body) from (select body from messages where created_at < (select created_at from messages where body = 'رسالة 261') order by created_at desc limit 50) x$$, 'رسالة 211 .. رسالة 260');
+select t_is('polling after message 310 returns only newer ones', $$select count(*)::text from messages where created_at > (select created_at from messages where body = 'رسالة 310')$$, '0');
+reset role;

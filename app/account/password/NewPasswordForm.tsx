@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
+import { friendlyError } from "@/lib/errors";
 
 export function NewPasswordForm() {
   const router = useRouter();
@@ -19,7 +20,7 @@ export function NewPasswordForm() {
     setError(null);
     const { error } = await createClient().auth.updateUser({ password: a });
     setBusy(false);
-    if (error) return setError(error.message.includes("Password") ? "استعمل 8 أحرف على الأقل." : error.message);
+    if (error) return setError(error.message.includes("Password") ? "استعمل 8 أحرف على الأقل." : friendlyError(error));
     setDone(true);
     setTimeout(() => router.push("/account"), 1500);
   }

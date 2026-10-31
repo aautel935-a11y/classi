@@ -5,6 +5,8 @@ import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import { TOWNS } from "@/lib/types";
 import { safePath } from "@/lib/safe";
+import { digitsOnly, toE164 } from "@/lib/phone";
+import { friendlyError } from "@/lib/errors";
 
 const ROLES = [
   ["guardian", "ولي أمر"],
@@ -35,14 +37,14 @@ function EmailForm({ next: rawNext, onBack }: { next: string; onBack: () => void
         redirectTo: `${window.location.origin}/auth/callback?next=${encodeURIComponent("/account/password")}`,
       });
       setBusy(false);
-      if (error) return setError(/rate|limit|seconds/i.test(error.message) ? "أُرسلت رسائل كثيرة خلال وقت قصير. انتظر قليلاً ثم حاول مرة أخرى." : error.message);
+      if (error) return setError(/rate|limit|seconds/i.test(error.message) ? "أُرسلت رسائل كثيرة خلال وقت قصير. انتظر قليلاً ثم حاول مرة أخرى." : friendlyError(error));
       setSent(true);
       return;
     }
     if (mode === "in") {
       const { error } = await supabase.auth.signInWithPassword({ email, password });
       setBusy(false);
-      if (error) return setError(error.message === "Invalid login credentials" ? "البريد أو كلمة المرور غير صحيحة." : error.message);
+      if (error) return setError(error.message === "Invalid login credentials" ? "البريد أو كلمة المرور غير صحيحة." : friendlyError(error));
       router.push(next);
       router.refresh();
       return;
@@ -57,7 +59,7 @@ function EmailForm({ next: rawNext, onBack }: { next: string; onBack: () => void
       },
     });
     setBusy(false);
-    if (error) return setError(error.message.includes("Password") ? "كلمة المرور قصيرة، استعمل 8 أحرف على الأقل." : error.message);
+    if (error) return setError(error.message.includes("Password") ? "كلمة المرور قصيرة، استعمل 8 أحرف على الأقل." : friendlyError(error));
     if (data.session) {
       await supabase.from("profiles").update({ roles: [role], active_role: role, town: String(f.get("town")) || null }).eq("id", data.user!.id);
       router.push(role === "teacher" ? "/teach" : role === "institute" ? "/manage" : next);
@@ -150,18 +152,13 @@ function EmailForm({ next: rawNext, onBack }: { next: string; onBack: () => void
   );
 }
 
-/** "050-123 4567" → "+972501234567", or null when it is not an Israeli mobile number. */
-function toE164(raw: string) {
-  const d = raw.replace(/[^0-9+]/g, "");
-  return /^(\+?972|0)5\d{8}$/.test(d) ? d.replace(/^(\+?972|0)/, "+972") : null;
-}
 
 function otpError(m: string) {
   if (/signups? not allowed|user not found/i.test(m)) return "NOT_FOUND";
   if (/expired|invalid|token/i.test(m)) return "الرمز غير صحيح أو انتهت صلاحيته. اطلب رمزاً جديداً.";
   if (/rate|limit|seconds|too many/i.test(m)) return "طلبت رموزاً كثيرة خلال وقت قصير. انتظر دقيقة ثم حاول مرة أخرى.";
   if (/sms|hook|send/i.test(m)) return "تعذّر إرسال الرسالة الآن. تأكد من الرقم وحاول بعد قليل.";
-  return m;
+  return friendlyError({ message: m });
 }
 
 /** Sign in or sign up with a phone number and a 6-digit SMS code. */
@@ -227,7 +224,7 @@ export function LoginForm({ next: rawNext, initial = "in" }: { next: string; ini
   async function onCode(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
     setError(null);
-    const token = String(new FormData(e.currentTarget).get("code") ?? "").replace(/\D/g, "");
+    const token = digitsOnly(String(new FormData(e.currentTarget).get("code") ?? ""));
     if (token.length !== 6) return setError("الرمز من 6 أرقام.");
     setBusy(true);
     const supabase = createClient();
@@ -259,7 +256,7 @@ export function LoginForm({ next: rawNext, initial = "in" }: { next: string; ini
         <label className="field" htmlFor="code">
           الرمز
           <input ref={codeRef} id="code" name="code" inputMode="numeric" autoComplete="one-time-code" pattern="[0-9]*" maxLength={6} required dir="ltr"
-                 className="otp" placeholder="••••••" onInput={(e) => { const v = (e.target as HTMLInputElement).value.replace(/\D/g, ""); (e.target as HTMLInputElement).value = v; if (v.length === 6) (e.target as HTMLInputElement).form?.requestSubmit(); }} />
+                 className="otp" placeholder="••••••" onInput={(e) => { const v = digitsOnly((e.target as HTMLInputElement).value); (e.target as HTMLInputElement).value = v; if (v.length === 6) (e.target as HTMLInputElement).form?.requestSubmit(); }} />
         </label>
         {error && <p className="err">{error}</p>}
         <button className="btn block" disabled={busy}>{busy ? "لحظة…" : "دخول"}</button>

@@ -5,6 +5,7 @@ import { Icon } from "@/components/Icon";
 import { leaveReviewAction } from "@/app/actions";
 import { requireUser } from "@/lib/session";
 import { ErrorNote } from "@/components/ErrorNote";
+import { KeepForm } from "@/components/KeepForm";
 
 export const dynamic = "force-dynamic";
 
@@ -45,7 +46,8 @@ export default async function ReviewPage({ searchParams }: { searchParams: Promi
 
   return (
     <div className="wrap">
-      <form action={leaveReviewAction} className="section formstack">
+      <form id="kf-leaveReview" action={leaveReviewAction} className="section formstack">
+            <KeepForm formId="kf-leaveReview" />
         <Link className="back" href="/schedule"><Icon name="back" />جدولي</Link>
         <h1>كيف كانت الحصة مع {ownerName}؟</h1>
         <p className="muted">{x.offering?.title}{x.child?.name ? ` · ${x.child.name}` : ""}</p>

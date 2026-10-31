@@ -3,6 +3,7 @@ import { requireUser } from "@/lib/session";
 import { redirect } from "next/navigation";
 import { isoDay } from "@/lib/format";
 import { ErrorNote } from "@/components/ErrorNote";
+import { KeepForm } from "@/components/KeepForm";
 
 export const dynamic = "force-dynamic";
 const DAYS = ["الأحد", "الاثنين", "الثلاثاء", "الأربعاء", "الخميس", "الجمعة"];
@@ -21,7 +22,8 @@ export default async function NewCourse({ searchParams }: { searchParams: Promis
   const start = isoDay(new Date(Date.now() + 7 * 864e5));
   return (
     <div className="wrap">
-      <form action={newCourseAction} className="section">
+      <form id="kf-newCourse" action={newCourseAction} className="section">
+            <KeepForm formId="kf-newCourse" />
         <h1>دورة جديدة</h1>
         <ErrorNote msg={sp.error} />
         <label className="field" htmlFor="title">اسم الدورة<input id="title" name="title" required minLength={3} placeholder="دورة بجروت رياضيات 5 وحدات" /></label>

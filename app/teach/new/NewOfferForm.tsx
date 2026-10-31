@@ -1,24 +1,33 @@
 "use client";
 
 import { OfferExtras } from "@/components/OfferExtras";
-import { useState } from "react";
+import { useEffect, useState } from "react";
+import { KeepForm, readKept } from "@/components/KeepForm";
 import { Icon } from "@/components/Icon";
 import { newOfferingAction } from "@/app/actions";
 import { TYPES, type OfferingType } from "@/lib/types";
 
-const DAYS = ["الأحد", "الاثنين", "الثلاثاء", "الأربعاء", "الخميس", "الجمعة"];
+const DAYS = ["الأحد", "الاثنين", "الثلاثاء", "الأربعاء", "الخميس", "الجمعة", "السبت"];
 type Opt = { id: number; name: string };
 
 export function NewOfferForm({ subjects, levels, error }: { subjects: Opt[]; levels: Opt[]; error?: string }) {
   const [tp, setTp] = useState<Exclude<OfferingType, "course">>("private");
   const [place, setPlace] = useState("home");
   const online = tp === "recorded" || place === "online" || place === "both";
+  // Back from a failed submit: restore the chosen type and place first; KeepForm then refills the fields (BUG-07).
+  useEffect(() => {
+    const k = readKept("new-offer");
+    const t = k?.type?.[0];
+    if (t === "private" || t === "group" || t === "recorded") setTp(t);
+    if (k?.place?.[0]) setPlace(k.place[0]);
+  }, []);
   return (
-    <form action={newOfferingAction} className="section">
+    <form id="new-offer" action={newOfferingAction} className="section">
+      <KeepForm formId="new-offer" />
       <h1>عرض جديد</h1>
       <p className="small muted">اختر النوع أولاً، والحقول تتغير حسبه. دورات المعاهد تُنشر من حساب المعهد.</p>
       {error && <p className="err">{error}</p>}
-      <input type="hidden" name="type" value={tp} />
+      <input type="hidden" name="type" value={tp} data-keep="1" />
       <div className="types">
         {(["private", "group", "recorded"] as const).map((k) => (
           <button

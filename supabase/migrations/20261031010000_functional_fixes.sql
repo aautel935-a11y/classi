@@ -1,11 +1,19 @@
 -- Classi: functional fixes, phase 2 (BUG-02, BUG-04, BUG-05, BUG-13, BUG-26 in CLASSI_BUG_REPORT.md).
--- Additive and safe on a live database: one new column, new functions and triggers; no row is changed or deleted.
+-- Additive and safe on a live database: one new column (backfilled for teachers who already changed their hours),
+-- new functions and triggers; no row is deleted.
 
 ------------------------------------------------------------------------------------------------------------
 -- BUG-04 + BUG-13: weekly hours are saved in one transaction (all or nothing), validated in the database,
 -- and the save records that the teacher really chose them.
 ------------------------------------------------------------------------------------------------------------
 alter table public.teachers add column if not exists hours_confirmed_at timestamptz;
+-- Teachers whose hours differ from the automatic default (Sunday-Thursday 15:00-21:00) clearly chose them already.
+update public.teachers t set hours_confirmed_at = now()
+ where t.hours_confirmed_at is null
+   and exists (select 1 from public.availability a where a.teacher_id = t.id)
+   and (select string_agg(a.weekday || ' ' || a.start_time || '-' || a.end_time, ',' order by a.weekday, a.start_time)
+          from public.availability a where a.teacher_id = t.id)
+       is distinct from '0 15:00:00-21:00:00,1 15:00:00-21:00:00,2 15:00:00-21:00:00,3 15:00:00-21:00:00,4 15:00:00-21:00:00';
 
 -- p_rows: [{"weekday": 0-6 (0 = Sunday), "start": "HH:MM", "end": "HH:MM"}, …]; p_buffer: break between lessons.
 -- Returns the number of saved ranges. Any invalid range raises and nothing changes.

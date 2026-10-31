@@ -1,0 +1,33 @@
+===== BUG-04 saving hours is all-or-nothing
+PASS: hours before = 5
+PASS: bad hours (end before start) are refused (refused: في يوم الاثنين: ساعة النهاية يجب أن تكون بعد البداية.)
+PASS: bad time format is refused (refused: في يوم الاثنين: اكتب الوقت بصيغة 00:00)
+PASS: overlapping ranges on one day are refused (refused: في يوم الاثنين: الفترتان متداخلتان.)
+PASS: after refused saves, every hour is still there = 5
+PASS: a good save replaces the hours and reports how many ranges = 4
+PASS: saved exactly = 0 15:00-20:00, 2 08:00-10:00, 2 16:00-21:00, 6 09:00-12:00
+PASS: break saved with the hours = 10
+PASS: clearing all hours is allowed (the teacher pauses)
+PASS: no hours now = 0
+PASS: a parent cannot save a teacher's hours (refused: هذه الصفحة للمعلمين)
+===== BUG-13 "set your hours" is done only when the teacher saved them
+PASS: new teacher creates a profile
+PASS: default hours exist but are not confirmed = 5:true
+PASS: teacher saves hours
+PASS: now confirmed = true
+===== BUG-02 same-day private lessons, at least 2 hours ahead
+PASS: a lesson 30 minutes from now is too soon (refused: يمكن الحجز قبل ساعتين على الأقل من موعد الحصة)
+PASS: a lesson later today (3 hours ahead) can be booked
+===== BUG-05 removing a child never moves their bookings to the parent
+PASS: book a group seat for يوسف
+PASS: removing يوسف while he has an upcoming lesson is refused (refused: لـيوسف حصص قادمة أو رزمة أو موعد أسبوعي. ألغِها أولاً من جدولك، ثم احذف الاسم.)
+PASS: the booking still belongs to يوسف = 1
+PASS: removing سلمى (no bookings) works
+PASS: cancel يوسف's lesson
+PASS: now يوسف can be removed
+===== BUG-26 one attendance record: the teacher's report and the institute's register agree
+PASS: institute marks the student absent
+PASS: a lesson report for that meeting
+PASS: the register follows the report = true
+PASS: institute corrects the register to absent
+PASS: the report follows the register = false
