@@ -7,23 +7,16 @@ test.describe.configure({ mode: "serial" });
 
 const S = {}; // shared between the steps of one project
 
+// Keeps a short log per page (errors, form posts, navigations) that is printed only when a step fails.
 function trace(page) {
   page.__events = [];
   const add = (x) => page.__events.push(x);
-  page.on("console", (m) => { if (m.type() !== "debug") add(`console.${m.type()}: ${m.text().slice(0, 200)}`); });
+  page.on("console", (m) => { if (m.type() === "error" || m.type() === "warning") add(`console.${m.type()}: ${m.text().slice(0, 200)}`); });
   page.on("pageerror", (e) => add(`pageerror: ${e.message.slice(0, 200)}`));
-  page.on("response", async (r) => {
-    if (r.url().includes("_rsc=")) { add(`GET rsc ${new URL(r.url()).search.slice(0, 60)} -> ${r.status()} cookie=${!!r.headers()["set-cookie"]} at ${Date.now() % 100000}`); return; }
-    if (r.request().method() !== "POST") return;
-    page.__tree = r.request().headers()["next-router-state-tree"];
-    const h = r.headers();
-    if (h["content-type"]?.includes("x-component")) { const b = await r.text().catch((e) => "body? " + e.message); add(`body ${b.length}: ${b.slice(0, 240).replace(/\s+/g, " ")}`); }
-    add(`POST ${new URL(r.url()).pathname} -> ${r.status()} loc=${h.location ?? ""} redirect=${h["x-action-redirect"] ?? ""} type=${h["content-type"] ?? ""} action=${r.request().headers()["next-action"] ? "fetch" : "form"} tree=${(r.request().headers()["next-router-state-tree"] ?? "none").length} cookie=${(h["set-cookie"] ?? "").split("\n").map((c) => c.split("=")[0]).join("+")} revalidated=${h["x-action-revalidated"] ?? ""} at ${Date.now() % 100000}`);
+  page.on("response", (r) => {
+    if (r.request().method() !== "POST" || r.url().includes("/auth/v1/")) return;
+    add(`POST ${new URL(r.url()).pathname} -> ${r.status()} redirect=${r.headers()["x-action-redirect"] ?? ""}`);
   });
-  page.__pending = new Map();
-  page.on("request", (r) => page.__pending.set(r, r.url()));
-  page.on("requestfinished", (r) => page.__pending.delete(r));
-  page.on("requestfailed", (r) => { page.__pending.delete(r); add(`requestfailed ${r.url().slice(0, 120)} ${r.failure()?.errorText}`); });
   page.on("framenavigated", (f) => { if (f === page.mainFrame()) add(`nav ${f.url()}`); });
 }
 

@@ -1,0 +1,39 @@
+### database drill.log [notice]
+NOTICE:  database "ct_drill" does not exist, skipping
+PASS: after rollback, flow_test (7 expected refusals)
+PASS: after rollback, roles_test (4 expected refusals)
+PASS: after rollback, security_test (0 expected refusals)
+### database grants.log [notice]
+PASS: all 93 RPCs called by the app are granted
+### database conc.log [warning]
+PASS: installments after two simultaneous confirmations = 3/3
+PASS: bookings on one institute slot after two simultaneous requests = 1
+PASS: bookings on one teacher slot after two simultaneous requests = 1
+concurrency: 3 passed, 0 failed
+### database sql.log [warning]
+suite             rc   errors expected  fails  result
+admin_ops_test     0        4        4      0  ok
+calendar_test      0        6        6      0  ok
+e2e_test           0        2        2      0  ok
+flow_test          0        7        7      0  ok
+functional_test    0        0        0      0  ok
+hardening_test     0        2        2      0  ok
+launch_test        0        4        4      0  ok
+messages_test      0        6        6      0  ok
+moderation_test    0        5        5      0  ok
+ops_test           0        6        6      0  ok
+payments_test      0        4        4      0  ok
+phase3_test        0        0        0      0  ok
+phone_login_test   0        1        1      0  ok
+recurring_test     0        4        4      0  ok
+reminders_test     0        3        3      0  ok
+reports_test       0        3        3      0  ok
+review_test        0        2        2      0  ok
+roles_test         0        4        4      0  ok
+security_test      0        0        0      0  ok
+sms_test           0        1        1      0  ok
+today_test         0        0        0      0  ok
+trial_packages_test   0        3        3      0  ok
+waitlist_test      0        3        3      0  ok
+### database safeupdate.log [notice]
+safeupdate: ok (28 migrations)

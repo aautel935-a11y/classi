@@ -1,0 +1,120 @@
+### quality build.log [notice]
+├ ƒ /api/health                             161 B         103 kB
+├ ƒ /api/health/cron                        161 B         103 kB
+├ ƒ /api/ics/[id]                           161 B         103 kB
+├ ƒ /api/push/dispatch                      161 B         103 kB
+├ ƒ /api/sms/otp                            161 B         103 kB
+├ ƒ /auth/callback                          161 B         103 kB
+├ ƒ /auth/confirm                           161 B         103 kB
+├ ○ /icon.svg                                 0 B            0 B
+├ ƒ /institute/[id]                         171 B         106 kB
+├ ƒ /login                                 6.8 kB         177 kB
+├ ƒ /manage                                 203 B         178 kB
+├ ƒ /manage/course/[id]                   2.95 kB         109 kB
+├ ƒ /manage/course/[id]/attendance/[sid]    190 B         106 kB
+├ ƒ /manage/new-course                     1.2 kB         104 kB
+├ ○ /manifest.webmanifest                   161 B         103 kB
+├ ƒ /messages                               190 B         106 kB
+├ ƒ /messages/[id]                        2.61 kB         177 kB
+├ ƒ /n/[id]                                 161 B         103 kB
+├ ƒ /notifications                        2.99 kB         106 kB
+├ ƒ /offer/[id]                           6.22 kB         112 kB
+├ ƒ /privacy                                190 B         106 kB
+├ ƒ /reports                                190 B         106 kB
+├ ƒ /reports/[id]                           190 B         106 kB
+├ ƒ /review                               1.22 kB         107 kB
+├ ○ /robots.txt                             161 B         103 kB
+├ ƒ /schedule                             3.39 kB         110 kB
+├ ƒ /search                                 418 B         107 kB
+├ ○ /sitemap.xml                            161 B         103 kB          1h      1y
+├ ƒ /teach                                 2.9 kB         181 kB
+├ ƒ /teach/calendar                         715 B         107 kB
+├ ƒ /teach/new                             5.2 kB         111 kB
+├ ƒ /teach/report                         1.22 kB         107 kB
+├ ƒ /teacher/[id]                           171 B         106 kB
+└ ƒ /terms                                  190 B         106 kB
++ First Load JS shared by all              103 kB
+  ├ chunks/1255-dc3ddf72a1dc71a7.js       46.6 kB
+  ├ chunks/4bd1b696-f785427dddbba9fb.js   54.2 kB
+  └ other shared chunks (total)           1.93 kB
+
+
+ƒ Middleware                              93.9 kB
+
+○  (Static)   prerendered as static content
+ƒ  (Dynamic)  server-rendered on demand
+
+### quality unit.log [warning]
+# Subtest: SEC-09 safePath keeps normal paths with query and hash
+ok 32 - SEC-09 safePath keeps normal paths with query and hash
+  ---
+  duration_ms: 0.184055
+  type: 'test'
+  ...
+# Subtest: BUG-20 withQuery picks ? or &
+ok 33 - BUG-20 withQuery picks ? or &
+  ---
+  duration_ms: 0.327263
+  type: 'test'
+  ...
+# Subtest: SEC-26 errorText blocks phishing lures but keeps real messages
+ok 34 - SEC-26 errorText blocks phishing lures but keeps real messages
+  ---
+  duration_ms: 1.073263
+  type: 'test'
+  ...
+# Subtest: SEC-29 ICS: a carriage return in a title cannot inject a property
+ok 35 - SEC-29 ICS: a carriage return in a title cannot inject a property
+  ---
+  duration_ms: 1.141932
+  type: 'test'
+  ...
+# Subtest: SEC-29 ICS: long Arabic lines are folded at 75 octets without splitting characters
+ok 36 - SEC-29 ICS: long Arabic lines are folded at 75 octets without splitting characters
+  ---
+  duration_ms: 0.423504
+  type: 'test'
+  ...
+# Subtest: I-2 escapeHtml
+ok 37 - I-2 escapeHtml
+  ---
+  duration_ms: 0.28264
+  type: 'test'
+  ...
+1..37
+# tests 37
+# suites 0
+# pass 37
+# fail 0
+# cancelled 0
+# skipped 0
+# todo 0
+# duration_ms 254.154775
+### quality lint.log [notice]
+`next lint` is deprecated and will be removed in Next.js 16.
+For new projects, use create-next-app to choose your preferred linter.
+For existing projects, migrate to the ESLint CLI:
+npx @next/codemod@canary next-lint-to-eslint-cli .
+
+
+./app/admin/page.tsx
+265:53  Warning: Using `<img>` could result in slower LCP and higher bandwidth. Consider using `<Image />` from `next/image` or a custom image loader to automatically optimize images. This may incur additional usage or c
+
+./app/layout.tsx
+38:9  Warning: Custom fonts not added in `pages/_document.js` will only load for a single page. This is discouraged. See: https://nextjs.org/docs/messages/no-page-custom-font  @next/next/no-page-custom-font
+
+./components/Avatar.tsx
+6:19  Warning: Using `<img>` could result in slower LCP and higher bandwidth. Consider using `<Image />` from `next/image` or a custom image loader to automatically optimize images. This may incur additional usage or cos
+
+info  - Need to disable some ESLint rules? Learn more here: https://nextjs.org/docs/app/api-reference/config/eslint#disabling-rules
+### quality audit.log [notice]
+found 0 vulnerabilities
+### quality npm.log [notice]
+npm warn deprecated inflight@1.0.6: This module is not supported, and leaks memory. Do not use it. Check out lru-cache if you want a good and tested way to coalesce async requests by a key value, which is much more compr
+npm warn deprecated @humanwhocodes/config-array@0.13.0: Use @eslint/config-array instead
+npm warn deprecated rimraf@3.0.2: Rimraf versions prior to v4 are no longer supported
+npm warn deprecated glob@7.2.3: Old versions of glob are not supported, and contain widely publicized security vulnerabilities, which have been fixed in the current version. Please update. Support for old versions may be
+npm warn deprecated @humanwhocodes/object-schema@2.0.3: Use @eslint/object-schema instead
+npm warn deprecated eslint@8.57.1: This version is no longer supported. Please see https://eslint.org/version-support for other options.
+
+added 360 packages in 8s

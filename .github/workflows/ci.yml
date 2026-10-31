@@ -127,7 +127,7 @@ jobs:
       - uses: supabase/setup-cli@v1
         with: { version: latest }
       - name: Start local Supabase (migrations + seed)
-        run: supabase start -x studio,imgproxy,edge-runtime,logflare,vector,supavisor,realtime 2>&1 | tee /tmp/supabase.log
+        run: supabase start -x studio,imgproxy,edge-runtime,logflare,vector,supavisor,realtime 2>&1 | sed -E 's/(sb_(publishable|secret)_)[A-Za-z0-9_-]+/\1[redacted]/g; s/[0-9a-f]{64}/[redacted]/g; s/eyJ[A-Za-z0-9._-]+/[redacted]/g' > /tmp/supabase.log; tail -3 /tmp/supabase.log
       - name: Local keys
         run: |
           supabase status -o env > /tmp/sb.env
@@ -151,8 +151,7 @@ jobs:
           docker logs supabase_auth_classi-local 2>&1 | grep -E '"level":"(warning|error)"' | grep -v DEPRECATION | tail -25 > /tmp/auth.log || true
           docker logs supabase_db_classi-local 2>&1 | grep -E 'ERROR|FATAL' -A1 | tail -30 > /tmp/db.log || true
           grep -a '\[page\]' /tmp/e2e.log > /tmp/e2e-pages.log || true
-          grep -a '\[diag\]' /tmp/e2e.log > /tmp/e2e-diag.log || true
-          sh .github/report.sh "e2e" /tmp/supabase.log /tmp/e2e-build.log /tmp/e2e.log /tmp/e2e-pages.log /tmp/e2e-diag.log /tmp/next.log /tmp/auth.log /tmp/db.log
+          sh .github/report.sh "e2e" /tmp/supabase.log /tmp/e2e-build.log /tmp/e2e.log /tmp/e2e-pages.log /tmp/next.log /tmp/auth.log /tmp/db.log
       - uses: actions/upload-artifact@v4
         if: always()
         with: { name: playwright-report, path: "tests/e2e/report\ntests/e2e/results", retention-days: 7 }
