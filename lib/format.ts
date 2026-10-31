@@ -19,10 +19,12 @@ export const weekday = (d: string | Date) =>
     new Intl.DateTimeFormat("en-US", { timeZone: TZ, weekday: "short" }).format(new Date(d))
   );
 
+// Israel's UTC offset at an instant, read from Intl parts (independent of the server's own time zone: BUG-21).
+const PARTS = new Intl.DateTimeFormat("en-US", { timeZone: TZ, hourCycle: "h23", year: "numeric", month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit", second: "2-digit" });
 function offsetMinutes(at: Date) {
-  const local = new Date(at.toLocaleString("en-US", { timeZone: TZ }));
-  const utc = new Date(at.toLocaleString("en-US", { timeZone: "UTC" }));
-  return (local.getTime() - utc.getTime()) / 60000;
+  const p = Object.fromEntries(PARTS.formatToParts(at).map((x) => [x.type, x.value])) as Record<string, string>;
+  const asUtc = Date.UTC(+p.year, +p.month - 1, +p.day, +p.hour, +p.minute, +p.second);
+  return Math.round((asUtc - Math.floor(at.getTime() / 1000) * 1000) / 60000);
 }
 /** "2026-11-08" + "17:00" in Israel time -> Date (UTC instant). */
 export function fromLocal(day: string, hhmm: string) {

@@ -12,12 +12,14 @@ export function datesOn(startDay: string, weekdays: number[], count: number) {
 }
 
 /** Next `n` calendar days in Israel, skipping Saturday. */
-export function nextDays(n: number, from = new Date()) {
+export function nextDays(n: number, from = new Date(), startToday = false) {
+  // Every day of the week, Saturday included (BUG-01): a teacher who opens Saturday hours gets Saturday bookings.
   const out: string[] = [];
   const d = new Date(`${isoDay(from)}T12:00:00Z`);
+  if (!startToday) d.setUTCDate(d.getUTCDate() + 1);
   while (out.length < n) {
+    out.push(d.toISOString().slice(0, 10));
     d.setUTCDate(d.getUTCDate() + 1);
-    if (d.getUTCDay() !== 6) out.push(d.toISOString().slice(0, 10));
   }
   return out;
 }
@@ -31,7 +33,7 @@ export function privateSlots(
   availability: { weekday: number; start_time: string; end_time: string }[],
   busy: { starts_at: string; minutes: number }[],
   minutes: number,
-  days = nextDays(7),
+  days = nextDays(8, new Date(), true),
   bufferMinutes = 0
 ): Slot[] {
   const now = Date.now();

@@ -1,4 +1,5 @@
 // WhatsApp and calendar links (no external service, just URLs).
+import { normalizeDigits } from "./phone";
 
 /** "+972501234567" → https://wa.me/972501234567?text=… */
 export function waLink(phone: string | null | undefined, text?: string) {
@@ -9,7 +10,7 @@ export function waLink(phone: string | null | undefined, text?: string) {
 
 /** "+972501234567" or "0501234567" (any form) → "+972501234567", or null. */
 export function cleanMobile(raw: string) {
-  const d = raw.replace(/[^0-9+]/g, "");
+  const d = normalizeDigits(raw).replace(/[^0-9+]/g, "");
   return /^(\+?972|0)5\d{8}$/.test(d) ? d.replace(/^(\+?972|0)/, "+972") : null;
 }
 

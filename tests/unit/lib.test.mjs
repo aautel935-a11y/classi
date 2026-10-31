@@ -27,17 +27,23 @@ test("time/isoDay/weekday round-trip in Israel time", () => {
 test("datesOn: next N meetings on chosen weekdays", () => {
   assert.deepEqual(datesOn("2026-11-01", [0, 2], 4), ["2026-11-01", "2026-11-03", "2026-11-08", "2026-11-10"]);
 });
-test("nextDays starts tomorrow (documented behaviour)", () => {
+test("nextDays starts tomorrow by default (group start dates)", () => {
   assert.deepEqual(nextDays(3, new Date("2026-11-01T10:00:00Z")), ["2026-11-02", "2026-11-03", "2026-11-04"]);
 });
-test("nextDays skips Saturday", () => {
-  assert.ok(!nextDays(14, new Date("2026-11-01T10:00:00Z")).some((d) => new Date(d + "T12:00:00Z").getUTCDay() === 6));
+test("BUG-02: booking days can start today", () => {
+  assert.deepEqual(nextDays(3, new Date("2026-11-01T10:00:00Z"), true), ["2026-11-01", "2026-11-02", "2026-11-03"]);
 });
-// KNOWN BUG (CLASSI_BUG_REPORT BUG-01): /teach lets a teacher set Saturday hours, but the booking calendar never shows Saturday.
-test("BUG-01: Saturday availability is never offered to students", { todo: "remove the Saturday skip or hide Saturday in /teach" }, () => {
+test("BUG-01: Saturday is a normal day (weekday 6)", () => {
+  const days = nextDays(7, new Date("2026-11-01T10:00:00Z"), true);
+  assert.ok(days.includes("2026-11-07"), days.join(","));
   const sat = { weekday: 6, start_time: "10:00", end_time: "12:00" };
-  const days = nextDays(7, new Date("2026-11-01T10:00:00Z"));
-  assert.ok(privateSlots([sat], [], 60, days).length > 0);
+  assert.equal(privateSlots([sat], [], 60, days).filter((x) => x.day === "2026-11-07").length, 2);
+});
+test("BUG-02: today's slots less than 2 hours away are shown as busy, later ones as free", () => {
+  const today = new Date().toISOString().slice(0, 10);
+  const wd = new Date(today + "T12:00:00Z").getUTCDay();
+  const all = privateSlots([{ weekday: wd, start_time: "00:00", end_time: "23:59" }], [], 60, [today]);
+  for (const x of all) assert.equal(x.busy, new Date(x.at).getTime() < Date.now() + 2 * 3600000, x.time);
 });
 
 const av = [{ weekday: 2, start_time: "16:00", end_time: "20:00" }];
