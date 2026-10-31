@@ -184,7 +184,8 @@ export async function teacherSetupAction(form: FormData) {
   });
   if (error) redirect(`/teach?error=${encodeURIComponent("تعذّر حفظ الملف: " + friendlyError(error))}`);
   revalidatePath("/teach");
-  redirect("/teach");
+  // A different address than the form's: a redirect to the same URL left the setup form on screen after saving.
+  redirect("/teach?ok=setup");
 }
 
 // Trial lesson and lesson packages from the offer form (both optional).
@@ -299,7 +300,7 @@ export async function instituteSetupAction(form: FormData) {
   const rooms = Math.min(10, Math.max(1, num(form, "rooms") || 1));
   await supabase.from("rooms").insert(Array.from({ length: rooms }, (_, i) => ({ institute_id: inst.id, name: `قاعة ${i + 1}` })));
   revalidatePath("/manage");
-  redirect("/manage");
+  redirect("/manage?ok=created");
 }
 
 export async function newCourseAction(form: FormData) {
@@ -726,7 +727,7 @@ export async function setEmailRemindersAction(form: FormData) {
   if (!user) redirect("/login");
   await supabase.from("profiles").update({ email_reminders: str(form, "on") === "1" }).eq("id", user.id);
   revalidatePath("/notifications");
-  redirect("/notifications");
+  redirect("/notifications?ok=email");
 }
 
 // ---------- teacher calendar ----------

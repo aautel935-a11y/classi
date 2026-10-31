@@ -103,6 +103,7 @@ export default async function Manage({ searchParams }: { searchParams: Promise<R
       <section className="section">
         <h2>ملف المعهد</h2>
         {sp.ok === "profile" && <p className="okmsg">حُفظ ملف المعهد.</p>}
+        {sp.ok === "created" && <p className="okmsg">أُنشئ المعهد. أضف قاعاتك ودوراتك.</p>}
         <div className="card">
           <PhotoUpload kind="institute" name={inst.name} current={inst.logo_url} />
           <details>
