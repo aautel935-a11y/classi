@@ -145,7 +145,7 @@ jobs:
       - name: Report (annotations)
         if: always()
         run: |
-          docker logs supabase_auth_classi-local --tail 40 > /tmp/auth.log 2>&1 || true
+          docker logs supabase_auth_classi-local 2>&1 | grep -v templatemailer | tail -25 > /tmp/auth.log || true
           docker logs supabase_db_classi-local --tail 30 > /tmp/db.log 2>&1 || true
           sh .github/report.sh "e2e" /tmp/supabase.log /tmp/e2e-build.log /tmp/e2e.log /tmp/next.log /tmp/auth.log /tmp/db.log
       - uses: actions/upload-artifact@v4

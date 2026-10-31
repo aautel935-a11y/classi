@@ -7,6 +7,12 @@
 T="$(cd "$(dirname "$0")" && pwd)"
 OUT=${OUT:-/tmp/classi-test-results}; mkdir -p "$OUT"
 SUITES=${*:-$(cd "$T" && ls *_test.sql | sed 's/\.sql$//')}
+# Roles are cluster-wide: create them once here, so parallel database builds never race to create them.
+psql -h ${PGSOCK:-/var/tmp/pgc} -p ${PGPORT:-54329} -U postgres -q -c "do \$\$ begin
+  if not exists (select 1 from pg_roles where rolname = 'anon') then create role anon nologin; end if;
+  if not exists (select 1 from pg_roles where rolname = 'authenticated') then create role authenticated nologin; end if;
+  if not exists (select 1 from pg_roles where rolname = 'service_role') then create role service_role nologin bypassrls; end if;
+end \$\$;" >/dev/null
 echo "$SUITES" | tr ' ' '\n' | grep . | xargs -P ${JOBS:-4} -I{} sh -c "DB=ct_{} sh '$T/run.sh' {} > '$OUT/{}.out' 2>&1; echo \$? > '$OUT/{}.rc'"
 fail=0
 printf '%-16s %3s %8s %8s %6s  %s\n' suite rc errors expected fails result

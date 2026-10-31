@@ -29,17 +29,28 @@ async function readCode(phone) {
 }
 
 /** Sign up with phone + code through the real login screen. */
+const lastAuth = new WeakMap();
+function watchAuth(page) {
+  if (lastAuth.has(page)) return;
+  lastAuth.set(page, "");
+  page.on("response", async (r) => {
+    if (r.url().includes("/auth/v1/")) lastAuth.set(page, `${r.request().method()} ${new URL(r.url()).pathname} -> ${r.status()} ${(await r.text().catch(() => "")).slice(0, 300)}`);
+  });
+  page.on("requestfailed", (r) => { if (r.url().includes("/auth/v1/")) lastAuth.set(page, `${r.url()} failed: ${r.failure()?.errorText}`); });
+}
+
 async function waitForCodeStep(page, phone) {
   const heading = page.getByRole("heading", { name: "أدخل الرمز" });
   const err = page.locator(".err");
   await expect(heading.or(err).first()).toBeVisible({ timeout: 20_000 });
   if (await err.isVisible()) {
     const outbox = await sql("select count(*)::int n from otp_outbox where regexp_replace(phone, '\\D', '', 'g') = $1", ["972" + phone.slice(1)]);
-    throw new Error(`code request refused on screen: "${(await err.textContent())?.trim()}" (otp_outbox rows: ${outbox[0]?.n})`);
+    throw new Error(`code request refused on screen: "${(await err.textContent())?.trim()}" (otp_outbox rows: ${outbox[0]?.n}; last auth call: ${lastAuth.get(page)})`);
   }
 }
 
 export async function signUp(page, { phone, name, role }) {
+  watchAuth(page);
   await page.goto("/login?mode=up");
   await page.locator("#full_name").fill(name);
   await page.locator(`input[name="role"][value="${role}"]`).check();
@@ -56,6 +67,7 @@ export async function signUp(page, { phone, name, role }) {
 
 /** Sign in again (existing account). */
 export async function signIn(page, phone) {
+  watchAuth(page);
   await page.goto("/login");
   await page.locator("#phone").fill(phone);
   await page.getByRole("button", { name: "أرسل رمز الدخول" }).click();
