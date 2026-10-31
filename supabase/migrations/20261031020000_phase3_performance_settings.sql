@@ -141,6 +141,20 @@ begin
 end $$;
 
 ------------------------------------------------------------------------------------------------------------
+-- 7. Publishing an offer failed with "permission denied" (found by the E2E journey). The app inserts with
+-- .select("id"), so the new row must pass the read policy in the same statement; the owner check looked the row
+-- up by id (is_offering_owner), which cannot see a row that is still being inserted. The owner is now also
+-- recognised from the row's own columns. Who can read what is unchanged.
+------------------------------------------------------------------------------------------------------------
+drop policy if exists "read offerings" on public.offerings;
+create policy "read offerings" on public.offerings for select
+  using ((active and not moderation_hidden and offering_owner_verified(id))
+         or (teacher_id is not null and teacher_id = my_teacher_id())
+         or (institute_id is not null and exists (select 1 from institutes i where i.id = institute_id and i.owner_id = auth.uid()))
+         or is_offering_owner(id) or is_admin()
+         or exists (select 1 from bookings b where b.offering_id = offerings.id and b.booked_by = auth.uid()));
+
+------------------------------------------------------------------------------------------------------------
 -- Least privilege: re-created functions get their grants back (the allow-list of phase 1).
 ------------------------------------------------------------------------------------------------------------
 revoke execute on function public.owner_bookings(uuid, timestamptz), public.seats_overview(uuid[]),

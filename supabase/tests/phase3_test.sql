@@ -41,3 +41,18 @@ select t_is('whole platform unchanged', $$select ((select count(*) from seats_ov
 set role anon;
 select t_ok('visitors can still read seat counts', $$select count(*) from seats_overview()$$);
 reset role;
+
+\echo '===== publishing an offer returns its id (the app inserts with .select("id"); RLS checks the new row)'
+set role authenticated; set request.jwt.claim.sub = 'b0000000-0000-0000-0000-000000000003';
+select t_ok('teacher publishes a private offer and reads it back in the same statement',
+  $$insert into offerings (type, teacher_id, title, price, minutes, places) values ('private', my_teacher_id(), 'عرض جديد للاختبار', 100, 60, '{online}') returning id$$);
+reset role;
+set role authenticated; set request.jwt.claim.sub = 'b0000000-0000-0000-0000-000000000002';
+select t_ok('institute owner creates a course and reads it back in the same statement',
+  $$insert into offerings (type, institute_id, title, price, minutes, places, seats) select 'course', id, 'دورة جديدة للاختبار', 300, 90, '{center}', 20 from institutes where owner_id = auth.uid() limit 1 returning id$$);
+reset role;
+set role authenticated; set request.jwt.claim.sub = 'b0000000-0000-0000-0000-000000000004';
+select t_err('a parent still cannot create an offer for a teacher',
+  $$insert into offerings (type, teacher_id, title, price, minutes, places) select 'private', id, 'انتحال', 1, 60, '{online}' from teachers limit 1 returning id$$);
+select t_is('a parent does not see unpublished offers', $$select count(*)::text from offerings where title in ('عرض جديد للاختبار','دورة جديدة للاختبار')$$, '0');
+reset role;

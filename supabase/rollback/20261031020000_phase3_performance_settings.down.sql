@@ -65,4 +65,6 @@ revoke execute on function public.owner_bookings(uuid), public.seats_overview(),
 grant execute on function public.seats_overview() to anon, authenticated;
 grant execute on function public.owner_bookings(uuid), public.admin_set_setting(text, text) to authenticated;
 
+-- 5. The read policy of offerings stays as phase 3 defines it: the older one makes publishing a new offer fail.
+
 commit;
