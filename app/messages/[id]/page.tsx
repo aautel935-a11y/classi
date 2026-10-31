@@ -5,6 +5,7 @@ import { Icon } from "@/components/Icon";
 import { reportConversationAction } from "@/app/actions";
 import { requireUser } from "@/lib/session";
 import { Thread } from "./Thread";
+import { PAGE_SIZE } from "@/lib/messages";
 
 export const dynamic = "force-dynamic";
 
@@ -34,7 +35,10 @@ export default async function Conversation({ params, searchParams }: { params: P
     otherPhoto = row?.other_photo ?? null;
     profileHref = null;
   }
-  const { data: messages } = await supabase.from("messages").select("id,sender_id,body,created_at,read_at").eq("conversation_id", id).order("created_at").limit(300);
+  // Newest page first (BUG-03: the old ascending limit hid every message after the 300th).
+  const { data: newest } = await supabase.from("messages").select("id,sender_id,body,created_at,read_at").eq("conversation_id", id)
+    .order("created_at", { ascending: false }).order("id", { ascending: false }).limit(PAGE_SIZE);
+  const messages = ((newest ?? []) as any[]).slice().reverse();
   if (member) await supabase.rpc("mark_conversation_read", { p_conv: id });
 
   return (
@@ -56,7 +60,7 @@ export default async function Conversation({ params, searchParams }: { params: P
       </div>
       {sp.reported && <p className="okmsg">وصل البلاغ للإدارة. شكراً لك.</p>}
       {!member && <p className="note">تقرأ هذه المحادثة لأنها بُلّغ عنها. لا يمكنك الكتابة فيها.</p>}
-      <Thread conversationId={id} me={user.id} initial={(messages ?? []) as any[]} canWrite={!!member} />
+      <Thread conversationId={id} me={user.id} initial={messages} hasOlder={(newest ?? []).length === PAGE_SIZE} canWrite={!!member} />
     </div>
   );
 }

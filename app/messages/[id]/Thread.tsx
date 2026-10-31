@@ -4,30 +4,49 @@ import { useEffect, useRef, useState, useTransition } from "react";
 import { createClient } from "@/lib/supabase/client";
 import { sendMessageAction } from "@/app/actions";
 import { dayLong, isoDay, time } from "@/lib/format";
+import { PAGE_SIZE, firstStamp, lastStamp, mergeMessages, type Msg } from "@/lib/messages";
 
-type Msg = { id: string; sender_id: string; body: string; created_at: string; read_at: string | null };
+const COLS = "id,sender_id,body,created_at,read_at";
 
-/** The conversation: checks for new messages every few seconds while open. */
-export function Thread({ conversationId, me, initial, canWrite }: { conversationId: string; me: string; initial: Msg[]; canWrite: boolean }) {
+/**
+ * The conversation: opens on the newest messages, loads older ones on demand, and every few seconds fetches only
+ * what arrived since the last message (plus read receipts of my own unread messages). BUG-03.
+ */
+export function Thread({ conversationId, me, initial, hasOlder: hasOlder0, canWrite }: { conversationId: string; me: string; initial: Msg[]; hasOlder: boolean; canWrite: boolean }) {
   const [msgs, setMsgs] = useState<Msg[]>(initial);
+  const [hasOlder, setHasOlder] = useState(hasOlder0);
+  const [loadingOlder, setLoadingOlder] = useState(false);
+  const msgsRef = useRef<Msg[]>(initial);
+  msgsRef.current = msgs;
   const [text, setText] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [pending, start] = useTransition();
   const end = useRef<HTMLDivElement>(null);
 
+  // Scroll to the bottom when a newer message arrives, not when older ones are added above.
+  const lastId = msgs.length ? msgs[msgs.length - 1].id : "";
   useEffect(() => {
     end.current?.scrollIntoView({ block: "end" });
-  }, [msgs.length]);
+  }, [lastId]);
 
   useEffect(() => {
     const supabase = createClient();
     let alive = true;
     async function poll() {
       if (document.hidden) return;
-      const { data } = await supabase.from("messages").select("id,sender_id,body,created_at,read_at").eq("conversation_id", conversationId).order("created_at").limit(300);
-      if (!alive || !data) return;
-      setMsgs(data as Msg[]);
-      if ((data as Msg[]).some((m) => m.sender_id !== me && !m.read_at)) await supabase.rpc("mark_conversation_read", { p_conv: conversationId });
+      const cur = msgsRef.current ?? [];
+      const since = lastStamp(cur);
+      let q = supabase.from("messages").select(COLS).eq("conversation_id", conversationId).order("created_at").limit(100);
+      if (since) q = q.gt("created_at", since);
+      const unreadMine = cur.filter((m) => m.sender_id === me && !m.read_at && !m.id.startsWith("tmp-")).map((m) => m.id).slice(-50);
+      const [{ data }, { data: receipts }] = await Promise.all([
+        q,
+        unreadMine.length ? supabase.from("messages").select(COLS).in("id", unreadMine).not("read_at", "is", null) : Promise.resolve({ data: [] as Msg[] }),
+      ]);
+      if (!alive) return;
+      const incoming = [...((data ?? []) as Msg[]), ...((receipts ?? []) as Msg[])];
+      if (incoming.length) setMsgs((m) => mergeMessages(m, incoming));
+      if (((data ?? []) as Msg[]).some((m) => m.sender_id !== me && !m.read_at)) await supabase.rpc("mark_conversation_read", { p_conv: conversationId });
     }
     const t = setInterval(poll, 4000);
     return () => {
@@ -35,6 +54,18 @@ export function Thread({ conversationId, me, initial, canWrite }: { conversation
       clearInterval(t);
     };
   }, [conversationId, me]);
+
+  async function loadOlder() {
+    const before = firstStamp(msgsRef.current ?? []);
+    if (!before) return;
+    setLoadingOlder(true);
+    const { data } = await createClient().from("messages").select(COLS).eq("conversation_id", conversationId)
+      .lt("created_at", before).order("created_at", { ascending: false }).limit(PAGE_SIZE);
+    setLoadingOlder(false);
+    const older = ((data ?? []) as Msg[]).slice().reverse();
+    setHasOlder(older.length === PAGE_SIZE);
+    if (older.length) setMsgs((m) => mergeMessages(m, older));
+  }
 
   function send(e: React.FormEvent) {
     e.preventDefault();
@@ -58,6 +89,11 @@ export function Thread({ conversationId, me, initial, canWrite }: { conversation
   return (
     <>
       <div className="bubbles" aria-live="polite">
+        {hasOlder && (
+          <button type="button" className="btn sm ghost" style={{ alignSelf: "center" }} onClick={loadOlder} disabled={loadingOlder}>
+            {loadingOlder ? "لحظة…" : "عرض الرسائل الأقدم"}
+          </button>
+        )}
         {msgs.length === 0 && <p className="empty">اكتب أول رسالة. مثلاً: هل يناسبك يوم الثلاثاء؟</p>}
         {msgs.map((m) => {
           const day = isoDay(m.created_at);
