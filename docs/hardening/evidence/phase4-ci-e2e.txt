@@ -1,0 +1,203 @@
+###  [warning]
+No files were found with the provided path: tests/e2e/report
+tests/e2e/results. No artifacts will be uploaded.
+### e2e db.log [notice]
+ 2026-10-31 21:52:54.631 UTC [50] FATAL:  role "postgres" does not exist
+ 2026-10-31 21:52:54.632 UTC [49] LOG:  TimescaleDB background worker launcher connected to shared catalogs
+--
+ 2026-10-31 21:52:55.281 UTC [49] FATAL:  terminating background worker "TimescaleDB Background Worker Launcher" due to administrator command
+ 2026-10-31 21:52:55.282 UTC [39] LOG:  background worker "TimescaleDB Background Worker Launcher" (PID 49) exited with exit code 1
+### e2e next.log [notice]
+   ▲ Next.js 15.5.28
+   - Local:        http://localhost:3000
+   - Network:      http://10.1.0.105:3000
+
+ ✓ Starting...
+ ✓ Ready in 372ms
+### e2e restore.log [notice]
+backup of 127.0.0.1 -> /tmp/backups/classi-backup-20261031T215249Z
+Dumping roles from local database...
+Dumped schema to /tmp/backups/classi-backup-20261031T215249Z/roles.sql.
+Dumping schemas from local database...
+Dumped schema to /tmp/backups/classi-backup-20261031T215249Z/schema.sql.
+Dumping data from local database...
+Dumped schema to /tmp/backups/classi-backup-20261031T215249Z/data.sql.
+done: 64 tables, 388 rows; files: SHA256SUMS counts.txt data.sql roles.sql schema.sql 
+Keep this folder off the laptop's synced folders, and delete it when no longer needed (it holds personal data).
+restoring into 127.0.0.1 ...
+PASS: 64 tables, every row count matches the backup
+scheduled jobs after the restore: 7
+### e2e lighthouse.log [notice]
+page | form factor | performance | accessibility | best practices | SEO | LCP ms | CLS | TBT ms
+/ | mobile | 88 | 100 | 100 | 100 | 3617 | 0.000 | 90
+   LCP element: <h1 id="hero-title">
+/ | desktop | 98 | 100 | 100 | 100 | 774 | 0.000 | 0
+   LCP element: <h1 id="hero-title">
+/search | mobile | 90 | 100 | 100 | 100 | 3327 | 0.000 | 104
+   LCP element: <h3>
+/search | desktop | 97 | 100 | 100 | 100 | 737 | 0.000 | 0
+   LCP element: <h3>
+/offer/28666e6e-f4f0-4ccf-b768-bdfab405a74b | mobile | 94 | 100 | 100 | 100 | 2870 | 0.000 | 52
+   LCP element: <h1>
+/offer/28666e6e-f4f0-4ccf-b768-bdfab405a74b | desktop | 98 | 100 | 100 | 100 | 696 | 0.000 | 0
+   LCP element: <h1>
+/login | mobile | 91 | 100 | 100 | 100 | 3298 | 0.000 | 79
+   LCP element: <h1>
+/login | desktop | 98 | 100 | 100 | 100 | 734 | 0.000 | 0
+   LCP element: <h1>
+### e2e axe.log [notice]
+[axe] desktop account | no violations
+[axe] desktop home | no violations
+[axe] desktop login | no violations
+[axe] desktop messages | no violations
+[axe] desktop notifications | no violations
+[axe] desktop offer | no violations
+[axe] desktop schedule | no violations
+[axe] desktop search | no violations
+[axe] desktop teacher | no violations
+[axe] mobile account | no violations
+[axe] mobile home | no violations
+[axe] mobile login | no violations
+[axe] mobile messages | no violations
+[axe] mobile notifications | no violations
+[axe] mobile offer | no violations
+[axe] mobile schedule | no violations
+[axe] mobile search | no violations
+[axe] mobile teacher | no violations
+### e2e e2e.log [warning]
+[axe] mobile teacher | no violations
+[axe] mobile login | no violations
+  ✓   1 [mobile] › tests/e2e/a11y.spec.mjs:26:3 › accessibility (axe) › public pages: home, search, offer, teacher, login (17.3s)
+[axe] mobile account | no violations
+[axe] mobile schedule | no violations
+[axe] mobile notifications | no violations
+[axe] mobile messages | no violations
+  ✓   2 [mobile] › tests/e2e/a11y.spec.mjs:39:3 › accessibility (axe) › signed-in pages: account, schedule, notifications, messages (6.0s)
+  ✓   3 [mobile] › tests/e2e/journeys.spec.mjs:35:1 › 9. teacher: sign up, profile, hours with Saturday, new offer (and the form keeps input after an error) (4.9s)
+  ✓   4 [mobile] › tests/e2e/journeys.spec.mjs:75:1 › 10. parent: sign up, add a child, book a private lesson; booking dialog closes with Esc (4.2s)
+  ✓   5 [mobile] › tests/e2e/journeys.spec.mjs:110:1 › 11. messages and notifications: parent writes, teacher reads; opening one notification reads only that one (8.6s)
+  ✓   6 [mobile] › tests/e2e/journeys.spec.mjs:140:1 › 12. roles, two-step cancellation, and no form data leaking between records or accounts (4.4s)
+  ✓   7 [mobile] › tests/e2e/public.spec.mjs:5:1 › 1. home: Arabic, right-to-left, no sideways scroll (3.9s)
+  ✓   8 [mobile] › tests/e2e/public.spec.mjs:17:1 › 2. search lists offers and filters by type (442ms)
+  ✓   9 [mobile] › tests/e2e/public.spec.mjs:25:1 › 3. an offer page asks visitors to sign in before booking (545ms)
+  ✓  10 [mobile] › tests/e2e/public.spec.mjs:32:1 › 4. private pages send visitors to the login screen (621ms)
+  ✓  11 [mobile] › tests/e2e/public.spec.mjs:41:1 › 5. security headers are sent (32ms)
+  ✓  12 [mobile] › tests/e2e/public.spec.mjs:49:1 › 6. redirects never leave the site (SEC-09) (438ms)
+  ✓  13 [mobile] › tests/e2e/public.spec.mjs:56:1 › 7. robots, sitemap, and closed internal endpoints (56ms)
+  ✓  14 [mobile] › tests/e2e/public.spec.mjs:66:1 › 8. Arabic page with Hebrew and English text stays right-to-left and fits the screen (547ms)
+[axe] desktop home | no violations
+[axe] desktop search | no violations
+[axe] desktop offer | no violations
+[axe] desktop teacher | no violations
+[axe] desktop login | no violations
+  ✓  15 [desktop] › tests/e2e/a11y.spec.mjs:26:3 › accessibility (axe) › public pages: home, search, offer, teacher, login (17.1s)
+[axe] desktop account | no violations
+[axe] desktop schedule | no violations
+[axe] desktop notifications | no violations
+[axe] desktop messages | no violations
+  ✓  16 [desktop] › tests/e2e/a11y.spec.mjs:39:3 › accessibility (axe) › signed-in pages: account, schedule, notifications, messages (5.9s)
+  ✓  17 [desktop] › tests/e2e/journeys.spec.mjs:35:1 › 9. teacher: sign up, profile, hours with Saturday, new offer (and the form keeps input after an error) (4.8s)
+  ✓  18 [desktop] › tests/e2e/journeys.spec.mjs:75:1 › 10. parent: sign up, add a child, book a private lesson; booking dialog closes with Esc (4.1s)
+  ✓  19 [desktop] › tests/e2e/journeys.spec.mjs:110:1 › 11. messages and notifications: parent writes, teacher reads; opening one notification reads only that one (8.5s)
+  ✓  20 [desktop] › tests/e2e/journeys.spec.mjs:140:1 › 12. roles, two-step cancellation, and no form data leaking between records or accounts (4.3s)
+  ✓  21 [desktop] › tests/e2e/public.spec.mjs:5:1 › 1. home: Arabic, right-to-left, no sideways scroll (3.9s)
+  ✓  22 [desktop] › tests/e2e/public.spec.mjs:17:1 › 2. search lists offers and filters by type (361ms)
+  ✓  23 [desktop] › tests/e2e/public.spec.mjs:25:1 › 3. an offer page asks visitors to sign in before booking (321ms)
+  ✓  24 [desktop] › tests/e2e/public.spec.mjs:32:1 › 4. private pages send visitors to the login screen (579ms)
+  ✓  25 [desktop] › tests/e2e/public.spec.mjs:41:1 › 5. security headers are sent (31ms)
+  ✓  26 [desktop] › tests/e2e/public.spec.mjs:49:1 › 6. redirects never leave the site (SEC-09) (416ms)
+  ✓  27 [desktop] › tests/e2e/p
+### e2e e2e-summary.log [notice]
+  28 passed (1.7m)
+### e2e e2e-build.log [notice]
+├ ƒ /api/health                             161 B         103 kB
+├ ƒ /api/health/cron                        161 B         103 kB
+├ ƒ /api/ics/[id]                           161 B         103 kB
+├ ƒ /api/push/dispatch                      161 B         103 kB
+├ ƒ /api/sms/otp                            161 B         103 kB
+├ ƒ /auth/callback                          161 B         103 kB
+├ ƒ /auth/confirm                           161 B         103 kB
+├ ○ /icon.svg                                 0 B            0 B
+├ ƒ /institute/[id]                         171 B         106 kB
+├ ƒ /login                                7.01 kB         178 kB
+├ ƒ /manage                                 199 B         178 kB
+├ ƒ /manage/course/[id]                   2.96 kB         109 kB
+├ ƒ /manage/course/[id]/attendance/[sid]    190 B         106 kB
+├ ƒ /manage/new-course                     1.2 kB         104 kB
+├ ○ /manifest.webmanifest                   161 B         103 kB
+├ ƒ /messages                               190 B         106 kB
+├ ƒ /messages/[id]                        2.74 kB         177 kB
+├ ƒ /n/[id]                                 161 B         103 kB
+├ ƒ /notifications                        2.99 kB         106 kB
+├ ƒ /offer/[id]                           6.25 kB         112 kB
+├ ƒ /privacy                                190 B         106 kB
+├ ƒ /reports                                190 B         106 kB
+├ ƒ /reports/[id]                           190 B         106 kB
+├ ƒ /review                               1.22 kB         107 kB
+├ ○ /robots.txt                             161 B         103 kB
+├ ƒ /schedule                             3.39 kB         110 kB
+├ ƒ /search                                 418 B         107 kB
+├ ○ /sitemap.xml                            161 B         103 kB          1h      1y
+├ ƒ /teach                                 2.9 kB         181 kB
+├ ƒ /teach/calendar                         715 B         107 kB
+├ ƒ /teach/new                             5.2 kB         111 kB
+├ ƒ /teach/report                         1.22 kB         107 kB
+├ ƒ /teacher/[id]                           171 B         106 kB
+└ ƒ /terms                                  190 B         106 kB
++ First Load JS shared by all              103 kB
+  ├ chunks/1255-dc3ddf72a1dc71a7.js       46.6 kB
+  ├ chunks/4bd1b696-f785427dddbba9fb.js   54.2 kB
+  └ other shared chunks (total)           1.93 kB
+
+
+ƒ Middleware                              94.1 kB
+
+○  (Static)   prerendered as static content
+ƒ  (Dynamic)  server-rendered on demand
+
+### e2e supabase.log [notice]
+Seeding data from supabase/seed.sql...
+Starting containers...
+Waiting for health checks...
+Started supabase local development setup.
+
+╭──────────────────────────────────╮
+│ 🔧 Development Tools             │
+├─────────┬────────────────────────┤
+│ Mailpit │ http://127.0.0.1:54324 │
+╰─────────┴────────────────────────╯
+
+╭─────────────────────────────────────────────────╮
+│ 🌐 APIs                                         │
+├─────────────┬───────────────────────────────────┤
+│ Project URL │ http://127.0.0.1:54321            │
+│ REST        │ http://127.0.0.1:54321/rest/v1    │
+│ GraphQL     │ http://127.0.0.1:54321/graphql/v1 │
+╰─────────────┴───────────────────────────────────╯
+
+╭───────────────────────────────────────────────────────────────╮
+│ ⛁ Database                                                    │
+├─────┬─────────────────────────────────────────────────────────┤
+│ URL │ ***127.0.0.1:54322/postgres │
+╰─────┴─────────────────────────────────────────────────────────╯
+
+╭──────────────────────────────────────────────────────────────╮
+│ 🔑 Authentication Keys                                       │
+├─────────────┬────────────────────────────────────────────────┤
+│ Publishable │ sb_publishable_[redacted] │
+│ Secret      │ sb_secret_[redacted]      │
+╰─────────────┴────────────────────────────────────────────────╯
+
+╭───────────────────────────────────────────────────────────────────────────────╮
+│ 📦 Storage (S3)                                                               │
+├────────────┬──────────────────────────────────────────────────────────────────┤
+│ URL        │ http://127.0.0.1:54321/storage/v1/s3                             │
+│ Access Key │ 625729a08b95bf1b7ff351a663f3a23c                                 │
+│ Secret Key │ [redacted] │
+│ Region     │ local                                                            │
+╰────────────┴──────────────────────────────────────────────────────────────────╯
+Local dev security notice
+All services bind to 0.0.0.0 (network-accessible, not just localhost)
+API keys and JWT secrets are shared defaults. Do not use in production
+Studio, pgMeta (/pg/*), and analytics have no authentication
+
