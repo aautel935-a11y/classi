@@ -145,6 +145,15 @@ jobs:
       - name: Playwright
         env: { BASE_URL: "http://localhost:3000" }
         run: npx playwright test -c tests/e2e/playwright.config.mjs --reporter=list 2>&1 | tee /tmp/e2e.log
+      - name: Diagnosis in development mode (React warnings), teacher journey only
+        if: always()
+        env: { BASE_URL: "http://localhost:3001", DIAG_DEV: "1" }
+        run: |
+          (npx next dev -p 3001 > /tmp/next-dev.log 2>&1 &)
+          npx --yes wait-on@8 -t 120000 http://localhost:3001/
+          curl -s -o /dev/null http://localhost:3001/teach; curl -s -o /dev/null http://localhost:3001/login
+          npx playwright test -c tests/e2e/playwright.config.mjs --project=desktop -g "^9\\." --retries=0 --reporter=list > /tmp/e2e-dev.log 2>&1 || true
+          grep -a '\[diag\]\|\[page\] event: console\|pageerror\|STUCK\|tick' /tmp/e2e-dev.log | cut -c1-400 | tail -40 > /tmp/e2e-dev-diag.log || true
       - name: Report (annotations)
         if: always()
         run: |
@@ -152,7 +161,7 @@ jobs:
           docker logs supabase_db_classi-local 2>&1 | grep -E 'ERROR|FATAL' -A1 | tail -30 > /tmp/db.log || true
           grep -a '\[page\]' /tmp/e2e.log > /tmp/e2e-pages.log || true
           grep -a '\[diag\]' /tmp/e2e.log > /tmp/e2e-diag.log || true
-          sh .github/report.sh "e2e" /tmp/supabase.log /tmp/e2e-build.log /tmp/e2e.log /tmp/e2e-pages.log /tmp/e2e-diag.log /tmp/next.log /tmp/auth.log /tmp/db.log
+          sh .github/report.sh "e2e" /tmp/supabase.log /tmp/e2e-build.log /tmp/e2e.log /tmp/e2e-pages.log /tmp/e2e-diag.log /tmp/e2e-dev-diag.log /tmp/next-dev.log /tmp/next.log /tmp/auth.log /tmp/db.log
       - uses: actions/upload-artifact@v4
         if: always()
         with: { name: playwright-report, path: "tests/e2e/report\ntests/e2e/results", retention-days: 7 }

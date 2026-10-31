@@ -10,7 +10,7 @@ const S = {}; // shared between the steps of one project
 function trace(page) {
   page.__events = [];
   const add = (x) => page.__events.push(x);
-  page.on("console", (m) => { if (m.type() !== "debug") add(`console.${m.type()}: ${m.text().slice(0, 200)}`); });
+  page.on("console", (m) => { if (process.env.DIAG_DEV && !m.text().includes("Content Security")) console.log(`[diag] console.${m.type()}: ${m.text().slice(0, 300)}`); if (m.type() !== "debug") add(`console.${m.type()}: ${m.text().slice(0, 200)}`); });
   page.on("pageerror", (e) => add(`pageerror: ${e.message.slice(0, 200)}`));
   page.on("response", async (r) => {
     if (r.url().includes("_rsc=")) { add(`GET rsc ${new URL(r.url()).search.slice(0, 60)} -> ${r.status()} cookie=${!!r.headers()["set-cookie"]} at ${Date.now() % 100000}`); return; }
