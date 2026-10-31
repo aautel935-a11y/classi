@@ -15,6 +15,7 @@ function trace(page) {
   page.on("response", async (r) => {
     if (r.url().includes("_rsc=")) { add(`GET rsc ${new URL(r.url()).search.slice(0, 60)} -> ${r.status()} cookie=${!!r.headers()["set-cookie"]} at ${Date.now() % 100000}`); return; }
     if (r.request().method() !== "POST") return;
+    page.__tree = r.request().headers()["next-router-state-tree"];
     const h = r.headers();
     if (h["content-type"]?.includes("x-component")) { const b = await r.text().catch((e) => "body? " + e.message); add(`body ${b.length}: ${b.slice(0, 240).replace(/\s+/g, " ")}`); }
     add(`POST ${new URL(r.url()).pathname} -> ${r.status()} loc=${h.location ?? ""} redirect=${h["x-action-redirect"] ?? ""} type=${h["content-type"] ?? ""} action=${r.request().headers()["next-action"] ? "fetch" : "form"} tree=${(r.request().headers()["next-router-state-tree"] ?? "none").length} cookie=${(h["set-cookie"] ?? "").split("\n").map((c) => c.split("=")[0]).join("+")} revalidated=${h["x-action-revalidated"] ?? ""} at ${Date.now() % 100000}`);
@@ -54,6 +55,19 @@ test("9. teacher: sign up, profile, hours with Saturday, new offer (and the form
       unfinished: performance.getEntriesByType("resource").filter((e) => !e.responseEnd).map((e) => e.name.slice(0, 80)),
       scripts: document.scripts.length,
     })).catch((e) => e.message)}`);
+    for (const withTree of [true, false]) {
+      const res = await page.evaluate(async ({ tree }) => {
+        const t = Date.now();
+        try {
+          const headers = { RSC: "1" }; if (tree) headers["Next-Router-State-Tree"] = tree;
+          const r = await fetch("/teach?probe=rsc", { headers, signal: AbortSignal.timeout(20000) });
+          const reader = r.body.getReader(); let n = 0, first = 0;
+          for (;;) { const { done, value } = await reader.read(); if (done) break; if (!first) first = Date.now() - t; n += value.length; }
+          return `status ${r.status} first byte ${first} ms, done ${Date.now() - t} ms, ${n} bytes`;
+        } catch (e) { return `error after ${Date.now() - t} ms: ${e.message}`; }
+      }, { tree: withTree ? page.__tree : null });
+      console.log(`[diag] RSC fetch ${withTree ? "with" : "without"} router tree: ${res}`);
+    }
     console.log(`[page] pending requests: ${[...page.__pending.values()].map((u) => u.slice(0, 120)).join(" , ")}`);
     console.log(`[page] next router: ${await page.evaluate(() => typeof window.next?.router?.push).catch((e) => e.message)}`);
     await page.evaluate(() => window.next?.router?.push("/search")).catch(() => {});
