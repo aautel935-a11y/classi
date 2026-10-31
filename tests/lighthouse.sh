@@ -17,6 +17,7 @@ for p in "/" "/search" "/offer/$OFFER" "/login"; do
       const r = require(process.argv[1]); const c = r.categories, a = r.audits; const s = (k) => Math.round((c[k]?.score ?? 0) * 100);
       console.log([process.argv[2], process.argv[3], s("performance"), s("accessibility"), s("best-practices"), s("seo"),
         Math.round(a["largest-contentful-paint"].numericValue), a["cumulative-layout-shift"].numericValue.toFixed(3), Math.round(a["total-blocking-time"].numericValue)].join(" | "));
+      for (const it of (a["errors-in-console"]?.details?.items ?? []).slice(0, 3)) console.log("   ! console: " + String(it.description || it.source || "").slice(0, 160));
       for (const [k, v] of Object.entries(a)) if (v.score !== null && v.score < 0.9 && ["accessibility","seo","best-practices"].some((cat) => c[cat].auditRefs.some((x) => x.id === k && x.weight > 0))) console.log("   - " + k + ": " + v.title);
     ' "/tmp/lh/$name.json" "$p" "$ff"
   done

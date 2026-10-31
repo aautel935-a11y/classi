@@ -36,11 +36,11 @@ export default async function Search({ searchParams }: { searchParams: SP }) {
         <h1>بحث</h1>
         <HowToBook />
         <div className="hscroll">
-          <Link className="chip" href={link("")} aria-pressed={!f.type}>
+          <Link className="chip" href={link("")} aria-current={!f.type ? "page" : undefined}>
             كل الأنواع
           </Link>
           {(Object.keys(TYPES) as OfferingType[]).map((k) => (
-            <Link key={k} className="chip" href={link(k)} aria-pressed={f.type === k}>
+            <Link key={k} className="chip" href={link(k)} aria-current={f.type === k ? "page" : undefined}>
               {TYPES[k].name}
             </Link>
           ))}
@@ -100,6 +100,7 @@ export default async function Search({ searchParams }: { searchParams: SP }) {
             <button className="btn block">بحث</button>
           </noscript>
         </form>
+        <h2 className="sr-only">النتائج</h2>
         <p className="small muted num" aria-live="polite">{found.total} نتيجة{pages > 1 ? ` · صفحة ${page} من ${pages}` : ""}</p>
         <div className="stack">
           {res.length ? (
