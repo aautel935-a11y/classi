@@ -20,3 +20,4 @@ admin_ops_test      4
 today_test          0
 e2e_test            2
 security_test       0
+functional_test     0

@@ -4,20 +4,7 @@
 \pset footer off
 set client_min_messages = notice;
 
--- ---------- assertion helpers (run with the caller's role) ----------
-create function public.t_ok(p_label text, p_sql text) returns void language plpgsql as $$
-begin execute p_sql; raise notice 'PASS: %', p_label;
-exception when others then raise notice 'FAIL: % -> %', p_label, sqlerrm; end $$;
-create function public.t_err(p_label text, p_sql text) returns void language plpgsql as $$
-begin execute p_sql; raise notice 'FAIL: % -> it was allowed', p_label;
-exception when others then raise notice 'PASS: % (refused: %)', p_label, left(sqlerrm, 90); end $$;
-create function public.t_is(p_label text, p_sql text, p_expect text) returns void language plpgsql as $$
-declare v text;
-begin execute p_sql into v;
-  if v is not distinct from p_expect then raise notice 'PASS: % = %', p_label, coalesce(v, 'null');
-  else raise notice 'FAIL: % -> got %, expected %', p_label, coalesce(v, 'null'), coalesce(p_expect, 'null'); end if;
-exception when others then raise notice 'FAIL: % -> %', p_label, sqlerrm; end $$;
-grant execute on function public.t_ok(text,text), public.t_err(text,text), public.t_is(text,text,text) to anon, authenticated;
+-- assertion helpers t_ok / t_err / t_is come from grants.sql
 
 -- ---------- synthetic people ----------
 insert into auth.users (id, email, raw_user_meta_data) values
