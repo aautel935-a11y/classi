@@ -68,7 +68,7 @@ jobs:
         run: npx tsc --noEmit 2>&1 | tee /tmp/tsc.log
       - name: ESLint
         if: always()
-        run: npx next lint --max-warnings=-1 2>&1 | tee /tmp/lint.log
+        run: npx next lint 2>&1 | tee /tmp/lint.log
       - name: Unit tests
         if: always()
         run: sh tests/run-unit.sh 2>&1 | tee /tmp/unit.log
@@ -144,7 +144,10 @@ jobs:
         run: npx playwright test -c tests/e2e/playwright.config.mjs --reporter=list 2>&1 | tee /tmp/e2e.log
       - name: Report (annotations)
         if: always()
-        run: sh .github/report.sh "e2e" /tmp/supabase.log /tmp/e2e-build.log /tmp/e2e.log /tmp/next.log
+        run: |
+          docker logs supabase_auth_classi-local --tail 40 > /tmp/auth.log 2>&1 || true
+          docker logs supabase_db_classi-local --tail 30 > /tmp/db.log 2>&1 || true
+          sh .github/report.sh "e2e" /tmp/supabase.log /tmp/e2e-build.log /tmp/e2e.log /tmp/next.log /tmp/auth.log /tmp/db.log
       - uses: actions/upload-artifact@v4
         if: always()
         with: { name: playwright-report, path: "tests/e2e/report\ntests/e2e/results", retention-days: 7 }

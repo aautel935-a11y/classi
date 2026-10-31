@@ -29,6 +29,16 @@ async function readCode(phone) {
 }
 
 /** Sign up with phone + code through the real login screen. */
+async function waitForCodeStep(page, phone) {
+  const heading = page.getByRole("heading", { name: "أدخل الرمز" });
+  const err = page.locator(".err");
+  await expect(heading.or(err).first()).toBeVisible({ timeout: 20_000 });
+  if (await err.isVisible()) {
+    const outbox = await sql("select count(*)::int n from otp_outbox where regexp_replace(phone, '\\D', '', 'g') = $1", ["972" + phone.slice(1)]);
+    throw new Error(`code request refused on screen: "${(await err.textContent())?.trim()}" (otp_outbox rows: ${outbox[0]?.n})`);
+  }
+}
+
 export async function signUp(page, { phone, name, role }) {
   await page.goto("/login?mode=up");
   await page.locator("#full_name").fill(name);
@@ -37,7 +47,7 @@ export async function signUp(page, { phone, name, role }) {
   if (role === "student") await page.locator('input[name="guardian_ok"]').check();
   await page.locator('input[name="terms"]').check();
   await page.getByRole("button", { name: "أرسل رمز الدخول" }).click();
-  await expect(page.getByRole("heading", { name: "أدخل الرمز" })).toBeVisible();
+  await waitForCodeStep(page, phone);
   await page.locator("#code").fill(await readCode(phone));
   await page.waitForURL((u) => !u.pathname.startsWith("/login"), { timeout: 20_000 });
   const rows = await sql("select id from auth.users where phone in ($1, $2)", ["972" + phone.slice(1), "+972" + phone.slice(1)]);
@@ -49,7 +59,7 @@ export async function signIn(page, phone) {
   await page.goto("/login");
   await page.locator("#phone").fill(phone);
   await page.getByRole("button", { name: "أرسل رمز الدخول" }).click();
-  await expect(page.getByRole("heading", { name: "أدخل الرمز" })).toBeVisible();
+  await waitForCodeStep(page, phone);
   await page.locator("#code").fill(await readCode(phone));
   await page.waitForURL((u) => !u.pathname.startsWith("/login"), { timeout: 20_000 });
 }
