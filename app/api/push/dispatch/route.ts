@@ -54,7 +54,7 @@ async function deliver(db: ReturnType<typeof publicClient>, secret: string, clai
       try {
         await webpush.sendNotification(
           s,
-          JSON.stringify({ title: "Classi", body: it.body, url: it.link ?? "/notifications", tag: it.kind.startsWith("reminder") ? `r-${it.id}` : undefined }),
+          JSON.stringify({ title: "Classi", body: it.body, url: `/n/${it.id}`, tag: it.kind.startsWith("reminder") ? `r-${it.id}` : undefined }),
           { TTL: it.kind.startsWith("reminder") ? 3600 : 86400, urgency: it.kind === "reminder_soon" || it.kind === "message" ? "high" : "normal", timeout: 6000 }
         );
       } catch (e: any) {

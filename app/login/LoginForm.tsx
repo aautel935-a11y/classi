@@ -25,10 +25,16 @@ function EmailForm({ next: rawNext, onBack }: { next: string; onBack: () => void
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [sent, setSent] = useState(false);
+  // With captcha on in Supabase Auth, password sign-in, sign-up and reset need a token too (single use).
+  const [captcha, setCaptcha] = useState<string | null>(null);
+  const [captchaRound, setCaptchaRound] = useState(0);
+  const cap = () => (captcha ? { captchaToken: captcha } : {});
+  const used = () => { setCaptcha(null); setCaptchaRound((r) => r + 1); };
 
   async function onSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
     setError(null);
+    if (TURNSTILE_SITE_KEY && !captcha) return setError("أكّد أولاً أنك لست برنامجاً آلياً (المربع أعلى الزر).");
     setBusy(true);
     const f = new FormData(e.currentTarget);
     const supabase = createClient();
@@ -37,14 +43,17 @@ function EmailForm({ next: rawNext, onBack }: { next: string; onBack: () => void
     if (mode === "reset") {
       const { error } = await supabase.auth.resetPasswordForEmail(email, {
         redirectTo: `${window.location.origin}/auth/callback?next=${encodeURIComponent("/account/password")}`,
+        ...cap(),
       });
+      used();
       setBusy(false);
       if (error) return setError(/rate|limit|seconds/i.test(error.message) ? "أُرسلت رسائل كثيرة خلال وقت قصير. انتظر قليلاً ثم حاول مرة أخرى." : friendlyError(error));
       setSent(true);
       return;
     }
     if (mode === "in") {
-      const { error } = await supabase.auth.signInWithPassword({ email, password });
+      const { error } = await supabase.auth.signInWithPassword({ email, password, options: { ...cap() } });
+      used();
       setBusy(false);
       if (error) return setError(error.message === "Invalid login credentials" ? "البريد أو كلمة المرور غير صحيحة." : friendlyError(error));
       router.push(next);
@@ -58,8 +67,10 @@ function EmailForm({ next: rawNext, onBack }: { next: string; onBack: () => void
       options: {
         data: { full_name: String(f.get("full_name")).trim(), role, town: String(f.get("town") || ""), phone: String(f.get("phone") || "").trim(), terms_accepted_at: new Date().toISOString(), ...(role === "student" ? { guardian_consent_at: new Date().toISOString() } : {}) },
         emailRedirectTo: `${window.location.origin}/auth/callback?next=${encodeURIComponent(role === "teacher" ? "/teach" : role === "institute" ? "/manage" : next)}&role=${role}`,
+        ...cap(),
       },
     });
+    used();
     setBusy(false);
     if (error) return setError(error.message.includes("Password") ? "كلمة المرور قصيرة، استعمل 8 أحرف على الأقل." : friendlyError(error));
     if (data.session) {
@@ -130,6 +141,7 @@ function EmailForm({ next: rawNext, onBack }: { next: string; onBack: () => void
       {mode === "reset" && (
         <button type="button" className="link small" style={{ alignSelf: "flex-start" }} onClick={() => { setMode("in"); setError(null); }}>العودة لتسجيل الدخول</button>
       )}
+      <Turnstile onToken={setCaptcha} resetKey={captchaRound} />
       {mode === "up" && role === "student" && (
         <label className="row small consent" style={{ alignItems: "flex-start" }}>
           <input type="checkbox" name="guardian_ok" required style={{ marginTop: 3 }} />

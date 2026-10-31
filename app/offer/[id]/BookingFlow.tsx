@@ -106,6 +106,11 @@ export function BookingFlow({ offering: o, slots, groupSessions, kids, trialFor 
     return () => { document.removeEventListener("keydown", onKey); document.body.style.overflow = prevOverflow; opener?.focus?.(); };
   }, [open]);
 
+  // A new step replaces the focused button: move focus to the new step's heading so Tab stays in the dialog.
+  useEffect(() => {
+    if (open) sheetRef.current?.querySelector<HTMLElement>("h2")?.focus();
+  }, [open, step]);
+
   if (o.full) return <button className="btn block" disabled>الدورة ممتلئة</button>;
 
   return (

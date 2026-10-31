@@ -372,7 +372,7 @@ async function SubsTab({ supabase }: { supabase: any }) {
 
       <h2>قواعد الحجز والرسائل</h2>
       <div className="card formstack">
-        <p className="small muted">قيم تطبقها قاعدة البيانات نفسها. القيمة الفارغة تعني الافتراضي.</p>
+        <p className="small muted">قيم تطبقها قاعدة البيانات نفسها. للعودة إلى الافتراضي اكتب القيمة الافتراضية المذكورة تحت كل حقل.</p>
         {([
           ["min_lead_minutes", "أقل مهلة لحجز حصة خصوصية (بالدقائق)", "120", "0–1440"],
           ["max_open_bookings_per_offer", "أقصى عدد حجوزات قادمة لطالب مع عرض واحد (غير الأسبوعي)", "8", "1–50"],

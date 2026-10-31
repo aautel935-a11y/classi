@@ -40,7 +40,7 @@ export default async function ReportPage({ searchParams }: { searchParams: Promi
 
   if (booking) {
     const [{ data: b }, { data: r }] = await Promise.all([
-      supabase.from("bookings").select("id,starts_at,offering_id,offering:offerings(title,type),session:sessions(starts_at)").eq("id", booking).maybeSingle(),
+      supabase.from("bookings").select("id,starts_at,offering_id,offering:offerings(title,type),session:sessions!bookings_session_id_fkey(starts_at)").eq("id", booking).maybeSingle(),
       supabase.from("lesson_reports").select("present,summary,homework,understanding,participation,note").eq("booking_id", booking).is("session_id", null).maybeSingle(),
     ]);
     if (!b) notFound();

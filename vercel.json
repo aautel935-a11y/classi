@@ -4,7 +4,8 @@
   "crons": [{ "path": "/api/health/cron", "schedule": "0 5 * * *" }],
   "git": {
     "deploymentEnabled": {
-      "hardening/production-readiness": false
+      "hardening/production-readiness": false,
+      "hardening/**": false
     }
   }
 }

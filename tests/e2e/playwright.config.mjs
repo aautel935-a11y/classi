@@ -14,6 +14,7 @@ export default defineConfig({
   fullyParallel: false,
   workers: 1,
   retries: process.env.CI ? 1 : 0,
+  failOnFlakyTests: !!process.env.CI, // a retry may collect evidence, but a test that needed one fails the run
   reporter: [["list"], ["html", { outputFolder: "report", open: "never" }]],
   use: { baseURL: base, locale: "ar", timezoneId: "Asia/Jerusalem", trace: "retain-on-failure", screenshot: "only-on-failure" },
   projects: [
