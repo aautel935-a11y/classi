@@ -7,6 +7,7 @@ import { requireUser } from "@/lib/session";
 import { ConfirmPay, PayBadge } from "@/components/Pay";
 import { dayNum, dayShort, dayLong, fromLocal, isoDay, monthName, time } from "@/lib/format";
 import { ErrorNote } from "@/components/ErrorNote";
+import { privateSlots } from "@/lib/dates";
 
 export const dynamic = "force-dynamic";
 
@@ -65,21 +66,10 @@ export default async function TeacherCalendar({ searchParams }: { searchParams: 
   const wd = new Date(`${day}T12:00:00Z`).getUTCDay();
   const nowIso = new Date().toISOString();
 
-  // Free hours from the weekly availability, minus anything that overlaps them.
+  // Free hours: exactly the times students are offered (same privateSlots as the offer page: BUG-16).
   const rows: Row[] = list.map((it) => ({ at: it.starts_at, end: new Date(new Date(it.starts_at).getTime() + it.minutes * 60000).toISOString(), item: it }));
-  for (const h of (hours ?? []).filter((x) => x.weekday === wd)) {
-    const [sh, sm] = h.start_time.split(":").map(Number);
-    const [eh, em] = h.end_time.split(":").map(Number);
-    for (let m = sh * 60 + sm; m + lesson <= eh * 60 + em; m += step) {
-      const hhmm = `${String(Math.floor(m / 60)).padStart(2, "0")}:${String(m % 60).padStart(2, "0")}`;
-      const s = fromLocal(day, hhmm).getTime();
-      const e = s + lesson * 60000;
-      const clash = list.some((it) => {
-        const is = new Date(it.starts_at).getTime();
-        return is < e && is + it.minutes * 60000 > s;
-      });
-      if (!clash && s > Date.now()) rows.push({ at: new Date(s).toISOString(), end: new Date(e).toISOString(), free: true });
-    }
+  for (const sl of privateSlots(hours ?? [], list.map((it) => ({ starts_at: it.starts_at, minutes: it.minutes })), lesson, [day], t.buffer_minutes ?? 0)) {
+    if (!sl.busy) rows.push({ at: sl.at, end: new Date(new Date(sl.at).getTime() + lesson * 60000).toISOString(), free: true });
   }
   rows.sort((a, b) => a.at.localeCompare(b.at));
   const back = (extra = "") => <input type="hidden" name="day" value={day + extra} />;

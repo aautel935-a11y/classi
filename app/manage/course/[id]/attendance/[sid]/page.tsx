@@ -4,6 +4,7 @@ import { Icon } from "@/components/Icon";
 import { saveAttendanceAction } from "@/app/actions";
 import { requireUser } from "@/lib/session";
 import { dayLong, initials, time } from "@/lib/format";
+import { ErrorNote } from "@/components/ErrorNote";
 
 export const dynamic = "force-dynamic";
 
@@ -29,7 +30,8 @@ export default async function Attendance({ params, searchParams }: { params: Pro
           <b>{(s as any).offering?.title}</b>
           <p className="small muted">اللقاء {s.seq} · {dayLong(s.starts_at)} {time(s.starts_at)}{(s as any).room ? ` · ${(s as any).room.name}` : ""}</p>
         </div>
-        {sp.saved && <p className="okmsg">حُفظ الحضور.</p>}
+        {sp.saved && <p className="okmsg">حُفظ الحضور ({sp.saved} طالب).</p>}
+        <ErrorNote msg={sp.error} />
         <input type="hidden" name="session_id" value={sid} />
         <input type="hidden" name="path" value={path} />
         {students.length === 0 ? (
@@ -43,13 +45,17 @@ export default async function Attendance({ params, searchParams }: { params: Pro
                   <div className="avatar" style={{ width: 36, height: 36, fontSize: 13 }}>{initials(b.student_name)}</div>
                   <span className="name">{b.student_name}</span>
                   <div className="toggle2 radios">
-                    <label><input type="radio" name={`b_${b.booking_id}`} value="p" defaultChecked={v !== false} />حاضر</label>
+                    {/* nothing is pre-selected: an unmarked student stays unmarked (BUG-15) */}
+                    <label><input type="radio" name={`b_${b.booking_id}`} value="p" defaultChecked={v === true} />حاضر</label>
                     <label><input type="radio" name={`b_${b.booking_id}`} value="a" defaultChecked={v === false} />غائب</label>
                   </div>
                 </div>
               );
             })}
           </div>
+        )}
+        {students.length > 0 && students.some((b) => mark.get(b.booking_id) === undefined) && (
+          <p className="small muted">{students.filter((b) => mark.get(b.booking_id) === undefined).length} لم يُسجَّل حضورهم بعد. من لا تختار له شيئاً يبقى «لم يُسجَّل».</p>
         )}
         {students.length > 0 && <button className="btn block">حفظ الحضور</button>}
       </form>

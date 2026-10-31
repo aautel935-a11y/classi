@@ -15,7 +15,12 @@ export default async function Home({ searchParams }: { searchParams: Promise<Rec
   const town = profile?.town || "باقة الغربية";
   const { offerings, taken, subjects, teachers: allTeachers } = await loadCatalog();
   const teachers = allTeachers.filter((t) => t.town === town).slice(0, 8);
-  const courses = offerings.filter((o) => o.type === "course").slice(0, 3);
+  // "Starting soon": courses whose first day is today or later, soonest first (BUG-19).
+  const today = new Date().toISOString().slice(0, 10);
+  const courses = offerings
+    .filter((o) => o.type === "course" && (o as any).start_date && (o as any).start_date >= today)
+    .sort((a, b) => String((a as any).start_date).localeCompare(String((b as any).start_date)))
+    .slice(0, 3);
   const types: OfferingType[] = ["private", "group", "course", "recorded"];
   const first = profile?.full_name?.split(" ")[0];
 

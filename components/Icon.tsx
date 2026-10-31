@@ -39,8 +39,10 @@ export function Logo() {
 }
 
 export function Stars({ rating, count }: { rating: number; count?: number | string }) {
+  // No reviews yet: "new", not a 0.0 that reads like a bad rating (BUG-17).
+  if (count !== undefined && Number(count) === 0) return <span className="badge">جديد</span>;
   return (
-    <span className="stars">
+    <span className="stars" aria-label={`التقييم ${Number(rating).toFixed(1)} من 5${count !== undefined ? `، ${count} تقييماً` : ""}`}>
       <svg viewBox="0 0 24 24" aria-hidden="true" dangerouslySetInnerHTML={{ __html: P.star }} />
       {Number(rating).toFixed(1)}
       {count !== undefined && <em>({count})</em>}

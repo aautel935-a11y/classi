@@ -52,7 +52,9 @@ export function BookingFlow({ offering: o, slots, groupSessions, kids, trialFor 
   const canTrial = o.type === "private" && trialPrice != null && !!who && trialFor.includes(who) && !weekly;
   const useTrial = canTrial && trial;
   const pays = pkg && !useTrial ? [["package", `من الرزمة (بقي ${pkg.remaining} من ${pkg.size})`]] : o.type === "course" ? [["bit", "تحويل عبر Bit"], ["cash", "نقداً في المعهد"], ["installments", "3 دفعات (يُتفق عليها مع المعهد)"]] : o.type === "recorded" ? [["bit", "تحويل عبر Bit"]] : [["bit", "تحويل عبر Bit"], ["cash", "نقداً للمعلم عند الحصة"]];
-  const ready = (st === "slot" && slot) || (st === "session" && session) || st === "freq" || (st === "mode" && mode) || (st === "who" && who) || (st === "pay" && pay);
+  // The payment choice is valid only if it is still offered (it depends on who and on weekly/trial: BUG-11).
+  const payOk = !!pay && pays.some(([k]) => k === pay);
+  const ready = (st === "slot" && slot) || (st === "session" && session) || st === "freq" || (st === "mode" && mode) || (st === "who" && who) || (st === "pay" && payOk);
   const instant = o.type !== "private" || o.autoConfirm;
   const dayName = (iso: string) => dayShort(iso).replace(/^ال/, "");
   const whoName = who === "self" ? "أنا" : kids.find((k) => k.id === who)?.name;
@@ -148,11 +150,11 @@ export function BookingFlow({ offering: o, slots, groupSessions, kids, trialFor 
                 <>
                   <h2>حصة واحدة أم كل أسبوع؟</h2>
                   <p className="hint">الأسبوعي يحجز لك نفس الموعد كل أسبوع تلقائياً، ويمكنك إيقافه متى شئت.</p>
-                  <button className="opt" aria-pressed={!weekly} onClick={() => setWeekly(false)}>
+                  <button className="opt" aria-pressed={!weekly} onClick={() => { setWeekly(false); setPay(null); }}>
                     <span className="dot" />
                     <span>{o.type === "group" ? "هذا اللقاء فقط" : "حصة واحدة"} <span className="muted small">· {dayLong(chosenAt)} {time(chosenAt)}</span></span>
                   </button>
-                  <button className="opt" aria-pressed={weekly} onClick={() => setWeekly(true)}>
+                  <button className="opt" aria-pressed={weekly} onClick={() => { setWeekly(true); setPay(null); }}>
                     <span className="dot" />
                     <span>
                       {o.type === "group" ? "اشتراك في كل اللقاءات القادمة" : "موعد ثابت كل أسبوع"}
@@ -185,19 +187,19 @@ export function BookingFlow({ offering: o, slots, groupSessions, kids, trialFor 
               {st === "who" && (
                 <>
                   <h2>{o.type === "course" ? "من سيسجّل؟" : o.type === "recorded" ? "لمن المحتوى؟" : "من سيحضر؟"}</h2>
-                  <button className="opt" aria-pressed={who === "self"} onClick={() => setWho("self")}>
+                  <button className="opt" aria-pressed={who === "self"} onClick={() => { setWho("self"); setPay(null); }}>
                     <span className="dot" />
                     <span>أنا</span>
                   </button>
                   {kids.map((k) => (
-                    <button key={k.id} className="opt" aria-pressed={who === k.id} onClick={() => setWho(k.id)}>
+                    <button key={k.id} className="opt" aria-pressed={who === k.id} onClick={() => { setWho(k.id); setPay(null); }}>
                       <span className="dot" />
                       <span>
                         {k.name} {k.grade && <span className="muted small">{k.grade}</span>}
                       </span>
                     </button>
                   ))}
-                  <a className="link small" href="/account#children">
+                  <a className="link small" href={`/account?back=${encodeURIComponent(`/offer/${o.id}`)}#children`}>
                     إضافة ابن أو ابنة
                   </a>
                 </>

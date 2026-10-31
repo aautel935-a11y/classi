@@ -52,7 +52,7 @@ export default async function TeacherPage({ params, searchParams }: { params: Pr
       {teacher.user_id && teacher.user_id !== user?.id && <MessageButton teacherId={teacher.id} back={`/teacher/${teacher.id}`} label="راسل المعلم" />}
       {teacher.user_id !== user?.id && <WhatsAppButton phone={teacher.whatsapp} text={`مرحباً أ. ${teacher.name}، رأيت صفحتك في Classi وعندي سؤال:`} />}
       <div className="facts" style={{ marginTop: 12 }}>
-        <div className="fact"><b className="num">{Number(teacher.rating).toFixed(1)}</b><span>التقييم</span></div>
+        <div className="fact"><b className="num">{teacher.reviews_count > 0 ? Number(teacher.rating).toFixed(1) : "جديد"}</b><span>التقييم</span></div>
         <div className="fact"><b className="num">{teacher.reviews_count}</b><span>تقييماً</span></div>
         <div className="fact"><b className="num">{teacher.years}</b><span>سنوات خبرة</span></div>
       </div>

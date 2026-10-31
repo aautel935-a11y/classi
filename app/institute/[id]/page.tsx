@@ -50,7 +50,7 @@ export default async function InstitutePage({ params, searchParams }: { params: 
       {ins.owner_id && ins.owner_id !== user?.id && <MessageButton instituteId={ins.id} back={`/institute/${ins.id}`} label="راسل المعهد" />}
       {ins.owner_id !== user?.id && <WhatsAppButton phone={(ins as any).whatsapp} text={`مرحباً، رأيت ${ins.name} في Classi وعندي سؤال:`} />}
       <div className="facts" style={{ marginTop: 12 }}>
-        <div className="fact"><b className="num">{Number(ins.rating).toFixed(1)}</b><span>التقييم</span></div>
+        <div className="fact"><b className="num">{ins.reviews_count > 0 ? Number(ins.rating).toFixed(1) : "جديد"}</b><span>التقييم</span></div>
         <div className="fact"><b className="num">{staff ?? 0}</b><span>معلمين</span></div>
         <div className="fact"><b className="num">{list.length}</b><span>دورات</span></div>
       </div>

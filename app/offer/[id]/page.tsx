@@ -59,7 +59,7 @@ export default async function OfferPage({ params, searchParams }: { params: Prom
   const mine = mineR.data;
   const ownerAccount = ownerR.data as any;
   const canMessage = !mine && !!(ownerAccount?.user_id ?? ownerAccount?.owner_id);
-  const slots = o.type === "private" ? privateSlots(avR.data ?? [], busyR.data ?? [], o.minutes || 60, nextDays(7), Number(bufR.data ?? 0)) : [];
+  const slots = o.type === "private" ? privateSlots(avR.data ?? [], busyR.data ?? [], o.minutes || 60, nextDays(8, new Date(), true), Number(bufR.data ?? 0)) : [];
   const rows = (seatsR.data ?? []) as { offering_id: string; session_id: string | null; taken: number }[];
   const ss = (ssR.data ?? []) as { id: string; starts_at: string }[];
   const groupSessions = ss.map((x) => ({ id: x.id, starts_at: x.starts_at, taken: rows.find((r) => r.session_id === x.id)?.taken ?? 0 }));
@@ -86,7 +86,8 @@ export default async function OfferPage({ params, searchParams }: { params: Prom
   // Nothing left to book: full course, every upcoming group meeting full, or no free private hours.
   const noRoom =
     full ||
-    (o.type === "group" && o.seats != null && groupSessions.length > 0 && groupSessions.every((g) => g.taken >= o.seats!)) ||
+    // a group with no upcoming meetings has nothing to book either (BUG-12): offer the waiting list instead
+    (o.type === "group" && (groupSessions.length === 0 || (o.seats != null && groupSessions.every((g) => g.taken >= o.seats!)))) ||
     (o.type === "private" && slots.every((s) => s.busy));
   const myWait = ((wlR.data ?? []) as { id: string; offering_id: string; status: string; pos: number | null; child_name: string | null }[]).filter((w) => w.offering_id === o.id && w.status !== "declined");
   const notified = myWait.find((w) => w.status === "notified");
@@ -112,7 +113,7 @@ export default async function OfferPage({ params, searchParams }: { params: Prom
           <TypeBadge type={o.type} />
           {o.type === "private" && o.auto_confirm && <span className="badge ok"><Icon name="check" />تأكيد فوري</span>}
           {o.allow_weekly && (o.type === "private" || o.type === "group") && <span className="badge"><Icon name="cal" />يمكن الحجز أسبوعياً</span>}
-          {noRoom && o.type !== "private" && <span className="badge bad">ممتلئ</span>}
+          {noRoom && o.type !== "private" && <span className="badge bad">{o.type === "group" && groupSessions.length === 0 ? "لا لقاءات قادمة" : "ممتلئ"}</span>}
           {o.type === "private" && o.trial_price != null && <span className="badge ok">{o.trial_price === 0 ? "حصة تجريبية مجانية" : `حصة تجريبية بـ ${o.trial_price} ₪`}</span>}
         </div>
         <h1>{o.title}</h1>
@@ -240,7 +241,10 @@ export default async function OfferPage({ params, searchParams }: { params: Prom
             )}
           </div>
         ) : user && noRoom ? (
+          <>
+          {o.type === "group" && groupSessions.length === 0 && <p className="note">لا لقاءات قادمة لهذه المجموعة الآن. انضم إلى قائمة الانتظار ليصلك إشعار، أو راسل المعلم.</p>}
           <WaitlistJoin offering={{ id: o.id, type: o.type }} kids={(children ?? []) as { id: string; name: string }[]} owner={o.institute ? "institute" : "teacher"} />
+          </>
         ) : user ? (
           <>
           {notified && <p className="okmsg">تحرّر مكان لك من قائمة الانتظار. احجز الآن قبل غيرك.</p>}

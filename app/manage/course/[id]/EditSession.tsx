@@ -11,10 +11,6 @@ type Props = {
   students: number;
 };
 
-const TIMES = Array.from({ length: 21 }, (_, i) => {
-  const m = 12 * 60 + i * 30;
-  return `${String(Math.floor(m / 60)).padStart(2, "0")}:${String(m % 60).padStart(2, "0")}`;
-});
 
 export function EditSession({ path, session, rooms, laterCount, students }: Props) {
   const [open, setOpen] = useState(false);
@@ -26,7 +22,6 @@ export function EditSession({ path, session, rooms, laterCount, students }: Prop
   const [error, setError] = useState<string | null>(null);
   const [done, setDone] = useState<string | null>(null);
   const [pending, start] = useTransition();
-  const times = TIMES.includes(session.time) ? TIMES : [session.time, ...TIMES];
 
   function save() {
     setError(null);
@@ -50,7 +45,7 @@ export function EditSession({ path, session, rooms, laterCount, students }: Prop
               <h2>تعديل اللقاء {session.seq}</h2>
               <div className="typeform">
                 <label className="field" htmlFor={`d-${session.id}`}>التاريخ<input id={`d-${session.id}`} type="date" value={day} onChange={(e) => setDay(e.target.value)} /></label>
-                <label className="field" htmlFor={`t-${session.id}`}>الساعة<select id={`t-${session.id}`} value={tm} onChange={(e) => setTm(e.target.value)}>{times.map((t) => <option key={t}>{t}</option>)}</select></label>
+                <label className="field" htmlFor={`t-${session.id}`}>الساعة<input id={`t-${session.id}`} type="time" step={300} required value={tm} onChange={(e) => setTm(e.target.value)} /></label>
                 {rooms.length > 0 && (
                   <label className="field" htmlFor={`r-${session.id}`}>القاعة<select id={`r-${session.id}`} value={room} onChange={(e) => setRoom(e.target.value)}>{rooms.map((r) => <option key={r.id} value={r.id}>{r.name}</option>)}</select></label>
                 )}

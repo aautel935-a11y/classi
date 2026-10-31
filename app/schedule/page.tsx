@@ -71,84 +71,10 @@ export default async function Schedule({ searchParams }: { searchParams: Promise
     return true;
   });
 
-  return (
-    <div className="wrap">
-      <div className="section">
-        <h1>جدولي</h1>
-        {sp.booked && (
-          <div className="okmsg">
-            {sp.booked === "weekly"
-              ? `${sp.instant === "1" ? "تم تثبيت موعدك الأسبوعي" : "أُرسل طلبك الأسبوعي للمعلم"}: ${sp.created ?? ""} حصص محجوزة للأسابيع القادمة.`
-              : sp.instant === "0" ? "أُرسل طلب الحجز للمعلم. يصلك إشعار عند موافقته." : "تم الحجز. تجد التفاصيل هنا وفي الإشعارات."}
-            {sp.skipped && <p className="small" style={{ marginTop: 4 }}>لم نحجز هذه المواعيد لأن المعلم مشغول فيها: {sp.skipped}</p>}
-          </div>
-        )}
-        {sp.cancelled_series && <p className="okmsg">أُلغي الموعد الأسبوعي ({sp.cancelled_series} حصص قادمة).</p>}
-        <ErrorNote msg={sp.error} />
-        {sp.ok === "linked" && <p className="okmsg">رُبط التسجيل بحسابك. تجد المواعيد والتقارير والدفعات هنا.</p>}
-        {sp.ok === "link_declined" && <p className="okmsg">شكراً. أبلغنا المعهد أن الرقم ليس لولي أمر هذا الطالب.</p>}
-        {linkRequests.length > 0 && (
-          <div className="card stack" id="links" style={{ gap: 8 }}>
-            <b>تسجيلات برقم هاتفك</b>
-            <p className="small muted">سجّل معهد أو معلم طالباً برقم هاتفك. إن كان ابنك أو ابنتك، اربط التسجيل بحسابك لترى المواعيد والتقارير والدفعات.</p>
-            {linkRequests.map((r) => (
-              <div key={r.booking_id} className="row between" style={{ flexWrap: "wrap", gap: 8 }}>
-                <span>{r.student_name} · {r.offering_title} · {r.owner_name}</span>
-                <span className="row" style={{ gap: 6 }}>
-                  <form action={answerLinkAction}>
-                    <input type="hidden" name="booking_id" value={r.booking_id} />
-                    <input type="hidden" name="accept" value="1" />
-                    <button className="btn sm okb">اربط بحسابي</button>
-                  </form>
-                  <form action={answerLinkAction}>
-                    <input type="hidden" name="booking_id" value={r.booking_id} />
-                    <input type="hidden" name="accept" value="0" />
-                    <button className="btn sm ghost">ليس ابني/ابنتي</button>
-                  </form>
-                </span>
-              </div>
-            ))}
-          </div>
-        )}
-        <div className="row between">
-          <p className="small muted">كل الحصص والدورات لك ولأبنائك في مكان واحد.</p>
-          <Link className="btn sm ghost" href="/reports"><Icon name="check" />تقارير الحصص{unreadReports > 0 ? ` (${unreadReports})` : ""}</Link>
-        </div>
-        {sp.left && <p className="okmsg">خرجت من قائمة الانتظار.</p>}
-        {sp.paid_reported && <p className="okmsg">أبلغنا المعلم بالتحويل. تصلك رسالة عندما يؤكد الاستلام.</p>}
-        <PushToggle compact />
-        {waits.length > 0 && (
-          <div className="stack" style={{ gap: 8 }}>
-            <h2>قوائم الانتظار</h2>
-            {waits.map((w) => (
-              <div key={w.id} className="card">
-                <div className="row between">
-                  <Link href={`/offer/${w.offering_id}`}><b>{w.offering_title}</b></Link>
-                  <span className={`badge ${w.status === "notified" ? "ok" : w.status === "declined" ? "bad" : ""}`}>
-                    {w.status === "notified" ? "تحرّر مكان" : w.status === "accepted" ? "ردّ المعلم" : w.status === "declined" ? "اعتذار" : `رقم ${w.pos}`}
-                  </span>
-                </div>
-                <span className="small muted">{w.owner_name} · {w.child_name ?? "أنا"}</span>
-                {w.status === "notified" && <Link className="btn sm" href={`/offer/${w.offering_id}`}>احجز الآن</Link>}
-                {w.status === "accepted" && <Link className="link small" href="/messages">تابع في الرسائل</Link>}
-                {w.reply && <span className="small">«{w.reply}»</span>}
-                {(w.status === "waiting" || w.status === "notified") && (
-                  <form action={leaveWaitlistAction}>
-                    <input type="hidden" name="id" value={w.id} />
-                    <input type="hidden" name="back" value="/schedule" />
-                    <button className="link small" style={{ color: "var(--bad)" }}>الخروج من القائمة</button>
-                  </form>
-                )}
-              </div>
-            ))}
-          </div>
-        )}
-        {visible.length === 0 && (
-          <div className="empty">
-            لا حصص بعد. <Link className="link" href="/search">ابحث عن معلم</Link> واحجز أول حصة.
-          </div>
-        )}
-        {visible.map(({ r, at, room, changed }) => (
+  // Upcoming lessons first, soonest on top; past ones folded away, newest first (BUG-18).
+  const upcoming = visible.filter(({ at }) => !at || at >= now);
+  const past = visible.filter(({ at }) => at && at < now).reverse().slice(0, 30);
+  const renderLesson = ({ r, at, room, changed }: (typeof visible)[number]) => (
           <div key={r.id} className="card lesson">
             <div className="date">
               {at ? (
@@ -254,7 +180,92 @@ export default async function Schedule({ searchParams }: { searchParams: Promise
               )}
             </div>
           </div>
-        ))}
+  );
+
+  return (
+    <div className="wrap">
+      <div className="section">
+        <h1>جدولي</h1>
+        {sp.booked && (
+          <div className="okmsg">
+            {sp.booked === "weekly"
+              ? `${sp.instant === "1" ? "تم تثبيت موعدك الأسبوعي" : "أُرسل طلبك الأسبوعي للمعلم"}: ${sp.created ?? ""} حصص محجوزة للأسابيع القادمة.`
+              : sp.instant === "0" ? "أُرسل طلب الحجز للمعلم. يصلك إشعار عند موافقته." : "تم الحجز. تجد التفاصيل هنا وفي الإشعارات."}
+            {sp.skipped && <p className="small" style={{ marginTop: 4 }}>لم نحجز هذه المواعيد لأن المعلم مشغول فيها: {sp.skipped}</p>}
+          </div>
+        )}
+        {sp.cancelled_series && <p className="okmsg">أُلغي الموعد الأسبوعي ({sp.cancelled_series} حصص قادمة).</p>}
+        <ErrorNote msg={sp.error} />
+        {sp.ok === "linked" && <p className="okmsg">رُبط التسجيل بحسابك. تجد المواعيد والتقارير والدفعات هنا.</p>}
+        {sp.ok === "link_declined" && <p className="okmsg">شكراً. أبلغنا المعهد أن الرقم ليس لولي أمر هذا الطالب.</p>}
+        {linkRequests.length > 0 && (
+          <div className="card stack" id="links" style={{ gap: 8 }}>
+            <b>تسجيلات برقم هاتفك</b>
+            <p className="small muted">سجّل معهد أو معلم طالباً برقم هاتفك. إن كان ابنك أو ابنتك، اربط التسجيل بحسابك لترى المواعيد والتقارير والدفعات.</p>
+            {linkRequests.map((r) => (
+              <div key={r.booking_id} className="row between" style={{ flexWrap: "wrap", gap: 8 }}>
+                <span>{r.student_name} · {r.offering_title} · {r.owner_name}</span>
+                <span className="row" style={{ gap: 6 }}>
+                  <form action={answerLinkAction}>
+                    <input type="hidden" name="booking_id" value={r.booking_id} />
+                    <input type="hidden" name="accept" value="1" />
+                    <button className="btn sm okb">اربط بحسابي</button>
+                  </form>
+                  <form action={answerLinkAction}>
+                    <input type="hidden" name="booking_id" value={r.booking_id} />
+                    <input type="hidden" name="accept" value="0" />
+                    <button className="btn sm ghost">ليس ابني/ابنتي</button>
+                  </form>
+                </span>
+              </div>
+            ))}
+          </div>
+        )}
+        <div className="row between">
+          <p className="small muted">كل الحصص والدورات لك ولأبنائك في مكان واحد.</p>
+          <Link className="btn sm ghost" href="/reports"><Icon name="check" />تقارير الحصص{unreadReports > 0 ? ` (${unreadReports})` : ""}</Link>
+        </div>
+        {sp.left && <p className="okmsg">خرجت من قائمة الانتظار.</p>}
+        {sp.paid_reported && <p className="okmsg">أبلغنا المعلم بالتحويل. تصلك رسالة عندما يؤكد الاستلام.</p>}
+        <PushToggle compact />
+        {waits.length > 0 && (
+          <div className="stack" style={{ gap: 8 }}>
+            <h2>قوائم الانتظار</h2>
+            {waits.map((w) => (
+              <div key={w.id} className="card">
+                <div className="row between">
+                  <Link href={`/offer/${w.offering_id}`}><b>{w.offering_title}</b></Link>
+                  <span className={`badge ${w.status === "notified" ? "ok" : w.status === "declined" ? "bad" : ""}`}>
+                    {w.status === "notified" ? "تحرّر مكان" : w.status === "accepted" ? "ردّ المعلم" : w.status === "declined" ? "اعتذار" : `رقم ${w.pos}`}
+                  </span>
+                </div>
+                <span className="small muted">{w.owner_name} · {w.child_name ?? "أنا"}</span>
+                {w.status === "notified" && <Link className="btn sm" href={`/offer/${w.offering_id}`}>احجز الآن</Link>}
+                {w.status === "accepted" && <Link className="link small" href="/messages">تابع في الرسائل</Link>}
+                {w.reply && <span className="small">«{w.reply}»</span>}
+                {(w.status === "waiting" || w.status === "notified") && (
+                  <form action={leaveWaitlistAction}>
+                    <input type="hidden" name="id" value={w.id} />
+                    <input type="hidden" name="back" value="/schedule" />
+                    <button className="link small" style={{ color: "var(--bad)" }}>الخروج من القائمة</button>
+                  </form>
+                )}
+              </div>
+            ))}
+          </div>
+        )}
+        {upcoming.length === 0 && (
+          <div className="empty">
+            {past.length ? "لا حصص قادمة." : "لا حصص بعد."} <Link className="link" href="/search">ابحث عن معلم</Link> واحجز {past.length ? "حصة جديدة" : "أول حصة"}.
+          </div>
+        )}
+        {upcoming.map(renderLesson)}
+        {past.length > 0 && (
+          <details className="card">
+            <summary className="link">الحصص السابقة ({past.length})</summary>
+            <div className="stack" style={{ gap: 8, marginTop: 8 }}>{past.map(renderLesson)}</div>
+          </details>
+        )}
       </div>
     </div>
   );
