@@ -58,7 +58,8 @@ select t_is('trigger functions callable by authenticated', $$select count(*)::te
    and p.prorettype='trigger'::regtype and has_function_privilege('authenticated', p.oid, 'execute')$$, '0');
 select t_is('functions callable by anon (exact list)', $$select string_agg(proname, ',' order by proname) from pg_proc p
    where p.pronamespace='public'::regnamespace and has_function_privilege('anon', p.oid, 'execute') and proname not like 't\_%' and proname <> 'test_day'$$,
-  'claim_otp,claim_push,drop_push_subscriptions,health_ping,is_active_user,is_admin,is_conversation_member,is_conversation_reported,is_offering_owner,is_offering_staff,log_sms,my_teacher_id,offering_owner_verified,owner_has_access,seats_overview,setting,teacher_buffer,teacher_busy');
+  -- phase 4 adds two public read functions: course_seats (seat counts) and search_offers (runs with the caller's rights)
+  'claim_otp,claim_push,course_seats,drop_push_subscriptions,health_ping,is_active_user,is_admin,is_conversation_member,is_conversation_reported,is_offering_owner,is_offering_staff,log_sms,my_teacher_id,offering_owner_verified,owner_has_access,search_offers,seats_overview,setting,teacher_buffer,teacher_busy');
 
 \echo '===== SEC-02 institute staff needs consent; no SMS from staff changes'
 set role authenticated; set request.jwt.claim.sub='60000000-0000-0000-0000-00000000000a';

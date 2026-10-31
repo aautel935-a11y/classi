@@ -1,0 +1,21 @@
+--- visitor (anon)
+catalog: active offers with owner and subject                295.31 ms     2889 rows  (> 1000: cut by the API)
+catalog: teachers by rating                                   11.67 ms      597 rows
+seats_overview() whole platform                               29.78 ms     1280 rows  (> 1000: cut by the API)
+--- teacher 1 (account 1)
+owner_bookings() dashboard                                     3.01 ms      333 rows
+owner_payments()                                              98.38 ms        0 rows
+owner_money_summary()                                        169.48 ms        1 rows
+owner_waitlist()                                             114.39 ms        5 rows
+my_conversations() teacher                                    19.36 ms       33 rows
+my_header_counts() teacher                                    18.72 ms        1 rows
+teacher_busy 9 days                                            0.67 ms        5 rows
+--- institute owner 1 (account 601)
+owner_bookings() institute                                     2.96 ms      339 rows
+owner_payments() institute                                    95.52 ms      136 rows
+owner_money_summary() institute                              175.26 ms        1 rows
+--- family (account 1000)
+schedule: my live bookings                                     0.08 ms       10 rows
+my_conversations() family                                     17.69 ms        1 rows
+chat poll: last 100 messages of a conversation                 0.36 ms       15 rows
+notifications page (60 newest)                                 0.05 ms        5 rows

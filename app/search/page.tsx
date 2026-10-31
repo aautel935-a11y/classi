@@ -1,7 +1,8 @@
 import Link from "next/link";
 import { OfferCard } from "@/components/OfferCard";
-import { loadCatalog } from "@/lib/catalog";
-import { PLACES, TOWNS, TYPES, ownerOf, type OfferingType, type Place } from "@/lib/types";
+import { loadReference, searchCatalog } from "@/lib/catalog";
+import { SEARCH_PAGE, type SearchFilters } from "@/lib/search";
+import { PLACES, TOWNS, TYPES, type OfferingType, type Place } from "@/lib/types";
 import { HowToBook } from "@/components/HowToBook";
 import { AutoSubmit } from "./AutoSubmit";
 
@@ -10,20 +11,22 @@ type SP = Promise<Record<string, string | undefined>>;
 
 export default async function Search({ searchParams }: { searchParams: SP }) {
   const f = await searchParams;
-  const { offerings, taken, subjects, levels } = await loadCatalog();
   const q = (f.q ?? "").trim();
-  const res = offerings.filter(
-    (o) =>
-      (!f.type || o.type === f.type) &&
-      (!f.place || o.places.includes(f.place as Place)) &&
-      (!f.subject || String(o.subject?.id) === f.subject) &&
-      (!f.level || String(o.level?.id) === f.level) &&
-      (!f.town || ownerOf(o).town === f.town) &&
-      (!q || [o.title, ownerOf(o).name, o.subject?.name].some((s) => s?.includes(q)))
-  );
+  // Phase 4: the database filters (same rules as before) and returns one page; filters in a fixed order for the cache key.
+  const filters: SearchFilters = { type: f.type || undefined, place: f.place || undefined, subject: f.subject || undefined, level: f.level || undefined, town: f.town || undefined, q: q || undefined };
+  const page = Math.max(1, Math.min(1000, Number.parseInt(f.page ?? "1", 10) || 1));
+  const [{ subjects, levels }, found] = await Promise.all([loadReference(), searchCatalog(filters, page)]);
+  const res = found.offers;
+  const taken = new Map(found.taken);
+  const pages = Math.max(1, Math.ceil(found.total / SEARCH_PAGE));
   const link = (type: string) => {
-    const p = new URLSearchParams(Object.entries(f).filter(([k, v]) => v && k !== "type") as [string, string][]);
+    const p = new URLSearchParams(Object.entries(f).filter(([k, v]) => v && k !== "type" && k !== "page") as [string, string][]);
     if (type) p.set("type", type);
+    return `/search?${p}`;
+  };
+  const pageLink = (n: number) => {
+    const p = new URLSearchParams(Object.entries(f).filter(([k, v]) => v && k !== "page") as [string, string][]);
+    if (n > 1) p.set("page", String(n));
     return `/search?${p}`;
   };
 
@@ -97,14 +100,20 @@ export default async function Search({ searchParams }: { searchParams: SP }) {
             <button className="btn block">بحث</button>
           </noscript>
         </form>
-        <p className="small muted num">{res.length} نتيجة</p>
+        <p className="small muted num" aria-live="polite">{found.total} نتيجة{pages > 1 ? ` · صفحة ${page} من ${pages}` : ""}</p>
         <div className="stack">
           {res.length ? (
             res.map((o) => <OfferCard key={o.id} o={o} taken={o.type === "course" ? taken.get(o.id) ?? 0 : undefined} />)
           ) : (
-            <div className="empty">لا توجد نتائج بهذه الفلاتر. جرّب إزالة المادة أو البلد.</div>
+            <div className="empty">{found.total ? "لا نتائج في هذه الصفحة." : "لا توجد نتائج بهذه الفلاتر. جرّب إزالة المادة أو البلد."}</div>
           )}
         </div>
+        {pages > 1 && (
+          <nav className="row between" aria-label="صفحات النتائج">
+            {page > 1 ? <Link className="btn sm ghost" href={pageLink(page - 1)} rel="prev">السابق</Link> : <span />}
+            {page < pages ? <Link className="btn sm ghost" href={pageLink(page + 1)} rel="next">التالي</Link> : <span />}
+          </nav>
+        )}
       </div>
     </div>
   );

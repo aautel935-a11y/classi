@@ -1,3 +1,4 @@
+import { loadReference } from "@/lib/catalog";
 import Link from "next/link";
 import { Icon } from "@/components/Icon";
 import { OfferCard } from "@/components/OfferCard";
@@ -29,7 +30,7 @@ export default async function Teach({ searchParams }: { searchParams: Promise<Re
   const { data: t } = await supabase.from("teachers").select("id,name,verify,town,bio,years,is_school_teacher,subject_id,photo_url,buffer_minutes,intro_video_url,pending_changes,review_note,whatsapp,hours_confirmed_at").eq("user_id", user.id).maybeSingle();
 
   if (!t) {
-    const { data: subjects } = await supabase.from("subjects").select("id,name").order("id");
+    const { subjects } = await loadReference();
     return (
       <div className="wrap">
         <form id="kf-teacherSetup" action={teacherSetupAction} className="section">
@@ -51,9 +52,11 @@ export default async function Teach({ searchParams }: { searchParams: Promise<Re
     );
   }
 
-  const [{ data: bookings }, { data: offers }, { data: courseSessions }, { data: subjectList }, { data: hours }, { data: links }, { data: wl }, { data: pend }, { data: pays }, { data: money }, { data: bitRow }, { data: reviewRows }, { data: plans }, { data: subReq }, { data: paid }, { data: settings }, { data: myReviews }, { data: invites }] = await Promise.all([
-    supabase.rpc("owner_bookings"),
-    supabase.from("offerings").select(OFFERING_SELECT).eq("teacher_id", t.id).order("created_at"),
+  const [{ data: bookings }, { data: offers }, { data: courseSessions }, { data: subjectList }, { data: hours }, { data: links }, { data: wl }, { data: pend }, { data: pays }, { data: money }, { data: bitRow }, { data: plans }, { data: subReq }, { data: paid }, { data: settings }, { data: myReviews }, { data: invites }, { data: studentCount }] = await Promise.all([
+    // Lessons from yesterday on and every open request (the dashboard shows nothing older); phase 4: an active
+    // teacher's full history would pass the API's 1,000-row limit and cut off the newest lessons.
+    supabase.rpc("owner_bookings", { p_from: new Date(Date.now() - 36 * 3600 * 1000).toISOString() }),
+    supabase.from("offerings").select(OFFERING_SELECT + ",review_status,review_note,pending_changes").eq("teacher_id", t.id).order("created_at"),
     supabase
       .from("sessions")
       .select("id,seq,starts_at,changed,offering_id,room:rooms(name),offering:offerings!inner(title,course_teacher_id,institute:institutes(name))")
@@ -61,7 +64,7 @@ export default async function Teach({ searchParams }: { searchParams: Promise<Re
       .gt("starts_at", new Date().toISOString())
       .order("starts_at")
       .limit(6),
-    supabase.from("subjects").select("id,name").order("id"),
+    loadReference().then((r) => ({ data: r.subjects })),
     supabase.from("availability").select("weekday,start_time,end_time").eq("teacher_id", t.id),
     supabase.from("offering_links").select("offering_id"),
     supabase.rpc("owner_waitlist"),
@@ -69,18 +72,18 @@ export default async function Teach({ searchParams }: { searchParams: Promise<Re
     supabase.rpc("owner_payments"),
     supabase.rpc("owner_money_summary"),
     supabase.from("pay_numbers").select("bit_phone").eq("teacher_id", t.id).maybeSingle(),
-    supabase.from("offerings").select("id,review_status,review_note,pending_changes").eq("teacher_id", t.id),
     supabase.from("plans").select("code,name,months,price,active").order("sort"),
     supabase.from("subscriptions").select("id,status,price,months").eq("teacher_id", t.id).in("status", ["pending", "reported"]).order("created_at", { ascending: false }).limit(1).maybeSingle(),
     supabase.rpc("paid_until", { p_teacher: t.id, p_institute: null }),
     supabase.from("app_settings").select("key,value"),
     supabase.from("reviews").select("id,stars,body,author_name,reply,created_at").eq("teacher_id", t.id).order("created_at", { ascending: false }).limit(30),
     supabase.rpc("my_staff_invites"),
+    supabase.rpc("owner_student_count"),
   ]);
   const setting = (k: string) => ((settings ?? []) as { key: string; value: string }[]).find((x) => x.key === k)?.value ?? "";
   const subsRequired = setting("subscriptions_required") === "true";
   const subActive = !!paid && new Date(String(paid)) > new Date();
-  const reviewOf = (id: string) => ((reviewRows ?? []) as { id: string; review_status: string; review_note: string | null; pending_changes: unknown }[]).find((r) => r.id === id);
+  const reviewOf = (id: string) => ((offers ?? []) as unknown as { id: string; review_status: string; review_note: string | null; pending_changes: unknown }[]).find((r) => r.id === id);
   const bitLocal = bitRow?.bit_phone ? String(bitRow.bit_phone).replace(/^\+972/, "0") : "";
   const hasLink = new Set((links ?? []).map((l) => l.offering_id));
   const dayRanges = (d: number) => ((hours ?? []) as { weekday: number; start_time: string; end_time: string }[])
@@ -122,7 +125,7 @@ export default async function Teach({ searchParams }: { searchParams: Promise<Re
           {((pays ?? []) as any[]).some((x) => x.pay_status === "reported") && <a className="stat" href="#payments"><b className="num">{((pays ?? []) as any[]).filter((x) => x.pay_status === "reported").length}</b><span>تحويلات للتأكيد</span></a>}
           {((pend ?? []) as any[]).length > 0 && <a className="stat" href="#reports"><b className="num">{(pend as any[]).length}</b><span>تقارير ناقصة</span></a>}
           {waitlist.length > 0 && <a className="stat" href="#waitlist"><b className="num">{waitlist.length}</b><span>في الانتظار</span></a>}
-          <div className="stat"><b className="num">{new Set(rows.filter((b) => b.status === "confirmed").map((b) => b.student_name)).size}</b><span>طلاب</span></div>
+          <div className="stat"><b className="num">{Number(studentCount ?? 0)}</b><span>طلاب</span></div>
         </div>
       </div>
 

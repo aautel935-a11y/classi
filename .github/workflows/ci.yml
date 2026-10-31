@@ -72,6 +72,8 @@ jobs:
       PGPASSWORD: postgres
     steps:
       - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: 22 }
       - name: SQL suites
         run: sh supabase/tests/run_all.sh 2>&1 | tee /tmp/sql.log
       - name: No UPDATE/DELETE without WHERE (Supabase pg_safeupdate)
@@ -86,12 +88,20 @@ jobs:
       - name: Rollback drill (phase 2 down file)
         if: always()
         run: sh supabase/tests/rollback_drill.sh supabase/rollback/20261031010000_functional_fixes.down.sql flow_test roles_test security_test 2>&1 | tee /tmp/drill.log
-      - name: Rollback drill (phase 3 down file)
+      - name: Rollback drill (phase 4 down file)
         if: always()
-        run: sh supabase/tests/rollback_drill.sh supabase/rollback/20261031020000_phase3_performance_settings.down.sql flow_test roles_test security_test functional_test 2>&1 | tee /tmp/drill3.log
+        run: sh supabase/tests/rollback_drill.sh supabase/rollback/20261101000000_phase4_performance.down.sql flow_test roles_test security_test functional_test phase3_test messages_test 2>&1 | tee /tmp/drill4.log
+      - name: Rollback drill (phases 4 then 3)
+        if: always()
+        run: sh supabase/tests/rollback_drill.sh supabase/rollback/20261101000000_phase4_performance.down.sql,supabase/rollback/20261031020000_phase3_performance_settings.down.sql flow_test roles_test security_test functional_test 2>&1 | tee /tmp/drill3.log
+      - name: Search equivalence at growth size (3,000 offers, 409 filter combinations)
+        if: always()
+        run: |
+          DB=ct_perf sh supabase/tests/run.sh perf_data > /tmp/perfdata.log 2>&1
+          DB=ct_perf node --experimental-strip-types --no-warnings tests/search-equivalence.mjs 2>&1 | tee /tmp/searcheq.log
       - name: Report (annotations)
         if: always()
-        run: sh .github/report.sh "database" /tmp/safeupdate.log /tmp/sql.log /tmp/conc.log /tmp/grants.log /tmp/drill.log /tmp/drill3.log
+        run: sh .github/report.sh "database" /tmp/safeupdate.log /tmp/sql.log /tmp/conc.log /tmp/grants.log /tmp/drill.log /tmp/drill4.log /tmp/drill3.log /tmp/searcheq.log
 
   e2e:
     # Full browser tests against a local Supabase stack (Docker) and a production build of the app.

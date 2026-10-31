@@ -1,3 +1,4 @@
+import { loadReference } from "@/lib/catalog";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { Icon } from "@/components/Icon";
@@ -37,8 +38,8 @@ export default async function ManageOffer({ params, searchParams }: { params: Pr
     o.institute_id ? supabase.from("rooms").select("id,name").eq("institute_id", o.institute_id).order("name") : Promise.resolve({ data: [] as { id: string; name: string }[] }),
     supabase.rpc("owner_bookings", { p_offering: id }),
     supabase.from("offering_links").select("url,note").eq("offering_id", id).maybeSingle(),
-    supabase.from("subjects").select("id,name").order("id"),
-    supabase.from("levels").select("id,name").order("sort"),
+    loadReference().then((r) => ({ data: r.subjects })),
+    loadReference().then((r) => ({ data: r.levels })),
     o.institute_id ? supabase.from("institute_teachers").select("teacher:teachers(id,name)").eq("institute_id", o.institute_id).eq("status", "accepted") : Promise.resolve({ data: [] as any[] }),
     supabase.rpc("owner_waitlist", { p_offering: id }),
     supabase.rpc("owner_packages", { p_offering: id }),

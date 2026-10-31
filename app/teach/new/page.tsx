@@ -1,3 +1,4 @@
+import { loadReference } from "@/lib/catalog";
 import Link from "next/link";
 import { requireUser } from "@/lib/session";
 import { NewOfferForm } from "./NewOfferForm";
@@ -9,8 +10,8 @@ export default async function NewOffer({ searchParams }: { searchParams: Promise
   const sp = await searchParams;
   const { supabase, user } = await requireUser("/teach/new");
   const [{ data: subjects }, { data: levels }, { data: me }] = await Promise.all([
-    supabase.from("subjects").select("id,name").order("id"),
-    supabase.from("levels").select("id,name").order("sort"),
+    loadReference().then((r) => ({ data: r.subjects })),
+    loadReference().then((r) => ({ data: r.levels })),
     supabase.from("teachers").select("id").eq("user_id", user.id).maybeSingle(),
   ]);
   // No teacher profile yet: ask for it first instead of showing a form that would be thrown away (BUG-08).

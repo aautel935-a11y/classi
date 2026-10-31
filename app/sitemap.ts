@@ -1,16 +1,18 @@
 import type { MetadataRoute } from "next";
 import { SITE } from "@/lib/site";
 import { publicClient } from "@/lib/supabase/public";
+import { fetchAll } from "@/lib/fetch-all";
 
 export const revalidate = 3600;
 
 /** Public pages for search engines: only what visitors can already see. */
 export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
   const db = publicClient();
-  const [{ data: t }, { data: i }, { data: o }] = await Promise.all([
-    db.from("teachers").select("id"),
-    db.from("institutes").select("id"),
-    db.from("offerings").select("id").eq("active", true),
+  // Read in pages: the API returns at most 1,000 rows per request.
+  const [t, i, o] = await Promise.all([
+    fetchAll<{ id: string }>((a, b) => db.from("teachers").select("id").order("id").range(a, b)),
+    fetchAll<{ id: string }>((a, b) => db.from("institutes").select("id").order("id").range(a, b)),
+    fetchAll<{ id: string }>((a, b) => db.from("offerings").select("id").eq("active", true).order("id").range(a, b)),
   ]);
   const now = new Date();
   return [

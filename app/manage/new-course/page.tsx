@@ -1,3 +1,4 @@
+import { loadReference } from "@/lib/catalog";
 import { newCourseAction } from "@/app/actions";
 import { requireUser } from "@/lib/session";
 import { redirect } from "next/navigation";
@@ -14,8 +15,8 @@ export default async function NewCourse({ searchParams }: { searchParams: Promis
   const { data: inst } = await supabase.from("institutes").select("id").eq("owner_id", user.id).maybeSingle();
   if (!inst) redirect("/manage");
   const [{ data: subjects }, { data: levels }, { data: rooms }, { data: staff }] = await Promise.all([
-    supabase.from("subjects").select("id,name").order("id"),
-    supabase.from("levels").select("id,name").order("sort"),
+    loadReference().then((r) => ({ data: r.subjects })),
+    loadReference().then((r) => ({ data: r.levels })),
     supabase.from("rooms").select("id,name").eq("institute_id", inst.id).order("name"),
     supabase.from("institute_teachers").select("teacher:teachers(id,name)").eq("institute_id", inst.id).eq("status", "accepted"),
   ]);

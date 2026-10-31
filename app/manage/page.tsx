@@ -1,3 +1,4 @@
+import { fetchAll } from "@/lib/fetch-all";
 import Link from "next/link";
 import { Icon } from "@/components/Icon";
 import { addStaffAction, instituteSetupAction, removeStaffAction, updateInstituteAction } from "@/app/actions";
@@ -44,10 +45,10 @@ export default async function Manage({ searchParams }: { searchParams: Promise<R
 
   const [{ data: courses }, { data: seats }, { data: rooms }, { data: staff }, { data: allTeachers }, { data: log }, { data: wl }, { data: pays }, { data: money }, { data: bitRow }, { data: plans }, { data: subReq }, { data: paid }, { data: settings }, { data: myReviews }] = await Promise.all([
     supabase.from("offerings").select("id,title,seats,schedule_note,review_status,course_teacher:teachers!offerings_course_teacher_id_fkey(name)").eq("institute_id", inst.id).eq("type", "course").order("created_at"),
-    supabase.rpc("seats_overview"),
+    supabase.rpc("course_seats", { p_institute: inst.id }),
     supabase.from("rooms").select("id,name").eq("institute_id", inst.id).order("name"),
     supabase.from("institute_teachers").select("status,teacher:teachers(id,name)").eq("institute_id", inst.id),
-    supabase.from("teachers").select("id,name,town").order("name"),
+    fetchAll<{ id: string; name: string; town: string }>((a, b) => supabase.from("teachers").select("id,name,town").order("name").order("id").range(a, b)).then((data) => ({ data })),
     supabase.from("change_log").select("id,body,notified_count,created_at").order("created_at", { ascending: false }).limit(5),
     supabase.rpc("owner_waitlist"),
     supabase.rpc("owner_payments"),
@@ -72,8 +73,7 @@ export default async function Manage({ searchParams }: { searchParams: Promise<R
         .order("starts_at")
         .limit(5)
     : { data: [] as any[] };
-  const taken = (oid: string) =>
-    ((seats ?? []) as { offering_id: string; session_id: string | null; taken: number }[]).filter((r) => r.offering_id === oid && !r.session_id).reduce((a, r) => a + r.taken, 0);
+  const taken = (oid: string) => ((seats ?? []) as { offering_id: string; taken: number }[]).find((r) => r.offering_id === oid)?.taken ?? 0;
   const waitlist = ((wl ?? []) as WRow[]).filter((w) => ids.includes(w.offering_id));
   const staffIds = new Set((staff ?? []).map((s: any) => s.teacher?.id));
 
