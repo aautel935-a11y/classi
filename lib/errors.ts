@@ -16,5 +16,7 @@ export function friendlyError(e: Err): string {
   }
   if (/row-level security|permission denied/i.test(msg)) return "لا تملك صلاحية لهذه العملية.";
   if (/fetch failed|network|timeout|ECONN|Failed to fetch/i.test(msg)) return "تعذّر الاتصال. تحقق من الإنترنت وحاول مرة أخرى.";
+  // Unknown error: keep the technical detail in the server log (code and message only, never request data).
+  if (typeof window === "undefined") console.error("[unmapped error]", e.code ?? "", msg.slice(0, 300));
   return "تعذّر إتمام العملية. حاول مرة أخرى.";
 }

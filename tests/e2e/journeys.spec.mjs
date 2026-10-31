@@ -9,6 +9,15 @@ const S = {}; // shared between the steps of one project
 
 function trace(page) {
   page.__events = [];
+  // Server action responses: keep the start of the payload (Playwright cannot read bodies of 303 responses).
+  page.route("**/*", async (route) => {
+    const req = route.request();
+    if (req.method() !== "POST" || !req.headers()["next-action"]) return route.fallback();
+    const resp = await route.fetch();
+    const body = await resp.text();
+    page.__events.push(`action body ${body.length}: ${body.slice(0, 700).replace(/\s+/g, " ")}`);
+    await route.fulfill({ response: resp, body });
+  });
   const add = (x) => page.__events.push(x);
   page.on("console", (m) => { if (m.type() !== "debug") add(`console.${m.type()}: ${m.text().slice(0, 200)}`); });
   page.on("pageerror", (e) => add(`pageerror: ${e.message.slice(0, 200)}`));
