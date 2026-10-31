@@ -1,0 +1,11 @@
+Backup / restore drill, local Postgres 16, synthetic data (perf_data.sql: 20,000 accounts, 200,000 bookings, 300,000 messages)
+scripts/db/backup.sh  (pg_dump path; the Supabase CLI path is exercised in CI)
+  done: 39 tables counted; files: SHA256SUMS counts.txt data.sql schema.sql      (2.7 s, data.sql 134 MB)
+scripts/db/restore-check.sh
+  full restore (schema + data) into an empty database:          PASS: 39 tables, every row count matches the backup
+  data-only restore into a database with every migration:        PASS: 39 tables, every row count matches the backup
+  after the full restore: function result fingerprints vs source  56 compared, 0 differences
+  after storage-setup.sql: policies 61 (source 61)
+safety checks
+  TARGET_URL of the production project:                          refusing: TARGET_URL is the production project
+  backup folder inside the repository:                           refusing: the backup must not be inside the repository
