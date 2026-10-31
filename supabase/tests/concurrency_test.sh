@@ -10,7 +10,9 @@ $P >/dev/null <<'SQL'
 insert into auth.users (id, email, raw_user_meta_data) values
  ('70000000-0000-0000-0000-000000000001','a@t','{"full_name":"أ"}'),
  ('70000000-0000-0000-0000-000000000002','b@t','{"full_name":"ب"}'),
- ('70000000-0000-0000-0000-000000000003','owner@t','{"full_name":"صاحب"}');
+ ('70000000-0000-0000-0000-000000000003','owner@t','{"full_name":"صاحب"}'),
+ ('70000000-0000-0000-0000-000000000004','c@t','{"full_name":"ج"}'),
+ ('70000000-0000-0000-0000-000000000005','d@t','{"full_name":"د"}');
 update institutes set owner_id='70000000-0000-0000-0000-000000000003' where name='معهد المستقبل';
 -- an institute's private lessons (no teacher row: the case SEC-22 was about)
 insert into offerings (type, institute_id, title, places, price, minutes, active, review_status)
@@ -51,6 +53,25 @@ for u in 1 2; do
 done
 wait
 check "bookings on one teacher slot after two simultaneous requests" "$($P -c "select count(*) from bookings where offering_id='$O2' and starts_at='$AT2' and status in ('pending','confirmed')")" "1"
+
+# SEC-33: one family sends two trial-lesson requests (two different times) at the same moment: one trial only.
+$P -c "update offerings set trial_price = 0, package_enabled = true, package_size = 4, package_price = 400 where id = '$O2'" >/dev/null
+AT3=$($P -c "select (test_day(3) + time '16:00') at time zone 'Asia/Jerusalem'")
+AT4=$($P -c "select (test_day(3) + time '18:00') at time zone 'Asia/Jerusalem'")
+for at in "$AT3" "$AT4"; do
+  ( $P -c "begin; set local role authenticated; set local request.jwt.claim.sub='70000000-0000-0000-0000-000000000004';
+           select create_trial_booking('$O2', null, '$at', 'cash', 'online'); select pg_sleep(1); commit;" >/dev/null 2>&1 ) &
+done
+wait
+check "trial lessons after two simultaneous trial requests by one family" "$($P -c "select count(*) from bookings where offering_id='$O2' and booked_by='70000000-0000-0000-0000-000000000004' and is_trial and status in ('pending','confirmed')")" "1"
+
+# SEC-33: the same family buys a lesson package twice at the same moment: one active package only.
+for i in 1 2; do
+  ( $P -c "begin; set local role authenticated; set local request.jwt.claim.sub='70000000-0000-0000-0000-000000000005';
+           select buy_package('$O2', null, 'cash'); select pg_sleep(1); commit;" >/dev/null 2>&1 ) &
+done
+wait
+check "active packages after two simultaneous purchases" "$($P -c "select count(*) from lesson_packages where offering_id='$O2' and user_id='70000000-0000-0000-0000-000000000005' and status='active'")" "1"
 
 psql -h ${PGSOCK:-/var/tmp/pgc} -p ${PGPORT:-54329} -U postgres -q -c "drop database if exists $DB" >/dev/null
 echo "concurrency: $pass passed, $fail failed"
