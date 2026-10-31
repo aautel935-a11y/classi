@@ -1,3 +1,9 @@
+### database drill3.log [notice]
+NOTICE:  database "ct_drill" does not exist, skipping
+PASS: after rollback, flow_test (7 expected refusals)
+PASS: after rollback, roles_test (4 expected refusals)
+PASS: after rollback, security_test (0 expected refusals)
+PASS: after rollback, functional_test (0 expected refusals)
 ### database drill.log [notice]
 NOTICE:  database "ct_drill" does not exist, skipping
 PASS: after rollback, flow_test (7 expected refusals)
