@@ -15,6 +15,7 @@ function trace(page) {
   page.on("response", async (r) => {
     if (r.request().method() !== "POST") return;
     const h = r.headers();
+    if (h["content-type"]?.includes("x-component")) { const b = await r.text().catch((e) => "body? " + e.message); add(`body ${b.length}: ${b.slice(0, 240).replace(/\s+/g, " ")}`); }
     add(`POST ${new URL(r.url()).pathname} -> ${r.status()} loc=${h.location ?? ""} redirect=${h["x-action-redirect"] ?? ""} type=${h["content-type"] ?? ""} action=${r.request().headers()["next-action"] ? "fetch" : "form"}`);
   });
   page.on("framenavigated", (f) => { if (f === page.mainFrame()) add(`nav ${f.url()}`); });
@@ -41,7 +42,9 @@ test("9. teacher: sign up, profile, hours with Saturday, new offer (and the form
   await page.getByRole("button", { name: "حفظ الملف" }).click();
   await expect(page.locator("#hours")).toBeVisible({ timeout: 30_000 }).catch(async (e) => {
     const n = await sql("select count(*)::int n from teachers where user_id = $1", [S.teacherUser]);
-    throw new Error(`${e.message}\n[page] teacher rows after save: ${n[0].n}`);
+    await page.reload();
+    const after = await page.locator("#hours").count();
+    throw new Error(`${e.message}\n[page] teacher rows after save: ${n[0].n}; #hours after reload: ${after}; url ${page.url()}`);
   });
   S.teacherId = (await sql("select id from teachers where user_id = $1", [S.teacherUser]))[0].id;
 
