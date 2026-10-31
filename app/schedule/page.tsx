@@ -24,13 +24,15 @@ type Row = {
 export default async function Schedule({ searchParams }: { searchParams: Promise<Record<string, string | undefined>> }) {
   const sp = await searchParams;
   const { supabase, user, profile } = await requireUser("/schedule");
-  const { data } = await supabase
+  const { data, error: listError } = await supabase
     .from("bookings")
     .select("id,status,pay_method,starts_at,session_id,mode,price,series_id,pay_status,installments_total,installments_paid,child:children(name),session:sessions(starts_at),offering:offerings(id,type,title,minutes,places,teacher:teachers!offerings_teacher_id_fkey(name,whatsapp),institute:institutes(name,whatsapp))")
     .eq("booked_by", user.id)
     .in("status", ["pending", "confirmed"])
     .order("created_at", { ascending: false });
+  if (listError) console.error("[schedule] bookings list failed:", listError.code, listError.message);
   const rows = ((data ?? []) as unknown as Row[]).filter((r) => r.offering);
+  if (rows.length < (data ?? []).length) console.error("[schedule] bookings hidden because their offer is not readable:", (data ?? []).length - rows.length);
   const [{ data: links }, { data: wl }, { count: unreadReports0 }, { data: payNums }, { data: linkReqs }] = await Promise.all([
     supabase.from("offering_links").select("offering_id,url,note"),
     supabase.rpc("my_waitlist"),
