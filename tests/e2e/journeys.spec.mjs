@@ -10,7 +10,7 @@ const S = {}; // shared between the steps of one project
 function trace(page) {
   page.__events = [];
   const add = (x) => page.__events.push(x);
-  page.on("console", (m) => { if (process.env.DIAG_DEV && !m.text().includes("Content Security")) console.log(`[diag] console.${m.type()}: ${m.text().slice(0, 300)}`); if (m.type() !== "debug") add(`console.${m.type()}: ${m.text().slice(0, 200)}`); });
+  page.on("console", (m) => { if (m.type() !== "debug") add(`console.${m.type()}: ${m.text().slice(0, 200)}`); });
   page.on("pageerror", (e) => add(`pageerror: ${e.message.slice(0, 200)}`));
   page.on("response", async (r) => {
     if (r.url().includes("_rsc=")) { add(`GET rsc ${new URL(r.url()).search.slice(0, 60)} -> ${r.status()} cookie=${!!r.headers()["set-cookie"]} at ${Date.now() % 100000}`); return; }
@@ -46,41 +46,8 @@ test("9. teacher: sign up, profile, hours with Saturday, new offer (and the form
   await page.goto("/teach", { waitUntil: "networkidle" });
   await page.locator("#bio").fill("أشرح الرياضيات خطوة بخطوة.");
   await page.getByRole("button", { name: "حفظ الملف" }).click();
-  await expect(page.locator("#hours")).toBeVisible({ timeout: 15_000 }).catch(async () => {
-    console.log("[page] STUCK after teacher setup action; reloading to continue the diagnosis");
-    console.log(`[diag] pending: ${[...page.__pending.values()].map((u) => u.slice(0, 140)).join(" , ")}`);
-    console.log(`[diag] dom: ${await page.evaluate(() => JSON.stringify({
-      sheets: [...document.querySelectorAll('link[rel="stylesheet"]')].map((l) => `${l.getAttribute("href")?.slice(0, 60)}|prec=${l.getAttribute("data-precedence") ?? ""}|loaded=${!!l.sheet}`),
-      imgs: [...document.images].filter((i) => !i.complete).map((i) => i.src.slice(0, 80)),
-      unfinished: performance.getEntriesByType("resource").filter((e) => !e.responseEnd).map((e) => e.name.slice(0, 80)),
-      scripts: document.scripts.length,
-    })).catch((e) => e.message)}`);
-    for (const withTree of [true, false]) {
-      const res = await page.evaluate(async ({ tree }) => {
-        const t = Date.now();
-        try {
-          const headers = { RSC: "1" }; if (tree) headers["Next-Router-State-Tree"] = tree;
-          const r = await fetch("/teach?probe=rsc", { headers, signal: AbortSignal.timeout(20000) });
-          const reader = r.body.getReader(); let n = 0, first = 0;
-          for (;;) { const { done, value } = await reader.read(); if (done) break; if (!first) first = Date.now() - t; n += value.length; }
-          return `status ${r.status} first byte ${first} ms, done ${Date.now() - t} ms, ${n} bytes`;
-        } catch (e) { return `error after ${Date.now() - t} ms: ${e.message}`; }
-      }, { tree: withTree ? page.__tree : null });
-      console.log(`[diag] RSC fetch ${withTree ? "with" : "without"} router tree: ${res}`);
-    }
-    console.log(`[page] pending requests: ${[...page.__pending.values()].map((u) => u.slice(0, 120)).join(" , ")}`);
-    console.log(`[page] next router: ${await page.evaluate(() => typeof window.next?.router?.push).catch((e) => e.message)}`);
-    await page.evaluate(() => window.next?.router?.push("/search")).catch(() => {});
-    await page.waitForTimeout(4000);
-    console.log(`[diag] router.push(/search) -> url=${page.url()} offers=${await page.locator("a[href^='/offer/']").count()}`);
-    await page.evaluate(() => window.next?.router?.push("/teach?probe=1")).catch(() => {});
-    await page.waitForTimeout(4000);
-    console.log(`[diag] after router.push(/teach?probe=1): url=${page.url()} dashboard=${await page.locator("#hours").count()}`);
-    console.log(`[page] after router.push: url=${page.url()} dashboard=${await page.locator("#hours").count()} pending=${[...page.__pending.values()].map((u) => u.slice(0, 120)).join(" , ")}`);
-    for (const e of page.__events.slice(-8)) console.log(`[page] event: ${e}`);
-    await page.reload();
-    await expect(page.locator("#hours")).toBeVisible();
-  });
+  // Same-page redirect after a server action (with the old root loading.tsx the page stayed on the setup form)
+  await expect(page.locator("#hours")).toBeVisible({ timeout: 15_000 });
   S.teacherId = (await sql("select id from teachers where user_id = $1", [S.teacherUser]))[0].id;
 
   // Hours: Sunday-Thursday as suggested, plus Saturday 09:00-13:00 (BUG-01), saved in one transaction (BUG-04)
@@ -89,7 +56,6 @@ test("9. teacher: sign up, profile, hours with Saturday, new offer (and the form
   await hours.locator('input[name="from_6"]').fill("09:00");
   await hours.locator('input[name="to_6"]').fill("13:00");
   await hours.getByRole("button", { name: "حفظ الأوقات" }).click();
-  for (let i = 0; i < 6; i++) { await page.waitForTimeout(1000); console.log(`[page] tick ${i}: ${await Promise.race([page.evaluate(() => location.href), new Promise((r) => setTimeout(() => r("main thread busy"), 1500))])}`); }
   await expect(page.getByText(/حُفظت الأوقات \(6 فترة\)/)).toBeVisible();
 
   // New offer: a server-side error must not wipe the form (BUG-07)
@@ -100,7 +66,7 @@ test("9. teacher: sign up, profile, hours with Saturday, new offer (and the form
   await page.locator('input[name="auto_confirm"]').check();
   await page.evaluate(() => { const f = document.getElementById("new-offer"); if (f) f.noValidate = true; });
   await page.getByRole("button", { name: "نشر العرض" }).click();
-  await expect(page.getByRole("alert").or(page.locator(".err"))).toContainText("https://");
+  await expect(page.locator(".err, [role=alert]").filter({ hasText: "https://" }).first()).toBeVisible();
   await expect(page.locator("#title")).toHaveValue("رياضيات للاختبار الآلي");
   await page.locator("#link").fill("https://zoom.us/j/123");
   await page.getByRole("button", { name: "نشر العرض" }).click();

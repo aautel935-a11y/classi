@@ -1,7 +1,0 @@
-{
-  "name": "classi-repro",
-  "private": true,
-  "scripts": { "build": "next build", "start": "next start -p 3100" },
-  "dependencies": { "next": "^15.5.9", "react": "^19.2.3", "react-dom": "^19.2.3" },
-  "devDependencies": { "@playwright/test": "^1.55.0", "typescript": "^5", "@types/react": "^19", "@types/node": "^20" }
-}

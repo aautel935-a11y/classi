@@ -145,15 +145,6 @@ jobs:
       - name: Playwright
         env: { BASE_URL: "http://localhost:3000" }
         run: npx playwright test -c tests/e2e/playwright.config.mjs --reporter=list 2>&1 | tee /tmp/e2e.log
-      - name: Diagnosis in development mode (React warnings), teacher journey only
-        if: always()
-        env: { BASE_URL: "http://localhost:3001", DIAG_DEV: "1" }
-        run: |
-          (npx next dev -p 3001 > /tmp/next-dev.log 2>&1 &)
-          npx --yes wait-on@8 -t 120000 http://localhost:3001/
-          curl -s -o /dev/null http://localhost:3001/teach; curl -s -o /dev/null http://localhost:3001/login
-          npx playwright test -c tests/e2e/playwright.config.mjs --project=desktop -g "9. teacher" --retries=0 --reporter=list > /tmp/e2e-dev.log 2>&1 || true
-          grep -a 'Error:\|^ *> \|\[page\] http\|\[diag\]\|pageerror\|STUCK\|tick' /tmp/e2e-dev.log | grep -v 'React DevTools\|Fast Refresh' | cut -c1-400 | tail -40 > /tmp/e2e-dev-diag.log; tail -5 /tmp/e2e-dev.log >> /tmp/e2e-dev-diag.log
       - name: Report (annotations)
         if: always()
         run: |
@@ -161,33 +152,8 @@ jobs:
           docker logs supabase_db_classi-local 2>&1 | grep -E 'ERROR|FATAL' -A1 | tail -30 > /tmp/db.log || true
           grep -a '\[page\]' /tmp/e2e.log > /tmp/e2e-pages.log || true
           grep -a '\[diag\]' /tmp/e2e.log > /tmp/e2e-diag.log || true
-          sh .github/report.sh "e2e" /tmp/supabase.log /tmp/e2e-build.log /tmp/e2e.log /tmp/e2e-pages.log /tmp/e2e-diag.log /tmp/e2e-dev-diag.log /tmp/next-dev.log /tmp/next.log /tmp/auth.log /tmp/db.log
+          sh .github/report.sh "e2e" /tmp/supabase.log /tmp/e2e-build.log /tmp/e2e.log /tmp/e2e-pages.log /tmp/e2e-diag.log /tmp/next.log /tmp/auth.log /tmp/db.log
       - uses: actions/upload-artifact@v4
         if: always()
         with: { name: playwright-report, path: "tests/e2e/report\ntests/e2e/results", retention-days: 7 }
 
-  repro:
-    # Diagnosis: a minimal Next.js app checks whether the client applies server action redirects in this setup.
-    runs-on: ubuntu-latest
-    timeout-minutes: 20
-    defaults:
-      run:
-        working-directory: tests/repro
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
-        with:
-          node-version: 22
-      - run: npm install --no-audit --no-fund > /tmp/repro-install.log 2>&1; npx next --version | tee -a /tmp/repro-install.log
-      - run: npx playwright install --with-deps chromium > /dev/null 2>&1
-      - run: npx next build > /tmp/repro-build.log 2>&1
-      - name: Without cookie in middleware
-        if: always()
-        run: (npx next start -p 3100 & npx --yes wait-on http://localhost:3100 && npx playwright test 2>&1 | tee /tmp/repro-plain.log; kill $! || true; sleep 2)
-      - name: Middleware sets a cookie
-        if: always()
-        run: (REPRO_MW=1 npx next start -p 3100 & npx --yes wait-on http://localhost:3100 && npx playwright test 2>&1 | tee /tmp/repro-cookie.log; kill $! || true; sleep 2)
-      - name: Report (annotations)
-        if: always()
-        working-directory: .
-        run: sh .github/report.sh "repro" /tmp/repro-install.log /tmp/repro-build.log /tmp/repro-plain.log /tmp/repro-cookie.log
