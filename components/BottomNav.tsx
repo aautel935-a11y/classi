@@ -19,7 +19,7 @@ export function BottomNav({ kind, unread }: { kind: keyof typeof NAVS; unread: n
     <nav className="bar" dir="rtl" aria-label="التنقل">
       <div className="in">
         {items.map(([href, label, icon]) => (
-          <Link key={href} href={href} aria-current={href === active ? "page" : undefined} className="navitem">
+          <Link key={href} href={href} prefetch={false} aria-current={href === active ? "page" : undefined} className="navitem">
             <span className="navicon">
               <Icon name={icon} />
               {icon === "chat" && unread > 0 && <i className="num">{unread}</i>}

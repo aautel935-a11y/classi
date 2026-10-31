@@ -66,7 +66,7 @@ async function Shell({ children }: { children: React.ReactNode }) {
       <div className="app">
         <header className="top">
           <div className="wrap" style={{ display: "flex", alignItems: "center", gap: 10, paddingBlock: 10 }}>
-            <Link href={kind === "teacher" ? "/teach" : kind === "institute" ? "/manage" : "/"} className="brand">
+            <Link href={kind === "teacher" ? "/teach" : kind === "institute" ? "/manage" : "/"} prefetch={false} className="brand">
               <Logo />
               <span>Classi</span>
             </Link>
