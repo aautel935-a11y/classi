@@ -7,6 +7,16 @@ test.describe.configure({ mode: "serial" });
 
 const S = {}; // shared between the steps of one project
 
+// On failure, print what each open page shows (URL, heading, messages) so the CI log explains the cause.
+test.afterEach(async ({ browser }, info) => {
+  if (info.status === info.expectedStatus) return;
+  for (const ctx of browser.contexts()) for (const p of ctx.pages()) {
+    const msg = await p.locator(".err, .okmsg, [role=alert], .note").allTextContents().catch(() => []);
+    const h = await p.locator("h1, h2").first().textContent().catch(() => "");
+    console.log(`[page] ${p.url()} | h: ${h?.trim()} | messages: ${msg.map((m) => m.trim()).filter(Boolean).join(" / ").slice(0, 400)}`);
+  }
+});
+
 test("9. teacher: sign up, profile, hours with Saturday, new offer (and the form keeps input after an error)", async ({ browser }, info) => {
   const ctx = await browser.newContext(); const page = await ctx.newPage();
   S.teacherPhone = phoneFor(info, 1);
