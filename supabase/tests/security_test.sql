@@ -144,6 +144,14 @@ reset role;
 \echo '===== SEC-17 / 27 / 22 booking rules'
 set role authenticated; set request.jwt.claim.sub='60000000-0000-0000-0000-00000000000d';
 select t_err('private lesson outside the teacher''s hours (Saturday 03:00)', $$select create_booking((select priv from ids), null, (test_day(6) + time '03:00') at time zone 'Asia/Jerusalem', null, 'bit', false, 'online')$$);
+reset role;
+insert into app_settings (key, value) values ('rule_teacher_hours', 'off');
+set role authenticated; set request.jwt.claim.sub='60000000-0000-0000-0000-00000000000d';
+select t_ok('rollback switch: with rule_teacher_hours=off the hours rule alone is lifted', $$select create_booking((select priv from ids), null, (test_day(6) + time '04:00') at time zone 'Asia/Jerusalem', null, 'bit', false, 'online')$$);
+reset role;
+delete from app_settings where key = 'rule_teacher_hours';
+update bookings set status = 'cancelled' where starts_at = (test_day(6) + time '04:00') at time zone 'Asia/Jerusalem';
+set role authenticated; set request.jwt.claim.sub='60000000-0000-0000-0000-00000000000d';
 select t_err('unknown payment method', $$select create_booking((select priv from ids), null, (test_day(1) + time '15:00') at time zone 'Asia/Jerusalem', null, 'free money', false, 'online')$$);
 select t_err('"from the package" without a package', $$select create_booking((select priv from ids), null, (test_day(1) + time '15:00') at time zone 'Asia/Jerusalem', null, 'package', false, 'online')$$);
 select t_ok('normal booking inside hours', $$select create_booking((select priv from ids), null, (test_day(1) + time '15:00') at time zone 'Asia/Jerusalem', null, 'bit', false, 'online')$$);

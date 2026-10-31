@@ -442,8 +442,8 @@ begin
   end if;
 
   if o.type = 'private' and new.starts_at is not null then
-    if o.teacher_id is not null then
-      -- inside the teacher's published hours (Israel time)
+    if o.teacher_id is not null and coalesce(setting('rule_teacher_hours'), 'on') <> 'off' then
+      -- inside the teacher's published hours (Israel time); switch: app_settings rule_teacher_hours = 'off' (rollback only)
       v_local := new.starts_at at time zone 'Asia/Jerusalem';
       v_end := v_local + make_interval(mins => coalesce(new.minutes, o.minutes));
       if not exists (select 1 from availability a

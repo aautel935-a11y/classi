@@ -1,0 +1,10 @@
+NOTICE:  database "ct_drill" does not exist, skipping
+PASS: after rollback, flow_test (7 expected refusals)
+PASS: after rollback, roles_test (4 expected refusals)
+PASS: after rollback, hardening_test (2 expected refusals)
+PASS: after rollback, trial_packages_test (3 expected refusals)
+PASS: after rollback, recurring_test (4 expected refusals)
+PASS: after rollback, payments_test (4 expected refusals)
+PASS: after rollback, security_test (0 expected refusals)
+PASS: after rollback, messages_test (6 expected refusals)
+PASS: after rollback, waitlist_test (3 expected refusals)
