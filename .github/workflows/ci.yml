@@ -61,14 +61,19 @@ jobs:
       - name: npm ci
         run: npm ci --no-audit --no-fund 2>&1 | tee /tmp/npm.log
       - name: Dependency audit (high and above)
+        if: always()
         run: npm audit --omit=dev --audit-level=high 2>&1 | tee /tmp/audit.log
       - name: TypeScript
+        if: always()
         run: npx tsc --noEmit 2>&1 | tee /tmp/tsc.log
       - name: ESLint
+        if: always()
         run: npx next lint --max-warnings=-1 2>&1 | tee /tmp/lint.log
       - name: Unit tests
+        if: always()
         run: sh tests/run-unit.sh 2>&1 | tee /tmp/unit.log
       - name: next build
+        if: always()
         run: npx next build 2>&1 | tee /tmp/build.log
       - name: Report (annotations)
         if: always()
@@ -94,10 +99,13 @@ jobs:
       - name: SQL suites
         run: sh supabase/tests/run_all.sh 2>&1 | tee /tmp/sql.log
       - name: Concurrency
+        if: always()
         run: sh supabase/tests/concurrency_test.sh 2>&1 | tee /tmp/conc.log
       - name: RPC grants match the app
+        if: always()
         run: sh supabase/tests/check_rpc_grants.sh 2>&1 | tee /tmp/grants.log
       - name: Rollback drill (phase 2 down file)
+        if: always()
         run: sh supabase/tests/rollback_drill.sh supabase/rollback/20261031010000_functional_fixes.down.sql flow_test roles_test security_test 2>&1 | tee /tmp/drill.log
       - name: Report (annotations)
         if: always()
