@@ -7,10 +7,21 @@ test.describe.configure({ mode: "serial" });
 
 const S = {}; // shared between the steps of one project
 
+function trace(page) {
+  page.__events = [];
+  const add = (x) => page.__events.push(x);
+  page.on("console", (m) => { if (m.type() === "error" || m.type() === "warning") add(`console.${m.type()}: ${m.text().slice(0, 200)}`); });
+  page.on("pageerror", (e) => add(`pageerror: ${e.message.slice(0, 200)}`));
+  page.on("response", (r) => { if (r.request().method() === "POST") add(`POST ${new URL(r.url()).pathname} -> ${r.status()}`); });
+  page.on("framenavigated", (f) => { if (f === page.mainFrame()) add(`nav ${f.url()}`); });
+}
+
 // On failure, print what each open page shows (URL, heading, messages) so the CI log explains the cause.
 test.afterEach(async ({ browser }, info) => {
   if (info.status === info.expectedStatus) return;
   for (const ctx of browser.contexts()) for (const p of ctx.pages()) {
+    console.log(`[page] events: ${(p.__events ?? []).slice(-12).join(" || ").slice(0, 1500)}`);
+    console.log(`[page] invalid fields: ${await p.evaluate(() => [...document.querySelectorAll("form :invalid")].map((e) => e.id || e.getAttribute("name")).join(",")).catch(() => "?")}`);
     const msg = await p.locator(".err, .okmsg, [role=alert], .note").allTextContents().catch(() => []);
     const h = await p.locator("h1, h2").first().textContent().catch(() => "");
     console.log(`[page] ${p.url()} | h: ${h?.trim()} | messages: ${msg.map((m) => m.trim()).filter(Boolean).join(" / ").slice(0, 400)}`);
@@ -18,7 +29,7 @@ test.afterEach(async ({ browser }, info) => {
 });
 
 test("9. teacher: sign up, profile, hours with Saturday, new offer (and the form keeps input after an error)", async ({ browser }, info) => {
-  const ctx = await browser.newContext(); const page = await ctx.newPage();
+  const ctx = await browser.newContext(); const page = await ctx.newPage(); trace(page);
   S.teacherPhone = phoneFor(info, 1);
   S.teacherUser = await signUp(page, { phone: S.teacherPhone, name: "معلمة الاختبار", role: "teacher" });
   await page.goto("/teach");
