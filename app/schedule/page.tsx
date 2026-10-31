@@ -26,7 +26,7 @@ export default async function Schedule({ searchParams }: { searchParams: Promise
   const { supabase, user, profile } = await requireUser("/schedule");
   const { data, error: listError } = await supabase
     .from("bookings")
-    .select("id,status,pay_method,starts_at,session_id,mode,price,series_id,pay_status,installments_total,installments_paid,child:children(name),session:sessions(starts_at),offering:offerings(id,type,title,minutes,places,teacher:teachers!offerings_teacher_id_fkey(name,whatsapp),institute:institutes(name,whatsapp))")
+    .select("id,status,pay_method,starts_at,session_id,mode,price,series_id,pay_status,installments_total,installments_paid,child:children(name),session:sessions!bookings_session_id_fkey(starts_at),offering:offerings(id,type,title,minutes,places,teacher:teachers!offerings_teacher_id_fkey(name,whatsapp),institute:institutes(name,whatsapp))")
     .eq("booked_by", user.id)
     .in("status", ["pending", "confirmed"])
     .order("created_at", { ascending: false });

@@ -15,7 +15,7 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ id:
   if (!user) return NextResponse.redirect(new URL(`/login?next=/schedule`, SITE));
   const { data: b } = await supabase
     .from("bookings")
-    .select("id,series_id,starts_at,minutes,mode,offering:offerings(id,type,title,minutes,teacher:teachers!offerings_teacher_id_fkey(name),institute:institutes(name)),session:sessions(starts_at,minutes)")
+    .select("id,series_id,starts_at,minutes,mode,offering:offerings(id,type,title,minutes,teacher:teachers!offerings_teacher_id_fkey(name),institute:institutes(name)),session:sessions!bookings_session_id_fkey(starts_at,minutes)")
     .eq("id", id).eq("booked_by", user.id).in("status", ["pending", "confirmed"]).maybeSingle();
   if (!b) return new NextResponse("not found", { status: 404 });
   const o = (b as any).offering;
