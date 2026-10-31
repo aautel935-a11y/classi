@@ -26,11 +26,12 @@ export function matchesOffer(o: SearchOffer, f: SearchFilters): boolean {
   );
 }
 
-/** An id filter matches only when it is the plain decimal form of an id ("01" or "x" match nothing, as before). */
+/** An id filter matches only when it is the plain decimal form of an id ("01" or "x" match nothing, as before).
+ * Ids are positive database integers, so anything outside 1..2147483647 can match nothing either. */
 const idArg = (v: string | undefined): number | null | false => {
   if (!v) return null;
   const n = Number(v);
-  return Number.isSafeInteger(n) && String(n) === v ? n : false;
+  return Number.isSafeInteger(n) && String(n) === v && n >= 1 && n <= 2147483647 ? n : false;
 };
 
 export type SearchArgs = {
@@ -43,6 +44,10 @@ export function searchArgs(f: SearchFilters, page = 1): SearchArgs | null {
   const subject = idArg(f.subject), level = idArg(f.level);
   if (subject === false || level === false) return null;
   const q = (f.q ?? "").trim();
+  // No title or name contains a NUL character (and the database cannot hold one): nothing can match.
+  // Same for broken text (a lone UTF-16 surrogate cannot be sent to the database).
+  const bad = (v: string | undefined) => !!v && (v.includes("\u0000") || /[\uD800-\uDBFF](?![\uDC00-\uDFFF])|(?<![\uD800-\uDBFF])[\uDC00-\uDFFF]/.test(v));
+  if ([q, f.type, f.place, f.town].some(bad)) return null;
   const p = Number.isSafeInteger(page) && page > 0 ? page : 1;
   return {
     p_type: f.type || null, p_place: f.place || null, p_subject: subject, p_level: level,

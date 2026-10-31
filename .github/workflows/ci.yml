@@ -146,8 +146,9 @@ jobs:
             B=$(ls -d /tmp/backups/classi-backup-* | tail -1)
             supabase db reset --no-seed >/dev/null 2>&1       # a fresh database with every migration, no data
             DATA_ONLY=1 TARGET_URL="$E2E_DB_URL" sh scripts/db/restore-check.sh "$B"
-            psql "$E2E_DB_URL" -q -v ON_ERROR_STOP=1 -f scripts/db/storage-setup.sql 2>&1 | grep -v NOTICE || true
-            echo "scheduled jobs after the restore: $(psql "$E2E_DB_URL" -At -f scripts/db/cron-jobs.sql | grep -c '^classi-')"
+            psql "$E2E_DB_URL" -q -v ON_ERROR_STOP=1 -c 'set client_min_messages = warning' -f scripts/db/storage-setup.sql
+            jobs=$(psql "$E2E_DB_URL" -At -v ON_ERROR_STOP=1 -f scripts/db/cron-jobs.sql | grep -c '^classi-')
+            echo "scheduled jobs after the restore: $jobs"; [ "$jobs" = 7 ]
           } 2>&1 | tee /tmp/restore.log
       - name: Report (annotations)
         if: always()

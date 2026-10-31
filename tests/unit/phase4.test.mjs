@@ -20,6 +20,14 @@ test("searchArgs: ids must be plain numbers, as the old String(id) === value com
   assert.equal(searchArgs({ subject: "x" }), null);
   assert.equal(searchArgs({ level: "1.0" }), null);
 });
+test("searchArgs: values the database cannot hold match nothing (as before) instead of failing", () => {
+  assert.equal(searchArgs({ subject: "9999999999" }), null);
+  assert.equal(searchArgs({ level: "0" }), null);
+  assert.equal(searchArgs({ q: "a\u0000b" }), null);
+  assert.equal(searchArgs({ q: "\uD800x" }), null);
+  assert.equal(searchArgs({ q: "😀" }).p_q, "😀");
+  assert.equal(searchArgs({ subject: "2147483647" }).p_subject, 2147483647);
+});
 test("searchArgs: pages", () => {
   assert.equal(searchArgs({}, 3).p_offset, 2 * SEARCH_PAGE);
   assert.equal(searchArgs({}, 0).p_offset, 0);

@@ -14,7 +14,13 @@ export default async function Home({ searchParams }: { searchParams: Promise<Rec
   const { profile } = await getSession();
   const town = profile?.town || "باقة الغربية";
   // Best-rated teachers of the town; "starting soon": courses whose first day is today or later, soonest first (BUG-19).
-  const [{ subjects }, home] = await Promise.all([loadReference(), loadHome(town)]);
+  const [{ subjects }, home] = await Promise.all([
+    loadReference(),
+    loadHome(town).catch((e) => {
+      console.error("[home] lists failed:", String(e?.message ?? e).slice(0, 200));
+      return { teachers: [] as any[], courses: [] as Awaited<ReturnType<typeof loadHome>>["courses"], taken: [] as [string, number][] };
+    }),
+  ]);
   const { teachers, courses } = home;
   const taken = new Map(home.taken);
   const types: OfferingType[] = ["private", "group", "course", "recorded"];
