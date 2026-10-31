@@ -20,11 +20,20 @@ end $$;
 grant usage on schema perf to anon, authenticated;
 grant execute on function perf.bench(text, text, int) to anon, authenticated;
 
+select '{' || string_agg(id::text, ',') || '}' as course_ids from (select id from offerings where type = 'course' order by id limit 30) x \gset
 \echo '--- visitor (anon)'
 set role anon;
 select perf.bench('catalog: active offers with owner and subject', $q$select o.id, t.name, i.name, s.name from offerings o left join teachers t on t.id = o.teacher_id left join institutes i on i.id = o.institute_id left join subjects s on s.id = o.subject_id where o.active order by o.created_at$q$);
 select perf.bench('catalog: teachers by rating', $q$select id, name, rating from teachers order by rating desc$q$);
 select perf.bench('seats_overview() whole platform', $q$select * from seats_overview()$q$);
+\if :{?phase4}
+select perf.bench('search_offers: first page, no filters (30 of all)', $q$select * from search_offers(null, null, null, null, null, null, 30, 0)$q$);
+select perf.bench('search_offers: type + town + text', $q$select * from search_offers('private', null, null, null, 'جت', 'رياضيات', 30, 0)$q$);
+select perf.bench('search_offers: last page', $q$select * from search_offers(null, null, null, null, null, null, 30, 2880)$q$);
+select perf.bench('course_seats for 30 courses', $q$select * from course_seats('$q$ || :'course_ids' || $q$'::uuid[])$q$);
+select perf.bench('home: 8 teachers of a town by rating', $q$select id from teachers where town = 'جت' order by rating desc limit 8$q$);
+select perf.bench('home: next 3 courses', $q$select id from offerings where active and type = 'course' and start_date >= current_date order by start_date, created_at limit 12$q$);
+\endif
 reset role;
 
 \echo '--- teacher 1 (account 1)'

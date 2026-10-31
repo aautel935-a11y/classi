@@ -1,0 +1,64 @@
+Visibility (who sees which offers / teachers / institutes), 5 accounts, before vs after phase 4:
+rows compared: 17756
+differences: 0
+
+Function results (row count + md5 of all rows), 8 accounts x 7 functions, before vs after:
+fingerprints compared: 56
+differences: 0
+family 1000 | my_conversations | 1 rows | identical
+family 1000 | owner_bookings | 0 rows | DIFFERENT
+family 1000 | owner_bookings(offer) | 0 rows | DIFFERENT
+family 1000 | owner_money_summary | 1 rows | identical
+family 1000 | owner_payments | 0 rows | DIFFERENT
+family 1000 | owner_waitlist | 0 rows | DIFFERENT
+family 1000 | seats_overview | 1280 rows | identical
+family 5000 | my_conversations | 1 rows | identical
+family 5000 | owner_bookings | 0 rows | DIFFERENT
+family 5000 | owner_bookings(offer) | 0 rows | DIFFERENT
+family 5000 | owner_money_summary | 1 rows | identical
+family 5000 | owner_payments | 0 rows | DIFFERENT
+family 5000 | owner_waitlist | 0 rows | DIFFERENT
+family 5000 | seats_overview | 1280 rows | identical
+institute owner 601 | my_conversations | 0 rows | DIFFERENT
+institute owner 601 | owner_bookings | 339 rows | identical
+institute owner 601 | owner_bookings(offer) | 33 rows | identical
+institute owner 601 | owner_money_summary | 1 rows | identical
+institute owner 601 | owner_payments | 136 rows | identical
+institute owner 601 | owner_waitlist | 0 rows | DIFFERENT
+institute owner 601 | seats_overview | 1280 rows | identical
+teacher 1 | my_conversations | 33 rows | identical
+teacher 1 | owner_bookings | 333 rows | identical
+teacher 1 | owner_bookings(offer) | 250 rows | identical
+teacher 1 | owner_money_summary | 1 rows | identical
+teacher 1 | owner_payments | 0 rows | DIFFERENT
+teacher 1 | owner_waitlist | 5 rows | identical
+teacher 1 | seats_overview | 1280 rows | identical
+teacher 2 | my_conversations | 33 rows | identical
+teacher 2 | owner_bookings | 333 rows | identical
+teacher 2 | owner_bookings(offer) | 0 rows | DIFFERENT
+teacher 2 | owner_money_summary | 1 rows | identical
+teacher 2 | owner_payments | 5 rows | identical
+teacher 2 | owner_waitlist | 5 rows | identical
+teacher 2 | seats_overview | 1280 rows | identical
+teacher 71 (also course teacher) | my_conversations | 34 rows | identical
+teacher 71 (also course teacher) | owner_bookings | 334 rows | identical
+teacher 71 (also course teacher) | owner_bookings(offer) | 250 rows | identical
+teacher 71 (also course teacher) | owner_money_summary | 1 rows | identical
+teacher 71 (also course teacher) | owner_payments | 5 rows | identical
+teacher 71 (also course teacher) | owner_waitlist | 5 rows | identical
+teacher 71 (also course teacher) | seats_overview | 1280 rows | identical
+unverified institute 620 | my_conversations | 0 rows | DIFFERENT
+unverified institute 620 | owner_bookings | 340 rows | identical
+unverified institute 620 | owner_bookings(offer) | 34 rows | identical
+unverified institute 620 | owner_money_summary | 1 rows | identical
+unverified institute 620 | owner_payments | 136 rows | identical
+unverified institute 620 | owner_waitlist | 0 rows | DIFFERENT
+unverified institute 620 | seats_overview | 1280 rows | identical
+unverified teacher 50 | my_conversations | 33 rows | identical
+unverified teacher 50 | owner_bookings | 334 rows | identical
+unverified teacher 50 | owner_bookings(offer) | 0 rows | DIFFERENT
+unverified teacher 50 | owner_money_summary | 1 rows | identical
+unverified teacher 50 | owner_payments | 5 rows | identical
+unverified teacher 50 | owner_waitlist | 5 rows | identical
+unverified teacher 50 | seats_overview | 1280 rows | identical
+PASS: search_offers matches the original filter in all 409 combinations (2889 visible offers, same order and count)

@@ -83,14 +83,32 @@ $$;
 ------------------------------------------------------------------------------------------------------------
 create or replace function public.course_seats(p_offerings uuid[] default null, p_institute uuid default null)
 returns table (offering_id uuid, taken int)
-language sql stable security definer set search_path = public as $$
-  select b.offering_id, count(*)::int
-    from bookings b join offerings o on o.id = b.offering_id
-   where o.type in ('group','course') and b.status in ('pending','confirmed') and b.session_id is null
-     and (p_offerings is null or b.offering_id = any (p_offerings))
-     and (p_institute is null or o.institute_id = p_institute)
-   group by b.offering_id
-$$;
+language plpgsql stable security definer set search_path = public as $$
+begin
+  -- Three shapes so each uses the bookings index (a generic plan over "any of the list" scanned every booking).
+  if p_offerings is not null then
+    return query
+      select b.offering_id, count(*)::int
+        from (select distinct x from unnest(p_offerings) x) l
+        join offerings o on o.id = l.x
+        join bookings b on b.offering_id = o.id
+       where o.type in ('group','course') and b.status in ('pending','confirmed') and b.session_id is null
+         and (p_institute is null or o.institute_id = p_institute)
+       group by b.offering_id;
+  elsif p_institute is not null then
+    return query
+      select b.offering_id, count(*)::int
+        from offerings o join bookings b on b.offering_id = o.id
+       where o.institute_id = p_institute and o.type in ('group','course') and b.status in ('pending','confirmed') and b.session_id is null
+       group by b.offering_id;
+  else
+    return query
+      select b.offering_id, count(*)::int
+        from bookings b join offerings o on o.id = b.offering_id
+       where o.type in ('group','course') and b.status in ('pending','confirmed') and b.session_id is null
+       group by b.offering_id;
+  end if;
+end $$;
 
 ------------------------------------------------------------------------------------------------------------
 -- 4. Owner dashboards: start from the caller's own offers (indexes) instead of testing every booking,
