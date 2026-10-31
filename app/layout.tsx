@@ -11,6 +11,13 @@ import { signOutAction } from "@/app/actions";
 import { navFor } from "@/lib/types";
 import { SITE } from "@/lib/site";
 import { Splash, splashScript } from "@/components/Splash";
+import { Aref_Ruqaa, IBM_Plex_Sans_Arabic, Readex_Pro } from "next/font/google";
+
+// Fonts are downloaded at build time and served from the site itself (phase 4): no render-blocking stylesheet
+// from fonts.googleapis.com, and the text appears in the fallback font at once (display: swap).
+const chalk = Aref_Ruqaa({ weight: "700", subsets: ["arabic"], display: "swap", variable: "--f-chalk", preload: false });
+const text = IBM_Plex_Sans_Arabic({ weight: ["400", "500", "600"], subsets: ["arabic", "latin"], display: "swap", variable: "--f-text" });
+const display = Readex_Pro({ weight: ["500", "600", "700"], subsets: ["arabic", "latin"], display: "swap", variable: "--f-display" });
 
 export const metadata: Metadata = {
   metadataBase: new URL(SITE),
@@ -30,15 +37,9 @@ export const viewport: Viewport = { width: "device-width", initialScale: 1, view
 
 export default async function RootLayout({ children }: { children: React.ReactNode }) {
   return (
-    <html lang="ar" dir="rtl" suppressHydrationWarning>
+    <html lang="ar" dir="rtl" className={`${chalk.variable} ${text.variable} ${display.variable}`} suppressHydrationWarning>
       <head>
         <script dangerouslySetInnerHTML={{ __html: splashScript }} />
-        <link rel="preconnect" href="https://fonts.googleapis.com" />
-        <link rel="preconnect" href="https://fonts.gstatic.com" crossOrigin="" />
-        <link
-          rel="stylesheet"
-          href="https://fonts.googleapis.com/css2?family=Aref+Ruqaa:wght@700&family=IBM+Plex+Sans+Arabic:wght@400;500;600&family=Readex+Pro:wght@500;600;700&display=swap"
-        />
       </head>
       <body>
         <Splash />
