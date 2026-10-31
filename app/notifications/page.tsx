@@ -1,7 +1,5 @@
-import Link from "next/link";
 import { Icon } from "@/components/Icon";
 import { markAllReadAction, setEmailRemindersAction } from "@/app/actions";
-import { RefreshOnce } from "@/components/RefreshOnce";
 import { PushToggle } from "@/components/PushToggle";
 import { requireUser } from "@/lib/session";
 import { dayLong, time } from "@/lib/format";
@@ -22,18 +20,15 @@ export default async function Notifications() {
   const list = data ?? [];
   const unreadIds = list.filter((n) => !n.read_at).map((n) => n.id);
   const unread = unreadIds.length > 0;
-  // Opening the list counts as reading it (BUG-14): the bell badge clears; this visit still highlights what was new.
-  if (unread) await supabase.from("notifications").update({ read_at: new Date().toISOString() }).in("id", unreadIds);
+  // A notification is read when it is opened (/n/<id> marks it), or with "mark all read" (phase 3, decision 4).
   return (
     <div className="wrap">
       <div className="section">
         <div className="row between">
           <h1>الإشعارات</h1>
-          {unread && <span className="small muted">{unreadIds.length} جديد</span>}
-          {unread && <RefreshOnce />}
-          {unreadIds.length >= 60 && (
+          {unread && (
             <form action={markAllReadAction}>
-              <button className="link small">تعليم الكل كمقروء</button>
+              <button className="link small">تعليم الكل كمقروء ({unreadIds.length})</button>
             </form>
           )}
         </div>
@@ -45,13 +40,13 @@ export default async function Notifications() {
         </form>
         {list.length === 0 && <div className="empty">لا إشعارات بعد. أي حجز أو تغيير في المواعيد يظهر هنا.</div>}
         {list.map((n) => (
-          <Link key={n.id} href={n.link ?? "#"} className={`card notice ${n.read_at ? "" : "unread"}`}>
+          <a key={n.id} href={`/n/${n.id}`} className={`card notice ${n.read_at ? "" : "unread"}`}>
             <span className="ico"><Icon name={ICON[n.kind] ?? "bell"} /></span>
             <div className="stack" style={{ gap: 2, minWidth: 0 }}>
               <p>{n.body}</p>
               <span className="small muted">{dayLong(n.created_at)} · {time(n.created_at)}</span>
             </div>
-          </Link>
+          </a>
         ))}
       </div>
     </div>

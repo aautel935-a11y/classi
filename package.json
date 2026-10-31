@@ -5,7 +5,12 @@
   "scripts": {
     "dev": "next dev",
     "build": "next build",
-    "start": "next start"
+    "start": "next start",
+    "lint": "next lint",
+    "typecheck": "tsc --noEmit",
+    "test:unit": "sh tests/run-unit.sh",
+    "test:db": "sh supabase/tests/run_all.sh",
+    "test:e2e": "playwright test -c tests/e2e/playwright.config.mjs"
   },
   "dependencies": {
     "@supabase/ssr": "^0.5.2",
@@ -20,6 +25,13 @@
     "@types/react": "^19.0.0",
     "@types/react-dom": "^19.0.0",
     "typescript": "^5.7.0",
-    "@types/web-push": "3.6.4"
+    "@types/web-push": "3.6.4",
+    "eslint": "^8.57.1",
+    "eslint-config-next": "^15.5.9",
+    "@playwright/test": "^1.55.0",
+    "pg": "^8.13.1"
+  },
+  "engines": {
+    "node": ">=20"
   }
 }

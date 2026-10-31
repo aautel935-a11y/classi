@@ -6,6 +6,7 @@ import { SupportButton } from "@/components/SupportButton";
 import { Icon, Logo } from "@/components/Icon";
 import { isConfigured } from "@/lib/supabase/server";
 import { getSession, isBlocked } from "@/lib/session";
+import { supportWhatsapp } from "@/lib/settings";
 import { signOutAction } from "@/app/actions";
 import { navFor } from "@/lib/types";
 import { SITE } from "@/lib/site";
@@ -49,15 +50,15 @@ export default async function RootLayout({ children }: { children: React.ReactNo
 
 async function Shell({ children }: { children: React.ReactNode }) {
   const { supabase, user, profile } = await getSession();
-  let unread = 0;
-  let unreadMessages = 0;
-  if (user) {
-    const { data } = await supabase.rpc("my_header_counts");
-    const row = (Array.isArray(data) ? data[0] : data) as { notifications: number; messages: number } | null;
-    unread = row?.notifications ?? 0;
-    unreadMessages = row?.messages ?? 0;
-  }
-  const { data: support } = await supabase.rpc("setting", { p_key: "support_whatsapp" });
+  // PERF-01: the badge counts and the support number are fetched in parallel; the support number is the same for
+  // everyone, so it comes from a shared 5-minute cache (refreshed at once when the admin changes it).
+  const [counts, support] = await Promise.all([
+    user ? supabase.rpc("my_header_counts") : Promise.resolve({ data: null }),
+    supportWhatsapp(),
+  ]);
+  const row = (Array.isArray(counts.data) ? counts.data[0] : counts.data) as { notifications: number; messages: number } | null;
+  const unread = row?.notifications ?? 0;
+  const unreadMessages = row?.messages ?? 0;
   if (isBlocked(profile)) return <Blocked status={profile!.status} until={profile!.suspended_until} reason={profile!.status_reason} />;
   const kind = navFor(profile?.active_role ?? "guardian");
   return (

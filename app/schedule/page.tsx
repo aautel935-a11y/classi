@@ -10,6 +10,7 @@ import { googleCalLink } from "@/lib/contact";
 import { SITE } from "@/lib/site";
 import { WhatsAppButton } from "@/components/WhatsAppButton";
 import { ErrorNote } from "@/components/ErrorNote";
+import { Confirm } from "@/components/Confirm";
 
 export const dynamic = "force-dynamic";
 
@@ -164,10 +165,8 @@ export default async function Schedule({ searchParams }: { searchParams: Promise
               })()}
               {r.offering.type !== "recorded" && (
                 <div className="row" style={{ gap: 16, flexWrap: "wrap" }}>
-                  <form action={cancelBookingAction} className="inline-form">
-                    <input type="hidden" name="id" value={r.id} />
-                    <button className="link small" style={{ color: "var(--bad)" }}>{r.series_id ? "إلغاء هذه الحصة فقط" : "إلغاء الحجز"}</button>
-                  </form>
+                  <Confirm action={cancelBookingAction} fields={{ id: r.id }} label={r.series_id ? "إلغاء هذه الحصة فقط" : "إلغاء الحجز"}
+                    note="الإلغاء المجاني حتى 24 ساعة قبل الحصة الخصوصية. يصل المعلم إشعار." confirm="تأكيد الإلغاء" />
                   {r.series_id && (
                     <details>
                       <summary className="link small" style={{ color: "var(--bad)" }}>إيقاف الموعد الأسبوعي</summary>
@@ -246,11 +245,7 @@ export default async function Schedule({ searchParams }: { searchParams: Promise
                 {w.status === "accepted" && <Link className="link small" href="/messages">تابع في الرسائل</Link>}
                 {w.reply && <span className="small">«{w.reply}»</span>}
                 {(w.status === "waiting" || w.status === "notified") && (
-                  <form action={leaveWaitlistAction}>
-                    <input type="hidden" name="id" value={w.id} />
-                    <input type="hidden" name="back" value="/schedule" />
-                    <button className="link small" style={{ color: "var(--bad)" }}>الخروج من القائمة</button>
-                  </form>
+                  <Confirm action={leaveWaitlistAction} fields={{ id: w.id, back: "/schedule" }} label="الخروج من القائمة" note="تفقد دورك في القائمة." confirm="تأكيد الخروج" />
                 )}
               </div>
             ))}

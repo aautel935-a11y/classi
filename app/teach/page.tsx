@@ -15,6 +15,7 @@ import { SITE } from "@/lib/site";
 import { dayLong, isoDay, time } from "@/lib/format";
 import { ErrorNote } from "@/components/ErrorNote";
 import { KeepForm } from "@/components/KeepForm";
+import { Confirm } from "@/components/Confirm";
 
 export const dynamic = "force-dynamic";
 
@@ -239,7 +240,7 @@ export default async function Teach({ searchParams }: { searchParams: Promise<Re
             </div>
             <div className="row">
               <form action={respondAction}><input type="hidden" name="id" value={r.booking_id} /><input type="hidden" name="accept" value="1" /><button className="btn sm okb">{r.series_id ? "قبول كل المواعيد" : "قبول"}</button></form>
-              <form action={respondAction}><input type="hidden" name="id" value={r.booking_id} /><input type="hidden" name="accept" value="0" /><button className="btn sm badb">رفض</button></form>
+              <Confirm asButton action={respondAction} fields={{ id: r.booking_id, accept: "0" }} label="رفض" note="يصل الطالب إشعار بالرفض، ويتحرر الموعد." confirm="تأكيد الرفض" />
               <form action={startBookingConversationAction}><input type="hidden" name="booking_id" value={r.booking_id} /><button className="btn sm ghost"><Icon name="chat" />راسل</button></form>
             </div>
           </div>

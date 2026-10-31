@@ -2,7 +2,7 @@
 :root{
   --bg:#FBF8F2; --card:#FFFFFF; --ink:#18204A; --muted:#5A6080;
   --primary:#1E2F6E; --on-primary:#FFFFFF; --accent:#D4962A; --soft:#F5E6C6;
-  --line:#E5DFD2; --ok:#2E7D5B; --ok-soft:#DDEFE5; --bad:#B3261E; --bad-soft:#F7DEDB;
+  --line:#E5DFD2; --line-strong:#8C8471; --accent-ink:#8A5A0F; --ok:#25684B; --ok-soft:#DDEFE5; --bad:#B3261E; --bad-soft:#F7DEDB;
   --scrim:rgba(24,32,74,.45); --board:#24433B; --board-ink:#F4F1E6; --wood:#9B6B3D; --rule:rgba(30,47,110,.055); --shadow:0 1px 0 rgba(24,32,74,.04),0 8px 20px -14px rgba(24,32,74,.35);
   --chalk:"Aref Ruqaa","Readex Pro",serif; color-scheme:light;
   --display:"Readex Pro","IBM Plex Sans Arabic",system-ui,sans-serif;
@@ -14,7 +14,7 @@ body{background-color:var(--bg);background-image:repeating-linear-gradient(to bo
 body::before{content:"";position:fixed;inset:0 0 auto;height:env(safe-area-inset-top,0px);z-index:30;background:var(--bg)}
 button,input,select,textarea{font:inherit;color:inherit}
 button{cursor:pointer}
-:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+:focus-visible{outline:2px solid var(--accent-ink);outline-offset:2px}
 .app{max-width:480px;margin:0 auto;min-height:100vh;padding-bottom:calc(84px + env(safe-area-inset-bottom,0px))}
 .wrap{padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px))}
 
@@ -68,7 +68,7 @@ svg.i{width:20px;height:20px;fill:none;stroke:currentColor;stroke-width:1.75;str
 .badge svg{width:14px;height:14px}
 .badge.ok{background:var(--ok-soft);color:var(--ok)}
 .badge.bad{background:var(--bad-soft);color:var(--bad)}
-.verified{color:var(--accent);display:inline-flex}
+.verified{color:var(--accent-ink);display:inline-flex}
 .verified svg{width:17px;height:17px}
 
 /* cards */
@@ -81,7 +81,7 @@ button.card:hover{border-color:var(--muted)}
 .meta{display:flex;flex-wrap:wrap;gap:4px 12px;font-size:13px;color:var(--muted)}
 .meta span{display:inline-flex;align-items:center;gap:4px}
 .meta svg{width:15px;height:15px}
-.stars{color:var(--accent);display:inline-flex;align-items:center;gap:3px;font-weight:600}
+.stars{color:var(--accent-ink);display:inline-flex;align-items:center;gap:3px;font-weight:600}
 .stars svg{width:15px;height:15px;fill:currentColor;stroke:none}
 .stars em{font-style:normal;color:var(--muted);font-weight:400}
 
@@ -96,12 +96,12 @@ button.card:hover{border-color:var(--muted)}
 /* filters */
 .filters{display:grid;grid-template-columns:repeat(2,1fr);gap:8px}
 .field{display:flex;flex-direction:column;gap:4px;font-size:13px;color:var(--muted);min-width:0}
-.field select,.field input,.field textarea{background:var(--card);border:1px solid var(--line);border-radius:var(--r-sm);padding:10px;color:var(--ink);width:100%}
+.field select,.field input,.field textarea{background:var(--card);border:1px solid var(--line-strong);border-radius:var(--r-sm);padding:10px;color:var(--ink);width:100%}
 
 /* buttons */
 .btn{display:inline-flex;align-items:center;justify-content:center;gap:6px;min-height:48px;border-radius:var(--r-lg);border:1px solid var(--primary);background:var(--primary);color:var(--on-primary);font-weight:600;padding:0 18px;font-size:15px}
 .btn.ghost{background:transparent;color:var(--primary)}
-.btn.sm{min-height:36px;padding:0 12px;font-size:13.5px;border-radius:var(--r-sm)}
+.btn.sm{min-height:40px;padding:0 12px;font-size:13.5px;border-radius:var(--r-sm)}
 .btn.block{width:100%}
 .btn:disabled{opacity:.45;cursor:not-allowed}
 .btn.okb{background:var(--ok);border-color:var(--ok);color:var(--bg)}
@@ -392,13 +392,26 @@ a.cal-row{color:inherit;text-decoration:none;border-inline-start:4px solid var(-
 .hours-day:has(> label input:not(:checked)){opacity:.55}
 .hours-day input[type=time]{padding:6px 8px;border:1px solid var(--line);border-radius:var(--r-sm);background:var(--bg);font:inherit;min-width:0;width:108px}
 input.otp{font-size:26px;letter-spacing:.5em;text-align:center;font-variant-numeric:tabular-nums;padding:12px}
-.btn.wa{background:#1f8f4e;color:#fff;border-color:#1f8f4e;gap:8px}
+.btn.wa{background:#167A41;color:#fff;border-color:#167A41;gap:8px}
 .btn.wa:hover{background:#18763f}
 .support{position:fixed;inset-inline-start:14px;bottom:calc(76px + env(safe-area-inset-bottom));z-index:40;display:flex;flex-direction:column;align-items:flex-start;gap:8px}
-.support-fab{width:44px;height:44px;border-radius:50%;border:0;background:#1f8f4e;color:#fff;font-size:22px;font-weight:700;box-shadow:0 4px 14px rgba(0,0,0,.18);cursor:pointer}
+.support-fab{width:44px;height:44px;border-radius:50%;border:0;background:#167A41;color:#fff;font-size:22px;font-weight:700;box-shadow:0 4px 14px rgba(0,0,0,.18);cursor:pointer}
 .support-card{background:var(--card);border:1px solid var(--line);border-radius:var(--r-sm);box-shadow:0 8px 24px rgba(0,0,0,.14);padding:12px;display:flex;flex-direction:column;gap:6px;max-width:250px}
 .howto{border:1px solid var(--line);border-radius:var(--r-sm);background:var(--card);padding:10px 12px}
 .howto summary{cursor:pointer;font-weight:700;color:var(--primary)}
 .howto ol{margin:10px 0 6px;padding-inline-start:20px;display:flex;flex-direction:column;gap:8px}
 .howto li span{display:block;font-size:13.5px;color:var(--muted)}
 .hint{font-size:13px;color:var(--muted);margin:2px 0 6px}
+
+/* Two-step confirmation (components/Confirm.tsx) */
+.confirm{display:inline-block}
+.confirm>summary{list-style:none;cursor:pointer}
+.confirm>summary::-webkit-details-marker{display:none}
+.confirm[open]>summary{opacity:.7}
+.confirm-box{display:flex;flex-direction:column;gap:6px;margin-top:6px;padding:8px;border:1px solid var(--line-strong,#8C8471);border-radius:var(--r-sm,8px);background:var(--card,#fff);max-width:320px}
+
+/* Accessibility (A11Y-02/03, phase 3): text-style buttons get a 44px touch target; colours above meet WCAG AA. */
+.link.small{min-height:44px;display:inline-flex;align-items:center;padding-inline:4px}
+.sheet-close{position:absolute;top:8px;inset-inline-start:10px;width:44px;height:44px;border:0;background:transparent;font-size:26px;line-height:1;color:var(--muted);cursor:pointer;border-radius:50%}
+.sheet-close:focus-visible{outline:2px solid var(--accent-ink)}
+.sheet h2[tabindex]{outline:none}

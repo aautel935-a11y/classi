@@ -6,6 +6,7 @@ import { createClient } from "@/lib/supabase/client";
 import { TOWNS } from "@/lib/types";
 import { safePath } from "@/lib/safe";
 import { clearKeptForms } from "@/components/KeepForm";
+import { Turnstile, TURNSTILE_SITE_KEY } from "@/components/Turnstile";
 import { digitsOnly, toE164 } from "@/lib/phone";
 import { friendlyError } from "@/lib/errors";
 
@@ -178,6 +179,8 @@ export function LoginForm({ next: rawNext, initial = "in" }: { next: string; ini
   const [wait, setWait] = useState(0);
   const meta = useRef<Record<string, string> | null>(null);
   const codeRef = useRef<HTMLInputElement>(null);
+  const [captcha, setCaptcha] = useState<string | null>(null);
+  const [captchaRound, setCaptchaRound] = useState(0);
 
   useEffect(() => {
     if (wait <= 0) return;
@@ -189,11 +192,15 @@ export function LoginForm({ next: rawNext, initial = "in" }: { next: string; ini
   if (useEmail) return <EmailForm next={next} onBack={() => setUseEmail(false)} />;
 
   async function sendCode(e164: string, signup: boolean) {
+    if (TURNSTILE_SITE_KEY && !captcha) return "أكّد أولاً أنك لست برنامجاً آلياً (المربع أعلى الزر).";
     const supabase = createClient();
     const { error } = await supabase.auth.signInWithOtp({
       phone: e164,
-      options: { shouldCreateUser: signup, channel: "sms", ...(signup && meta.current ? { data: meta.current } : {}) },
+      options: { shouldCreateUser: signup, channel: "sms", ...(signup && meta.current ? { data: meta.current } : {}), ...(captcha ? { captchaToken: captcha } : {}) },
     });
+    // A captcha token is single-use: ask for a fresh one for the next request.
+    setCaptcha(null);
+    setCaptchaRound((n) => n + 1);
     return error ? otpError(error.message) : null;
   }
 
@@ -266,6 +273,7 @@ export function LoginForm({ next: rawNext, initial = "in" }: { next: string; ini
         <p className="small muted">لم تصل الرسالة خلال دقيقة؟ إن كان لحسابك بريد إلكتروني نرسل الرمز إليه تلقائياً، أو <button type="button" className="link" onClick={() => setUseEmail(true)}>ادخل بالبريد وكلمة المرور</button>.</p>
         <div className="row between small">
           <button type="button" className="link" onClick={() => { setStep("phone"); setError(null); }}>تغيير الرقم</button>
+          {wait <= 0 && <Turnstile onToken={setCaptcha} resetKey={captchaRound} />}
           {wait > 0 ? <span className="muted num">إعادة الإرسال بعد {wait} ث</span> : <button type="button" className="link" onClick={resend} disabled={busy}>أرسل الرمز مرة أخرى</button>}
         </div>
       </form>
@@ -324,6 +332,7 @@ export function LoginForm({ next: rawNext, initial = "in" }: { next: string; ini
         </label>
       )}
       {error && <p className="err">{error}</p>}
+      <Turnstile onToken={setCaptcha} resetKey={captchaRound} />
       <button className="btn block" disabled={busy}>{busy ? "لحظة…" : "أرسل رمز الدخول"}</button>
       <p className="small muted" style={{ textAlign: "center" }}>بلا كلمة مرور: نرسل لك رمزاً برسالة SMS.</p>
       <button type="button" className="link small" onClick={() => setUseEmail(true)}>لدي حساب قديم بالبريد الإلكتروني</button>

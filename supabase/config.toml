@@ -1,0 +1,62 @@
+# Local Supabase stack for CI and local development ONLY (`supabase start`).
+# It is not linked to the production project and holds synthetic data from seed.sql.
+project_id = "classi-local"
+
+[api]
+enabled = true
+port = 54321
+schemas = ["public", "graphql_public"]
+extra_search_path = ["public", "extensions"]
+max_rows = 1000
+
+[db]
+port = 54322
+shadow_port = 54320
+major_version = 15
+
+[db.seed]
+enabled = true
+sql_paths = ["./seed.sql"]
+
+[realtime]
+enabled = false
+
+[studio]
+enabled = false
+
+[storage]
+enabled = true
+file_size_limit = "5MiB"
+
+[auth]
+enabled = true
+site_url = "http://localhost:3000"
+additional_redirect_urls = ["http://localhost:3000/auth/callback"]
+jwt_expiry = 3600
+enable_signup = true
+enable_anonymous_sign_ins = false
+
+[auth.rate_limit]
+sms_sent = 200
+token_verifications = 300
+
+[auth.email]
+enable_signup = true
+enable_confirmations = false
+
+[auth.sms]
+enable_signup = true
+enable_confirmations = true
+template = "Your code is {{ .Code }}"
+max_frequency = "1s"
+
+# Sign-in codes go through Classi's own Postgres hook (as in production); E2E tests read the code from otp_outbox.
+[auth.hook.send_sms]
+enabled = true
+uri = "pg-functions://postgres/public/send_sms_hook"
+
+[edge_runtime]
+enabled = false
+
+[analytics]
+enabled = false

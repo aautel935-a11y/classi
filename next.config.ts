@@ -11,12 +11,12 @@ const securityHeaders = [
     key: "Content-Security-Policy-Report-Only",
     value: [
       "default-src 'self'",
-      "script-src 'self' 'unsafe-inline'",
+      "script-src 'self' 'unsafe-inline' https://challenges.cloudflare.com",
       "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com",
       "font-src 'self' https://fonts.gstatic.com",
       `img-src 'self' data: blob: https://*.supabase.co https://i.ytimg.com`,
       `connect-src 'self' ${supabase}`,
-      "frame-src https://www.youtube-nocookie.com",
+      "frame-src https://www.youtube-nocookie.com https://challenges.cloudflare.com",
       "worker-src 'self'",
       "manifest-src 'self'",
     ].join("; "),
@@ -30,9 +30,7 @@ const securityHeaders = [
 
 const nextConfig: NextConfig = {
   poweredByHeader: false,
-  // Still on until CI runs `tsc` and `next lint` on every change (audit SEC-35, phase 6 of the hardening plan).
-  typescript: { ignoreBuildErrors: true },
-  eslint: { ignoreDuringBuilds: true },
+  // Type and lint errors fail the build (SEC-35); CI runs tsc, next lint and next build on every push.
   async headers() {
     return [{ source: "/(.*)", headers: securityHeaders }];
   },

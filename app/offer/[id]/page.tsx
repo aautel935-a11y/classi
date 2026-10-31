@@ -17,6 +17,7 @@ import { buyPackageAction, leaveWaitlistAction } from "@/app/actions";
 import { IntroVideo } from "@/components/IntroVideo";
 import { WhatsAppButton } from "@/components/WhatsAppButton";
 import { PayBadge, PayForStudent } from "@/components/Pay";
+import { Confirm } from "@/components/Confirm";
 
 export const dynamic = "force-dynamic";
 
@@ -50,7 +51,7 @@ export default async function OfferPage({ params, searchParams }: { params: Prom
     o.type === "group" || o.type === "course"
       ? supabase.from("sessions").select("id,starts_at,seq").eq("offering_id", o.id).eq("cancelled", false).gt("starts_at", now).order("starts_at").limit(o.type === "group" ? 4 : 1)
       : empty,
-    o.type === "group" || o.type === "course" ? supabase.rpc("seats_overview") : empty,
+    o.type === "group" || o.type === "course" ? supabase.rpc("seats_overview", { p_offerings: [o.id] }) : empty,
     user ? supabase.from("children").select("id,name,grade").order("created_at") : empty,
     o.type === "private" && o.teacher_id ? supabase.rpc("teacher_buffer", { p_teacher: o.teacher_id }) : empty,
     user ? supabase.rpc("my_waitlist") : empty,
@@ -233,11 +234,7 @@ export default async function OfferPage({ params, searchParams }: { params: Prom
             {waiting.status === "accepted" ? (
               <Link className="btn sm" href="/messages">الرسائل</Link>
             ) : (
-              <form action={leaveWaitlistAction}>
-                <input type="hidden" name="id" value={waiting.id} />
-                <input type="hidden" name="back" value={`/offer/${o.id}`} />
-                <button className="link small" style={{ color: "var(--bad)" }}>الخروج من القائمة</button>
-              </form>
+              <Confirm action={leaveWaitlistAction} fields={{ id: waiting.id, back: `/offer/${o.id}` }} label="الخروج من القائمة" note="تفقد دورك في القائمة." confirm="تأكيد الخروج" />
             )}
           </div>
         ) : user && noRoom ? (

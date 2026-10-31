@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState, useTransition } from "react";
+import { useMemo, useState, useTransition, useEffect, useRef } from "react";
 import { useRouter } from "next/navigation";
 import { bookAction } from "@/app/actions";
 import { dayLong, dayNum, dayShort, monthName, time } from "@/lib/format";
@@ -35,6 +35,7 @@ export function BookingFlow({ offering: o, slots, groupSessions, kids, trialFor 
   const [error, setError] = useState<string | null>(null);
   const [trial, setTrial] = useState(true);
   const [pending, start] = useTransition();
+  const sheetRef = useRef<HTMLDivElement>(null);
 
   const chooseMode = o.type !== "recorded" && o.places.length > 1;
   const canWeekly = o.allowWeekly && (o.type === "private" || o.type === "group");
@@ -82,6 +83,29 @@ export function BookingFlow({ offering: o, slots, groupSessions, kids, trialFor 
     });
   }
 
+  // Dialog behaviour (A11Y-01): focus moves into the sheet, Tab stays inside it, Esc and a visible button close it,
+  // the page behind does not scroll, and focus returns to the button that opened it.
+  useEffect(() => {
+    if (!open) return;
+    const sheet = sheetRef.current;
+    const opener = document.activeElement as HTMLElement | null;
+    const prevOverflow = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    const focusables = () => Array.from(sheet?.querySelectorAll<HTMLElement>('button:not([disabled]),a[href],input:not([disabled]),select,textarea,[tabindex]:not([tabindex="-1"])') ?? []);
+    (sheet?.querySelector<HTMLElement>("h2") ?? focusables()[0])?.focus();
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") { e.preventDefault(); setOpen(false); return; }
+      if (e.key !== "Tab") return;
+      const f = focusables();
+      if (!f.length) return;
+      const first = f[0], last = f[f.length - 1];
+      if (e.shiftKey && document.activeElement === first) { e.preventDefault(); last.focus(); }
+      else if (!e.shiftKey && document.activeElement === last) { e.preventDefault(); first.focus(); }
+    };
+    document.addEventListener("keydown", onKey);
+    return () => { document.removeEventListener("keydown", onKey); document.body.style.overflow = prevOverflow; opener?.focus?.(); };
+  }, [open]);
+
   if (o.full) return <button className="btn block" disabled>الدورة ممتلئة</button>;
 
   return (
@@ -92,14 +116,15 @@ export function BookingFlow({ offering: o, slots, groupSessions, kids, trialFor 
       {open && (
         <>
           <div className="scrim" onClick={() => setOpen(false)} />
-          <div className="sheet" dir="rtl" role="dialog" aria-modal="true" aria-label="حجز">
+          <div className="sheet" dir="rtl" role="dialog" aria-modal="true" aria-label={`حجز: ${o.title}`} ref={sheetRef}>
             <div className="grab" />
+            <button type="button" className="sheet-close" onClick={() => setOpen(false)} aria-label="إغلاق">×</button>
             <div className="wrap">
               <div className="steps">{steps.map((_, i) => <i key={i} className={i <= step ? "on" : ""} />)}</div>
 
               {st === "slot" && (
                 <>
-                  <h2>اختر الموعد</h2>
+                  <h2 tabIndex={-1}>اختر الموعد</h2>
                   <p className="hint">اختر يوماً ثم ساعة من المواعيد المتاحة. الرمادية محجوزة.</p>
                   {days.length === 0 ? (
                     <p className="empty">لا توجد أوقات فارغة هذا الأسبوع. راسل المعلم أو جرّب لاحقاً.</p>
@@ -128,7 +153,7 @@ export function BookingFlow({ offering: o, slots, groupSessions, kids, trialFor 
 
               {st === "session" && (
                 <>
-                  <h2>اختر اللقاء</h2>
+                  <h2 tabIndex={-1}>اختر اللقاء</h2>
                   <p className="hint">كل لقاء يُحجز وحده، ويمكنك الاشتراك في كل اللقاءات القادمة إن سمح المعلم.</p>
                   {groupSessions.length === 0 && <p className="empty">لا لقاءات قادمة لهذه المجموعة.</p>}
                   {groupSessions.map((g) => {
@@ -148,7 +173,7 @@ export function BookingFlow({ offering: o, slots, groupSessions, kids, trialFor 
 
               {st === "freq" && chosenAt && (
                 <>
-                  <h2>حصة واحدة أم كل أسبوع؟</h2>
+                  <h2 tabIndex={-1}>حصة واحدة أم كل أسبوع؟</h2>
                   <p className="hint">الأسبوعي يحجز لك نفس الموعد كل أسبوع تلقائياً، ويمكنك إيقافه متى شئت.</p>
                   <button className="opt" aria-pressed={!weekly} onClick={() => { setWeekly(false); setPay(null); }}>
                     <span className="dot" />
@@ -171,7 +196,7 @@ export function BookingFlow({ offering: o, slots, groupSessions, kids, trialFor 
 
               {st === "mode" && (
                 <>
-                  <h2>كيف تريد الحضور؟</h2>
+                  <h2 tabIndex={-1}>كيف تريد الحضور؟</h2>
                   {o.places.map((p) => (
                     <button key={p} className="opt" aria-pressed={mode === p} onClick={() => setMode(p)}>
                       <span className="dot" />
@@ -186,7 +211,7 @@ export function BookingFlow({ offering: o, slots, groupSessions, kids, trialFor 
 
               {st === "who" && (
                 <>
-                  <h2>{o.type === "course" ? "من سيسجّل؟" : o.type === "recorded" ? "لمن المحتوى؟" : "من سيحضر؟"}</h2>
+                  <h2 tabIndex={-1}>{o.type === "course" ? "من سيسجّل؟" : o.type === "recorded" ? "لمن المحتوى؟" : "من سيحضر؟"}</h2>
                   <button className="opt" aria-pressed={who === "self"} onClick={() => { setWho("self"); setPay(null); }}>
                     <span className="dot" />
                     <span>أنا</span>
@@ -207,7 +232,7 @@ export function BookingFlow({ offering: o, slots, groupSessions, kids, trialFor 
 
               {st === "pay" && (
                 <>
-                  <h2>الدفع</h2>
+                  <h2 tabIndex={-1}>الدفع</h2>
                   <p className="hint">الدفع مباشرة للمعلم أو المعهد، لا يمر أي مبلغ عبر Classi.</p>
                   {canTrial && (
                     <label className="switch-row">

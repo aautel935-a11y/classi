@@ -942,6 +942,7 @@ export async function adminSubscriptionAction(form: FormData) {
     }));
   } else if (op === "setting") {
     ({ error } = await supabase.rpc("admin_set_setting", { p_key: str(form, "key"), p_value: str(form, "value") }));
+    revalidateTag("settings");
   } else if (op === "plan") {
     ({ error } = await supabase.rpc("admin_set_plan", { p_code: str(form, "code"), p_price: num(form, "price"), p_active: form.get("active") === "on" }));
   } else if (op === "demo") {

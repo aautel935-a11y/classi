@@ -1,0 +1,61 @@
+import pg from "pg";
+import { expect } from "@playwright/test";
+
+const url = process.env.E2E_DB_URL || "postgresql://postgres:postgres@127.0.0.1:54322/postgres";
+if (/supabase\.co/.test(url)) throw new Error("E2E_DB_URL must be the local test database");
+
+/** One query against the local test database (superuser: plays the admin / reads codes). */
+export async function sql(text, params = []) {
+  const c = new pg.Client({ connectionString: url });
+  await c.connect();
+  try { return (await c.query(text, params)).rows; } finally { await c.end(); }
+}
+
+/** A unique Israeli mobile for this project and role: 0521xxxxxx (mobile project) / 0522xxxxxx (desktop). */
+export function phoneFor(testInfo, n) {
+  const p = testInfo.project.name === "mobile" ? "1" : "2";
+  const run = String(Date.now()).slice(-4);
+  return `052${p}${run}${String(n).padStart(2, "0")}`.slice(0, 10);
+}
+
+async function readCode(phone) {
+  const digits = "972" + phone.slice(1);
+  for (let i = 0; i < 30; i++) {
+    const rows = await sql("select otp from otp_outbox where regexp_replace(phone, '\\D', '', 'g') = $1 order by created_at desc limit 1", [digits]);
+    if (rows[0]?.otp) return rows[0].otp;
+    await new Promise((r) => setTimeout(r, 500));
+  }
+  throw new Error(`no sign-in code for ${phone}`);
+}
+
+/** Sign up with phone + code through the real login screen. */
+export async function signUp(page, { phone, name, role }) {
+  await page.goto("/login?mode=up");
+  await page.locator("#full_name").fill(name);
+  await page.locator(`input[name="role"][value="${role}"]`).check();
+  await page.locator("#phone").fill(phone);
+  if (role === "student") await page.locator('input[name="guardian_ok"]').check();
+  await page.locator('input[name="terms"]').check();
+  await page.getByRole("button", { name: "أرسل رمز الدخول" }).click();
+  await expect(page.getByRole("heading", { name: "أدخل الرمز" })).toBeVisible();
+  await page.locator("#code").fill(await readCode(phone));
+  await page.waitForURL((u) => !u.pathname.startsWith("/login"), { timeout: 20_000 });
+  const rows = await sql("select id from auth.users where phone in ($1, $2)", ["972" + phone.slice(1), "+972" + phone.slice(1)]);
+  return rows[0]?.id;
+}
+
+/** Sign in again (existing account). */
+export async function signIn(page, phone) {
+  await page.goto("/login");
+  await page.locator("#phone").fill(phone);
+  await page.getByRole("button", { name: "أرسل رمز الدخول" }).click();
+  await expect(page.getByRole("heading", { name: "أدخل الرمز" })).toBeVisible();
+  await page.locator("#code").fill(await readCode(phone));
+  await page.waitForURL((u) => !u.pathname.startsWith("/login"), { timeout: 20_000 });
+}
+
+/** No horizontal scrolling (RTL layouts at phone width). */
+export async function expectNoSideScroll(page) {
+  const overflow = await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth);
+  expect(overflow, "page must not scroll sideways").toBeLessThanOrEqual(1);
+}

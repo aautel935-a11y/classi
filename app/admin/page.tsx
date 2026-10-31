@@ -8,6 +8,7 @@ import { dayLong, time } from "@/lib/format";
 import { runHealthChecks } from "@/lib/health";
 import { OpsTab } from "./OpsTab";
 import { ErrorNote } from "@/components/ErrorNote";
+import { Confirm } from "@/components/Confirm";
 
 export const dynamic = "force-dynamic";
 
@@ -74,24 +75,12 @@ export default async function Admin({ searchParams }: { searchParams: Promise<Re
                 <span className="small muted">من: {r.reporter_name || "مستخدم"}</span>
                 <div className="row" style={{ flexWrap: "wrap" }}>
                   {r.target_type !== "user" && (
-                    <form action={adminHideAction}>
-                      <input type="hidden" name="kind" value={r.target_type} />
-                      <input type="hidden" name="id" value={r.target_id} />
-                      <input type="hidden" name="hidden" value="1" />
-                      <input type="hidden" name="reason" value={REASON[r.reason] ?? ""} />
-                      <input type="hidden" name="back" value={back} />
-                      <button className="btn sm badb">إخفاء المحتوى</button>
-                    </form>
+                    <Confirm asButton action={adminHideAction} fields={{ kind: r.target_type, id: r.target_id, hidden: "1", reason: REASON[r.reason] ?? "", back }}
+                      label="إخفاء المحتوى" note="يختفي عن الطلاب ويصل صاحبه إشعار." confirm="تأكيد الإخفاء" />
                   )}
                   {r.owner_id && (
-                    <form action={adminSetStatusAction}>
-                      <input type="hidden" name="user_id" value={r.owner_id} />
-                      <input type="hidden" name="status" value="suspended" />
-                      <input type="hidden" name="days" value="7" />
-                      <input type="hidden" name="reason" value={REASON[r.reason] ?? ""} />
-                      <input type="hidden" name="back" value={back} />
-                      <button className="btn sm badb">إيقاف الحساب 7 أيام</button>
-                    </form>
+                    <Confirm asButton action={adminSetStatusAction} fields={{ user_id: r.owner_id, status: "suspended", days: "7", reason: REASON[r.reason] ?? "", back }}
+                      label="إيقاف الحساب 7 أيام" note="لا يستطيع صاحب الحساب الحجز أو التعديل أو المراسلة طوال المدة." confirm="تأكيد الإيقاف" />
                   )}
                   {r.owner_id && <Link className="btn sm ghost" href={`/admin/users/${r.owner_id}`}>الحساب</Link>}
                 </div>
@@ -144,7 +133,7 @@ async function VerifyTab({ supabase }: { supabase: any }) {
   const Buttons = ({ kind, id }: { kind: string; id: string }) => (
     <div className="row">
       <form action={adminVerifyAction}><input type="hidden" name="kind" value={kind} /><input type="hidden" name="id" value={id} /><input type="hidden" name="status" value="verified" /><button className="btn sm okb">توثيق</button></form>
-      <form action={adminVerifyAction}><input type="hidden" name="kind" value={kind} /><input type="hidden" name="id" value={id} /><input type="hidden" name="status" value="rejected" /><button className="btn sm badb">رفض</button></form>
+      <Confirm asButton action={adminVerifyAction} fields={{ kind, id, status: "rejected" }} label="رفض" note="يبقى الملف مخفياً عن الطلاب ويصل صاحبه إشعار." confirm="تأكيد الرفض" />
     </div>
   );
   return (
@@ -358,13 +347,13 @@ async function SubsTab({ supabase }: { supabase: any }) {
       <div className="card formstack">
         <div className="row between" style={{ flexWrap: "wrap", gap: 8 }}>
           <span><b>المعلمون والمعاهد التجريبيون</b><br /><span className="small muted">{demoVisible ? "ظاهرون للطلاب الآن." : "مخفيون عن الطلاب."}</span></span>
-          <form action={adminSubscriptionAction}><input type="hidden" name="op" value="demo" /><input type="hidden" name="visible" value={demoVisible ? "0" : "1"} />
-            <button className={`btn sm ${demoVisible ? "badb" : ""}`}>{demoVisible ? "إخفاء البيانات التجريبية" : "إظهارها مجدداً"}</button></form>
+          <Confirm asButton tone={demoVisible ? "bad" : "neutral"} action={adminSubscriptionAction} fields={{ op: "demo", visible: demoVisible ? "0" : "1" }}
+            label={demoVisible ? "إخفاء البيانات التجريبية" : "إظهارها مجدداً"} note="يتغير ما يراه كل الطلاب فوراً." confirm="تأكيد" />
         </div>
         <div className="row between" style={{ flexWrap: "wrap", gap: 8 }}>
           <span><b>الاشتراك إلزامي للظهور</b><br /><span className="small muted">{required ? "من لا يملك اشتراكاً فعّالاً لا يظهر للطلاب." : "فترة إطلاق: الجميع يظهر مجاناً."}</span></span>
-          <form action={adminSubscriptionAction}><input type="hidden" name="op" value="setting" /><input type="hidden" name="key" value="subscriptions_required" /><input type="hidden" name="value" value={required ? "false" : "true"} />
-            <button className="btn sm">{required ? "إيقاف الإلزام" : "تفعيل الإلزام"}</button></form>
+          <Confirm asButton tone="neutral" action={adminSubscriptionAction} fields={{ op: "setting", key: "subscriptions_required", value: required ? "false" : "true" }}
+            label={required ? "إيقاف الإلزام" : "تفعيل الإلزام"} note={required ? "يظهر الجميع مجاناً من جديد." : "كل معلم أو معهد بلا اشتراك فعّال يختفي عن الطلاب فوراً."} confirm="تأكيد" />
         </div>
         <form action={adminSubscriptionAction} className="row" style={{ flexWrap: "wrap", gap: 8 }}>
           <input type="hidden" name="op" value="setting" /><input type="hidden" name="key" value="platform_bit" />
@@ -379,6 +368,27 @@ async function SubsTab({ supabase }: { supabase: any }) {
             <span className="small muted">اتركه فارغاً لإخفاء زر المساعدة.</span></label>
           <button className="btn sm" style={{ alignSelf: "flex-end" }}>حفظ</button>
         </form>
+      </div>
+
+      <h2>قواعد الحجز والرسائل</h2>
+      <div className="card formstack">
+        <p className="small muted">قيم تطبقها قاعدة البيانات نفسها. القيمة الفارغة تعني الافتراضي.</p>
+        {([
+          ["min_lead_minutes", "أقل مهلة لحجز حصة خصوصية (بالدقائق)", "120", "0–1440"],
+          ["max_open_bookings_per_offer", "أقصى عدد حجوزات قادمة لطالب مع عرض واحد (غير الأسبوعي)", "8", "1–50"],
+          ["sms_daily_cap_per_user", "رسائل SMS لكل شخص في اليوم", "6", "0–50"],
+          ["sms_daily_cap", "رسائل SMS للمنصة كلها في اليوم", "400", "0–5000"],
+          ["otp_per_hour", "رموز الدخول لكل رقم في الساعة", "5", "1–20"],
+          ["staff_invites_per_day", "دعوات طاقم لكل معهد في اليوم", "10", "1–100"],
+        ] as const).map(([key, label, def, range]) => (
+          <form key={key} action={adminSubscriptionAction} className="row" style={{ flexWrap: "wrap", gap: 8 }}>
+            <input type="hidden" name="op" value="setting" /><input type="hidden" name="key" value={key} />
+            <label className="field" style={{ flex: 1, minWidth: 220 }}>{label}
+              <input name="value" type="number" inputMode="numeric" dir="ltr" defaultValue={set(key) || def} />
+              <span className="small muted">الافتراضي {def} · المسموح {range}</span></label>
+            <button className="btn sm" style={{ alignSelf: "flex-end" }}>حفظ</button>
+          </form>
+        ))}
       </div>
 
       <h2>الباقات</h2>
