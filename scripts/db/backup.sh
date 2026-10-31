@@ -17,7 +17,9 @@ echo "backup of $(host_of "$DB_URL") -> $DIR"
 if command -v supabase >/dev/null 2>&1; then
   supabase db dump --db-url "$DB_URL" -f "$DIR/roles.sql" --role-only
   supabase db dump --db-url "$DB_URL" -f "$DIR/schema.sql"
-  supabase db dump --db-url "$DB_URL" -f "$DIR/data.sql" --use-copy --data-only
+  # data of the app and of the accounts; photo files are copied separately (BACKUP-RESTORE.md), storage tables are
+  # Supabase's own and cannot be written back by the postgres role
+  supabase db dump --db-url "$DB_URL" -f "$DIR/data.sql" --use-copy --data-only --schema public,auth
 else
   need pg_dump
   echo "(Supabase CLI not found: pg_dump of the app and auth schemas)"

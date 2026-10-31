@@ -3,7 +3,7 @@
 # staging project, or a local one), then compares row counts with the backup's counts.txt. Prints counts only.
 # Usage:  TARGET_URL='postgresql://...' sh scripts/db/restore-check.sh /safe/folder/classi-backup-<stamp>
 # DATA_ONLY=1: the target already has the schema (all migrations applied): its public tables are emptied (rows the
-# migrations insert, such as default settings, and the photo bucket) and data.sql is loaded. Never on production (checked above).
+# migrations insert, such as default settings) and data.sql is loaded. Never on production (checked above).
 set -eu
 . "$(dirname "$0")/guard.sh"
 DIR="${1:?usage: TARGET_URL=... sh scripts/db/restore-check.sh <backup folder>}"
@@ -15,8 +15,7 @@ echo "restoring into $(host_of "$TARGET_URL") ..."
 set -- --single-transaction -v ON_ERROR_STOP=1 -q
 if [ "${DATA_ONLY:-}" = 1 ]; then
   psql "$TARGET_URL" "$@" -c "do \$\$ declare t text; begin
-      select string_agg(format('%I.%I', schemaname, tablename), ', ') into t from pg_tables
-       where schemaname = 'public' or (schemaname = 'storage' and tablename in ('buckets', 'objects'));
+      select string_agg(format('%I.%I', schemaname, tablename), ', ') into t from pg_tables where schemaname = 'public';
       if t is not null then execute 'truncate ' || t || ' cascade'; end if; end \$\$;" \
     -c 'set session_replication_role = replica' -f "$DIR/data.sql" >/dev/null
 else
