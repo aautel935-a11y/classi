@@ -295,7 +295,7 @@ export async function instituteSetupAction(form: FormData) {
     .insert({ owner_id: user.id, name: str(form, "name"), town: str(form, "town"), bio: str(form, "bio") })
     .select("id")
     .single();
-  if (error || !inst) redirect(`/manage?error=${encodeURIComponent("تعذّر الحفظ: " + (error?.message ?? ""))}`);
+  if (error || !inst) redirect(`/manage?error=${encodeURIComponent(error ? friendlyError(error) : "تعذّر الحفظ")}`);
   const rooms = Math.min(10, Math.max(1, num(form, "rooms") || 1));
   await supabase.from("rooms").insert(Array.from({ length: rooms }, (_, i) => ({ institute_id: inst.id, name: `قاعة ${i + 1}` })));
   revalidatePath("/manage");
@@ -570,7 +570,7 @@ export async function startConversationAction(form: FormData) {
     p_teacher: str(form, "teacher_id") || null,
     p_institute: str(form, "institute_id") || null,
   });
-  if (error || !data) redirect(`/messages?error=${encodeURIComponent(error?.message ?? "تعذّر فتح المحادثة")}`);
+  if (error || !data) redirect(`/messages?error=${encodeURIComponent(error ? friendlyError(error) : "تعذّر فتح المحادثة")}`);
   redirect(`/messages/${data}`);
 }
 
@@ -578,7 +578,7 @@ export async function startBookingConversationAction(form: FormData) {
   const { supabase, user } = await client();
   if (!user) redirect("/login");
   const { data, error } = await supabase.rpc("start_conversation_for_booking", { p_booking: str(form, "booking_id") });
-  if (error || !data) redirect(`/messages?error=${encodeURIComponent(error?.message ?? "تعذّر فتح المحادثة")}`);
+  if (error || !data) redirect(`/messages?error=${encodeURIComponent(error ? friendlyError(error) : "تعذّر فتح المحادثة")}`);
   redirect(`/messages/${data}`);
 }
 
