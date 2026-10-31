@@ -61,6 +61,7 @@ export async function signUp(page, { phone, name, role }) {
   await waitForCodeStep(page, phone);
   await page.locator("#code").fill(await readCode(phone));
   await page.waitForURL((u) => !u.pathname.startsWith("/login"), { timeout: 20_000 });
+  await page.waitForLoadState("networkidle"); // the sign-in page may still be redirecting
   const rows = await sql("select id from auth.users where phone in ($1, $2)", ["972" + phone.slice(1), "+972" + phone.slice(1)]);
   return rows[0]?.id;
 }
@@ -74,6 +75,7 @@ export async function signIn(page, phone) {
   await waitForCodeStep(page, phone);
   await page.locator("#code").fill(await readCode(phone));
   await page.waitForURL((u) => !u.pathname.startsWith("/login"), { timeout: 20_000 });
+  await page.waitForLoadState("networkidle");
 }
 
 /** No horizontal scrolling (RTL layouts at phone width). */

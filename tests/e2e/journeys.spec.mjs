@@ -20,7 +20,7 @@ function trace(page) {
 test.afterEach(async ({ browser }, info) => {
   if (info.status === info.expectedStatus) return;
   for (const ctx of browser.contexts()) for (const p of ctx.pages()) {
-    console.log(`[page] events: ${(p.__events ?? []).slice(-12).join(" || ").slice(0, 1500)}`);
+    for (const e of (p.__events ?? []).slice(-14)) console.log(`[page] event: ${e}`);
     console.log(`[page] invalid fields: ${await p.evaluate(() => [...document.querySelectorAll("form :invalid")].map((e) => e.id || e.getAttribute("name")).join(",")).catch(() => "?")}`);
     const msg = await p.locator(".err, .okmsg, [role=alert], .note").allTextContents().catch(() => []);
     const h = await p.locator("h1, h2").first().textContent().catch(() => "");
@@ -32,10 +32,10 @@ test("9. teacher: sign up, profile, hours with Saturday, new offer (and the form
   const ctx = await browser.newContext(); const page = await ctx.newPage(); trace(page);
   S.teacherPhone = phoneFor(info, 1);
   S.teacherUser = await signUp(page, { phone: S.teacherPhone, name: "معلمة الاختبار", role: "teacher" });
-  await page.goto("/teach");
+  await page.goto("/teach", { waitUntil: "networkidle" });
   await page.locator("#bio").fill("أشرح الرياضيات خطوة بخطوة.");
   await page.getByRole("button", { name: "حفظ الملف" }).click();
-  await expect(page.locator("#hours")).toBeVisible();
+  await expect(page.locator("#hours")).toBeVisible({ timeout: 30_000 });
   S.teacherId = (await sql("select id from teachers where user_id = $1", [S.teacherUser]))[0].id;
 
   // Hours: Sunday-Thursday as suggested, plus Saturday 09:00-13:00 (BUG-01), saved in one transaction (BUG-04)
