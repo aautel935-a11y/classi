@@ -15,7 +15,8 @@ function trace(page) {
     if (req.method() !== "POST" || !req.headers()["next-action"]) return route.fallback();
     const resp = await route.fetch();
     const body = await resp.text();
-    page.__events.push(`action body ${body.length}: ${body.slice(0, 700).replace(/\s+/g, " ")}`);
+    const zero = body.split("\n").find((l) => l.startsWith("0:")) ?? "";
+    page.__events.push(`action body ${body.length}: dashboard=${body.includes("أوقاتي المتاحة")} setup=${body.includes("يظهر ملفك للطلاب")} line0=${zero.slice(0, 400)}`);
     await route.fulfill({ response: resp, body });
   });
   const add = (x) => page.__events.push(x);

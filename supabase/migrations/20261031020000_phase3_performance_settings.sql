@@ -103,9 +103,48 @@ begin
 end $$;
 
 ------------------------------------------------------------------------------------------------------------
+-- 6. Saving hours failed on real Supabase (found by the E2E journey): Supabase loads pg_safeupdate, which refuses
+-- a DELETE without WHERE, and replace_availability emptied its temp table that way. Same body, one line changed.
+------------------------------------------------------------------------------------------------------------
+create or replace function public.replace_availability(p_rows jsonb, p_buffer int default 0)
+returns int language plpgsql security definer set search_path = public as $$
+declare v_teacher uuid := my_teacher_id(); r jsonb; v_n int := 0; v_day int; v_s time; v_e time;
+        v_names text[] := array['الأحد','الاثنين','الثلاثاء','الأربعاء','الخميس','الجمعة','السبت'];
+begin
+  if v_teacher is null then raise exception 'هذه الصفحة للمعلمين'; end if;
+  if jsonb_typeof(coalesce(p_rows, '[]'::jsonb)) <> 'array' or jsonb_array_length(coalesce(p_rows, '[]'::jsonb)) > 28 then
+    raise exception 'بيانات الأوقات غير صالحة';
+  end if;
+  if coalesce(p_buffer, 0) not in (0, 5, 10, 15, 30) then raise exception 'مدة الاستراحة غير صالحة'; end if;
+  create temp table if not exists _hours (weekday int, start_time time, end_time time) on commit drop;
+  delete from _hours where true;   -- Supabase runs pg_safeupdate: a DELETE without WHERE is refused
+  for r in select * from jsonb_array_elements(coalesce(p_rows, '[]'::jsonb)) loop
+    v_day := (r->>'weekday')::int;
+    if v_day is null or v_day not between 0 and 6 then raise exception 'يوم غير صالح'; end if;
+    if coalesce(r->>'start', '') !~ '^([01]\d|2[0-3]):[0-5]\d$' or coalesce(r->>'end', '') !~ '^([01]\d|2[0-3]):[0-5]\d$' then
+      raise exception 'في يوم %: اكتب الوقت بصيغة 00:00', v_names[v_day + 1];
+    end if;
+    v_s := (r->>'start')::time; v_e := (r->>'end')::time;
+    if v_e <= v_s then raise exception 'في يوم %: ساعة النهاية يجب أن تكون بعد البداية.', v_names[v_day + 1]; end if;
+    if exists (select 1 from _hours h where h.weekday = v_day and h.start_time < v_e and v_s < h.end_time) then
+      raise exception 'في يوم %: الفترتان متداخلتان.', v_names[v_day + 1];
+    end if;
+    insert into _hours values (v_day, v_s, v_e);
+    v_n := v_n + 1;
+  end loop;
+  -- One transaction: if anything below fails, the old hours stay.
+  update teachers set buffer_minutes = coalesce(p_buffer, 0), hours_confirmed_at = now() where id = v_teacher;
+  delete from availability where teacher_id = v_teacher;
+  insert into availability (teacher_id, weekday, start_time, end_time) select v_teacher, weekday, start_time, end_time from _hours;
+  if v_n > 0 then perform waitlist_hours_opened(); end if;
+  return v_n;
+end $$;
+
+------------------------------------------------------------------------------------------------------------
 -- Least privilege: re-created functions get their grants back (the allow-list of phase 1).
 ------------------------------------------------------------------------------------------------------------
 revoke execute on function public.owner_bookings(uuid, timestamptz), public.seats_overview(uuid[]),
   public.admin_set_setting(text, text) from public, anon, authenticated;
 grant execute on function public.seats_overview(uuid[]) to anon, authenticated;
 grant execute on function public.owner_bookings(uuid, timestamptz), public.admin_set_setting(text, text) to authenticated;
+-- replace_availability keeps the grants of phase 2 (create or replace does not change them).
