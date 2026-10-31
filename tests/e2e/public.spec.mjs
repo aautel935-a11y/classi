@@ -7,6 +7,11 @@ test("1. home: Arabic, right-to-left, no sideways scroll", async ({ page }) => {
   await expect(page.locator("html")).toHaveAttribute("lang", "ar");
   await expect(page.locator("html")).toHaveAttribute("dir", "rtl");
   await expectNoSideScroll(page);
+  // In-app navigation (no full reload): the search page replaces the home page
+  await page.waitForLoadState("networkidle");
+  await page.locator("a.searchbar").click();
+  await expect(page).toHaveURL(/\/search/, { timeout: 15_000 });
+  await expect(page.locator("a[href^='/offer/']").first()).toBeVisible();
 });
 
 test("2. search lists offers and filters by type", async ({ page }) => {

@@ -56,8 +56,12 @@ test("9. teacher: sign up, profile, hours with Saturday, new offer (and the form
     })).catch((e) => e.message)}`);
     console.log(`[page] pending requests: ${[...page.__pending.values()].map((u) => u.slice(0, 120)).join(" , ")}`);
     console.log(`[page] next router: ${await page.evaluate(() => typeof window.next?.router?.push).catch((e) => e.message)}`);
+    await page.evaluate(() => window.next?.router?.push("/search")).catch(() => {});
+    await page.waitForTimeout(4000);
+    console.log(`[diag] router.push(/search) -> url=${page.url()} offers=${await page.locator("a[href^='/offer/']").count()}`);
     await page.evaluate(() => window.next?.router?.push("/teach?probe=1")).catch(() => {});
     await page.waitForTimeout(4000);
+    console.log(`[diag] after router.push(/teach?probe=1): url=${page.url()} dashboard=${await page.locator("#hours").count()}`);
     console.log(`[page] after router.push: url=${page.url()} dashboard=${await page.locator("#hours").count()} pending=${[...page.__pending.values()].map((u) => u.slice(0, 120)).join(" , ")}`);
     for (const e of page.__events.slice(-8)) console.log(`[page] event: ${e}`);
     await page.reload();
