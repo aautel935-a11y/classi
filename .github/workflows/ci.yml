@@ -152,8 +152,8 @@ jobs:
           (npx next dev -p 3001 > /tmp/next-dev.log 2>&1 &)
           npx --yes wait-on@8 -t 120000 http://localhost:3001/
           curl -s -o /dev/null http://localhost:3001/teach; curl -s -o /dev/null http://localhost:3001/login
-          npx playwright test -c tests/e2e/playwright.config.mjs --project=desktop -g "^9\\." --retries=0 --reporter=list > /tmp/e2e-dev.log 2>&1 || true
-          grep -a '\[diag\]\|\[page\] event: console\|pageerror\|STUCK\|tick' /tmp/e2e-dev.log | cut -c1-400 | tail -40 > /tmp/e2e-dev-diag.log || true
+          npx playwright test -c tests/e2e/playwright.config.mjs --project=desktop -g "9. teacher" --retries=0 --reporter=list > /tmp/e2e-dev.log 2>&1 || true
+          grep -a '\[diag\]\|\[page\] event: console\|pageerror\|STUCK\|tick' /tmp/e2e-dev.log | cut -c1-400 | tail -40 > /tmp/e2e-dev-diag.log; tail -5 /tmp/e2e-dev.log >> /tmp/e2e-dev-diag.log
       - name: Report (annotations)
         if: always()
         run: |
