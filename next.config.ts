@@ -31,6 +31,10 @@ const securityHeaders = [
 const nextConfig: NextConfig = {
   poweredByHeader: false,
   // Type and lint errors fail the build (SEC-35); CI runs tsc, next lint and next build on every push.
+  // Browsers ask for /favicon.ico by themselves; answer with the app icon instead of a 404.
+  async rewrites() {
+    return [{ source: "/favicon.ico", destination: "/icon.svg" }];
+  },
   async headers() {
     return [{ source: "/(.*)", headers: securityHeaders }];
   },
