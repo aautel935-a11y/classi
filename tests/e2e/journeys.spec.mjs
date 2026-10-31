@@ -129,6 +129,8 @@ test("11. messages and notifications: parent writes, teacher reads; opening one 
   await tp.goto("/messages");
   await tp.locator("a[href^='/messages/']").first().click();
   await expect(tp.getByText("مرحباً، هل نبدأ بالكسور؟")).toBeVisible();
+  await tp.waitForLoadState("networkidle"); // opening the conversation marks its message notice read (asynchronously)
+  await tp.waitForTimeout(1500);
 
   const unreadBefore = Number((await sql("select count(*) from notifications where user_id = $1 and read_at is null", [S.teacherUser]))[0].count);
   expect(unreadBefore).toBeGreaterThan(0);
