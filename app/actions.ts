@@ -676,9 +676,9 @@ export async function respondWaitlistAction(form: FormData) {
   const { data, error } = await supabase.rpc("respond_waitlist", { p_id: str(form, "id"), p_accept: accept, p_reply: str(form, "reply") || null });
   revalidateTag("catalog");
   revalidatePath(back);
-  if (error) redirect(withQ(back, `error=${encodeURIComponent(error.message)}#waitlist`));
+  if (error) redirect(withQ(back, `error=${encodeURIComponent(error.message)}`) + "#waitlist");
   if (data) redirect(`/messages/${data}`);
-  redirect(withQ(back, `wl=${accept ? "accepted" : "declined"}#waitlist`));
+  redirect(withQ(back, `wl=${accept ? "accepted" : "declined"}`) + "#waitlist");
 }
 
 // ---------- phone notifications & reminders ----------

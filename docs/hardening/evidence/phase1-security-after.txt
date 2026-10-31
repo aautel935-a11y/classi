@@ -65,6 +65,9 @@ PASS: 2nd open booking
 PASS: 3rd open booking above the cap (refused: لديك حجوزات قادمة كثيرة مع هذا العرض. للمواعيد الثابتة استخدم الحجز الأسبوعي.)
 PASS: group seat
 PASS: same student, same meeting, again (refused: هذا الطالب مسجّل في هذا اللقاء)
+PASS: buy a 5-lesson package
+PASS: weekly series of 8 paid from the package = 8
+PASS: 5 weeks on the package, the rest paid normally = 5+3
 ===== SEC-07 a booking withdrawn right away does not text the teacher
 PASS: cancel the group seat at once
 PASS: teacher notification kind = booking_withdrawn:false
@@ -83,7 +86,7 @@ PASS: suspended: hide own offer (refused: حسابك موقوف حالياً و�
 PASS: suspended: change hours (refused: حسابك موقوف حالياً ولا يمكنه إجراء تغييرات)
 ===== SEC-05 deleting never erases bookings, payments or reviews
 PASS: Samer tries to delete his booked private offer
-PASS: offer and its bookings are still there = 1/2
+PASS: offer and its bookings are still there = 1/10
 PASS: Samer tries to delete a booked meeting
 PASS: the meeting is still there = 2
 PASS: even the database owner cannot cascade-delete booked offers (refused: update or delete on table "offerings" violates foreign key constraint "bookings_offering_i)

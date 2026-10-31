@@ -28,8 +28,10 @@ export function errorText(e: string | null | undefined): string | null {
   const s = String(e ?? "").trim();
   if (!s) return null;
   if (s.length > 220) return GENERIC;
-  if (/https?:|www\.|@|\b[a-z0-9-]+\.(com|net|org|co|il|io|me|app|click|info|xyz|ly|to|link)\b/i.test(s)) return GENERIC;
-  const digits = s.replace(/[\s\-–.()+]/g, "");
+  // A bare "https://" (as in "the link must start with https://") is fine; an actual address is not.
+  if (/https?:\/\/[^\s/]*[a-z0-9]\.[a-z]|www\.|@|\b[a-z0-9-]+\.(com|net|org|co|il|io|me|app|click|info|xyz|ly|to|link)\b/i.test(s)) return GENERIC;
+  // Classi's own hints use the placeholder number 050-1234567 / 0501234567; any other long number is refused.
+  const digits = s.replace(/050-?1234567/g, "").replace(/[\s\-–.()+]/g, "");
   if (/\d{7,}|[٠-٩]{7,}/.test(digits)) return GENERIC;
   return s;
 }

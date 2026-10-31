@@ -169,6 +169,15 @@ select t_ok('group seat', $$select create_booking((select grp from ids), null, n
 select t_err('same student, same meeting, again', $$select create_booking((select grp from ids), null, null, (select id from sessions where offering_id=(select grp from ids) and starts_at > now() order by starts_at limit 1), 'cash')$$);
 reset role;
 delete from app_settings where key = 'max_open_bookings_per_offer';
+-- review finding F1: a weekly series paid "from the package" keeps working after the package's lessons run out
+update offerings set package_enabled = true, package_size = 5, package_price = 600, allow_weekly = true where id = (select priv from ids);
+select test_approve_all();
+set role authenticated; set request.jwt.claim.sub='60000000-0000-0000-0000-00000000000e';
+select t_ok('buy a 5-lesson package', $$select buy_package((select priv from ids), null)$$);
+select t_is('weekly series of 8 paid from the package', $$select create_weekly_booking((select priv from ids), null, (test_day(4, 3) + time '17:00') at time zone 'Asia/Jerusalem', null, 'package') ->> 'created'$$, '8');
+select t_is('5 weeks on the package, the rest paid normally', $$select count(*) filter (where package_id is not null)::text || '+' || count(*) filter (where package_id is null and pay_method = 'cash')::text
+   from bookings where booked_by = auth.uid() and series_id is not null$$, '5+3');
+reset role;
 
 \echo '===== SEC-07 a booking withdrawn right away does not text the teacher'
 delete from notifications;
@@ -210,10 +219,11 @@ select t_err('suspended: change hours', $$delete from availability where teacher
 reset role;
 
 \echo '===== SEC-05 deleting never erases bookings, payments or reviews'
+select count(*) as priv_bookings from bookings where offering_id = (select priv from ids) \gset
 set role authenticated; set request.jwt.claim.sub='60000000-0000-0000-0000-00000000000b';
 select t_ok('Samer tries to delete his booked private offer', $$delete from offerings where id = (select priv from ids)$$);
 select t_is('offer and its bookings are still there', $$select (select count(*) from offerings where id = (select priv from ids))::text || '/' ||
-   (select count(*) from bookings where offering_id = (select priv from ids))::text$$, '1/2');
+   (select count(*) from bookings where offering_id = (select priv from ids))::text$$, '1/' || :'priv_bookings');
 select t_ok('Samer tries to delete a booked meeting', $$delete from sessions where id = (select session_id from bookings where offering_id = (select grp from ids) and session_id is not null limit 1)$$);
 select t_is('the meeting is still there', $$select count(*)::text from sessions s join bookings b on b.session_id = s.id where s.offering_id = (select grp from ids)$$, '2');
 reset role;

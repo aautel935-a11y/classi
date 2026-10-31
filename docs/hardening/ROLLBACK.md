@@ -1,5 +1,22 @@
 # خطة التراجع (Rollback) — فرع hardening/production-readiness
 
+## فحوص قبل النشر (قراءة فقط، في محرر SQL على الإنتاج)
+1. **صور خارج تخزين Supabase:** كل صف يظهر هنا يجب تصحيحه قبل النشر، لأن أي تحديث لاحق لذلك الصف سيفشل بسبب القيود الجديدة.
+   ```sql
+   select 'teacher' t, count(*) from teachers where photo_url is not null and photo_url !~ '^https://[a-z0-9]+\.supabase\.co/storage/v1/object/public/avatars/'
+   union all select 'institute', count(*) from institutes where logo_url is not null and logo_url !~ '^https://[a-z0-9]+\.supabase\.co/storage/v1/object/public/avatars/'
+   union all select 'profile', count(*) from profiles where avatar_url is not null and avatar_url !~ '^https://[a-z0-9]+\.supabase\.co/storage/v1/object/public/avatars/';
+   ```
+2. **دوال إضافات (extensions) داخل `public`:** سحب الصلاحية من PUBLIC سيشملها. يجب أن تكون النتيجة 0. إن لم تكن، تُضاف منحها إلى الـ migration.
+   ```sql
+   select count(*) from pg_proc p join pg_depend d on d.objid = p.oid and d.deptype = 'e' where p.pronamespace = 'public'::regnamespace;
+   ```
+3. **مدد اللقاءات الحالية:** القيود الجديدة `NOT VALID`، فلن تفشل الـ migration بسبب صفوف قديمة. لكن تعديل لقاء قديم خارج المدى 10–480 دقيقة سيفشل.
+   ```sql
+   select count(*) from sessions where minutes not between 10 and 480;
+   ```
+4. **ملاحظة:** إلغاء صلاحية PUBLIC الافتراضية يشمل كل الدوال الجديدة في كل الـ schemas. كل دالة جديدة يستدعيها التطبيق تحتاج `grant` صريحاً، و`check_rpc_grants.sh` يكشف النسيان.
+
 ## ترتيب النشر (عند الموافقة)
 1. **نسخة احتياطية قبل أي شيء**:
    - من Supabase: Database → Backups.

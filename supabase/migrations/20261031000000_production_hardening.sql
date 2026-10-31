@@ -183,6 +183,7 @@ create trigger sessions_room_guard before insert or update of room_id on public.
 -- 3. SEC-03 / SEC-10: no phone-number lookups. Walk-ins are linked only when the phone's owner accepts.
 ------------------------------------------------------------------------------------------------------------
 alter table public.bookings add column if not exists link_requested_at timestamptz;
+alter table public.bookings add column if not exists link_declined_at timestamptz;   -- the phone's owner said "not my child"
 
 create or replace function public.institute_enroll(p_offering uuid, p_name text, p_phone text default null, p_pay text default 'cash', p_paid boolean default false)
 returns uuid language plpgsql security definer set search_path = public as $$
@@ -221,6 +222,7 @@ begin
   if not found or not is_offering_owner(b.offering_id) then raise exception 'لا تملك صلاحية على هذا الحجز'; end if;
   if b.booked_by is not null then raise exception 'الحجز مربوط بحساب سابقاً'; end if;
   if b.offline_phone is null then raise exception 'لا يوجد رقم هاتف لهذا الطالب'; end if;
+  if b.link_declined_at is not null then raise exception 'صاحب هذا الرقم قال إنه ليس ولي أمر الطالب. تأكد من الرقم.'; end if;
   if b.link_requested_at > now() - interval '1 day' then raise exception 'أُرسلت دعوة اليوم. انتظر رد ولي الأمر.'; end if;
   update bookings set link_requested_at = now() where id = b.id;
   select id into v_user from profiles where phone = b.offline_phone limit 1;
@@ -240,7 +242,7 @@ language sql stable security definer set search_path = public as $$
   select b.id, o.title, coalesce(i.name, t.name), b.offline_name, b.created_at
     from bookings b join offerings o on o.id = b.offering_id
     left join institutes i on i.id = o.institute_id left join teachers t on t.id = o.teacher_id
-   where b.booked_by is null and b.status in ('pending','confirmed')
+   where b.booked_by is null and b.status in ('pending','confirmed') and b.link_declined_at is null
      and b.offline_phone is not null and b.offline_phone = (select phone from profiles where id = auth.uid())
    order by b.created_at desc
 $$;
@@ -251,7 +253,7 @@ declare b bookings%rowtype; v_phone text; v_owner uuid; v_me text;
 begin
   select phone, full_name into v_phone, v_me from profiles where id = auth.uid();
   select * into b from bookings where id = p_booking for update;
-  if not found or b.booked_by is not null or b.offline_phone is null or b.offline_phone is distinct from v_phone then
+  if not found or b.booked_by is not null or b.link_declined_at is not null or b.offline_phone is null or b.offline_phone is distinct from v_phone then
     raise exception 'هذا التسجيل غير مرتبط برقم هاتفك';
   end if;
   v_owner := offering_owner_user(b.offering_id);
@@ -259,8 +261,8 @@ begin
     update bookings set booked_by = auth.uid() where id = b.id;
     update lesson_reports set student_user = auth.uid() where booking_id = b.id and student_user is null;
   else
-    -- Not my child: the number stays on the walk-in, but it is no longer offered to me.
-    update bookings set offline_phone = null where id = b.id;
+    -- Not my child: the number stays on the walk-in (the institute may need it), but it is no longer offered to me.
+    update bookings set link_declined_at = now() where id = b.id;
   end if;
   insert into notifications (user_id, kind, body, link) values (v_owner, 'link_answer',
     case when p_accept then format('ربط %s تسجيل %s بحسابه.', v_me, b.offline_name)
@@ -279,7 +281,7 @@ begin
          '/schedule#links'
     from bookings b join offerings o on o.id = b.offering_id
     left join institutes i on i.id = o.institute_id left join teachers t on t.id = o.teacher_id
-   where b.booked_by is null and b.offline_phone = new.phone and b.status in ('pending','confirmed');
+   where b.booked_by is null and b.offline_phone = new.phone and b.status in ('pending','confirmed') and b.link_declined_at is null;
   return new;
 end $$;
 
@@ -431,7 +433,12 @@ begin
     raise exception 'طريقة دفع غير معروفة';
   end if;
   if new.pay_method = 'package' and new.package_id is null then
-    raise exception 'لا توجد رزمة فعّالة لهذا الطالب مع هذا العرض';
+    if new.series_id is not null then
+      -- weekly series: the weeks after the package runs out are paid normally (as before), not labelled "package"
+      new.pay_method := 'cash';
+    else
+      raise exception 'لا توجد رزمة فعّالة لهذا الطالب مع هذا العرض';
+    end if;
   end if;
 
   if o.type = 'private' and new.starts_at is not null then

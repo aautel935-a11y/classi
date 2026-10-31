@@ -33,6 +33,11 @@ test("SEC-26 errorText blocks phishing lures but keeps real messages", () => {
                       "حدّث بياناتك في www.evil.com", "رمزك ٠٥٠١٢٣٤٥٦٧", "x".repeat(300)]) {
     assert.notEqual(errorText(lure), lure, lure);
   }
+  // Classi's own hints must survive the filter (review finding F2)
+  for (const own of ["الرابط يجب أن يبدأ بـ https://", "رابط الفيديو يجب أن يبدأ بـ https://", "رقم الواتساب غير صحيح. اكتب رقم جوال مثل 050-1234567.",
+                     "رقم Bit غير صحيح. اكتب رقم جوال مثل 0501234567.", "تغيّر الموعد إلى 16/11 16:00"]) {
+    assert.equal(errorText(own), own, own);
+  }
   assert.equal(errorText(""), null);
   assert.equal(errorText(undefined), null);
 });
