@@ -10,13 +10,13 @@ const S = {}; // shared between the steps of one project
 function trace(page) {
   page.__events = [];
   const add = (x) => page.__events.push(x);
-  page.on("console", (m) => { if (m.type() === "error" || m.type() === "warning") add(`console.${m.type()}: ${m.text().slice(0, 200)}`); });
+  page.on("console", (m) => { if (m.type() !== "debug") add(`console.${m.type()}: ${m.text().slice(0, 200)}`); });
   page.on("pageerror", (e) => add(`pageerror: ${e.message.slice(0, 200)}`));
   page.on("response", async (r) => {
     if (r.request().method() !== "POST") return;
     const h = r.headers();
     if (h["content-type"]?.includes("x-component")) { const b = await r.text().catch((e) => "body? " + e.message); add(`body ${b.length}: ${b.slice(0, 240).replace(/\s+/g, " ")}`); }
-    add(`POST ${new URL(r.url()).pathname} -> ${r.status()} loc=${h.location ?? ""} redirect=${h["x-action-redirect"] ?? ""} type=${h["content-type"] ?? ""} action=${r.request().headers()["next-action"] ? "fetch" : "form"}`);
+    add(`POST ${new URL(r.url()).pathname} -> ${r.status()} loc=${h.location ?? ""} redirect=${h["x-action-redirect"] ?? ""} type=${h["content-type"] ?? ""} action=${r.request().headers()["next-action"] ? "fetch" : "form"} tree=${(r.request().headers()["next-router-state-tree"] ?? "none").length} vary=${h.vary ?? ""}`);
   });
   page.on("framenavigated", (f) => { if (f === page.mainFrame()) add(`nav ${f.url()}`); });
 }
