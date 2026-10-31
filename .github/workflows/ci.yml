@@ -145,9 +145,10 @@ jobs:
       - name: Report (annotations)
         if: always()
         run: |
-          docker logs supabase_auth_classi-local 2>&1 | grep -v templatemailer | tail -25 > /tmp/auth.log || true
-          docker logs supabase_db_classi-local --tail 30 > /tmp/db.log 2>&1 || true
-          sh .github/report.sh "e2e" /tmp/supabase.log /tmp/e2e-build.log /tmp/e2e.log /tmp/next.log /tmp/auth.log /tmp/db.log
+          docker logs supabase_auth_classi-local 2>&1 | grep -E '"level":"(warning|error)"' | grep -v DEPRECATION | tail -25 > /tmp/auth.log || true
+          docker logs supabase_db_classi-local 2>&1 | grep -E 'ERROR|FATAL' -A1 | tail -30 > /tmp/db.log || true
+          grep -a '\[page\]' /tmp/e2e.log > /tmp/e2e-pages.log || true
+          sh .github/report.sh "e2e" /tmp/supabase.log /tmp/e2e-build.log /tmp/e2e.log /tmp/e2e-pages.log /tmp/next.log /tmp/auth.log /tmp/db.log
       - uses: actions/upload-artifact@v4
         if: always()
         with: { name: playwright-report, path: "tests/e2e/report\ntests/e2e/results", retention-days: 7 }
