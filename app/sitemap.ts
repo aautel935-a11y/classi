@@ -9,11 +9,12 @@ export const revalidate = 3600;
 export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
   const db = publicClient();
   // Read in pages: the API returns at most 1,000 rows per request.
+  // If the database cannot be reached (for example during a build without it), the fixed pages are still listed.
   const [t, i, o] = await Promise.all([
     fetchAll<{ id: string }>((a, b) => db.from("teachers").select("id").order("id").range(a, b)),
     fetchAll<{ id: string }>((a, b) => db.from("institutes").select("id").order("id").range(a, b)),
     fetchAll<{ id: string }>((a, b) => db.from("offerings").select("id").eq("active", true).order("id").range(a, b)),
-  ]);
+  ]).catch(() => [[], [], []] as { id: string }[][]);
   const now = new Date();
   return [
     { url: SITE, lastModified: now, changeFrequency: "daily", priority: 1 },
