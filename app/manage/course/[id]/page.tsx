@@ -79,8 +79,8 @@ export default async function ManageOffer({ params, searchParams }: { params: Pr
         <section className="section">
           <details className="card" open={sp.edit === "1"}>
             <summary className="row between" style={{ cursor: "pointer" }}><b>تعديل العرض</b><span className="link small">السعر والتفاصيل</span></summary>
-            <form id="kf-updateOffering" action={updateOfferingAction} className="formstack" style={{ marginTop: 12 }}>
-            <KeepForm formId="kf-updateOffering" />
+            <form id={`kf-updateOffering-${id}`} action={updateOfferingAction} className="formstack" style={{ marginTop: 12 }}>
+            <KeepForm formId={`kf-updateOffering-${id}`} />
               <input type="hidden" name="id" value={id} />
               <label className="field" htmlFor="ed-title">العنوان<input id="ed-title" name="title" required minLength={3} defaultValue={o.title} /></label>
               <div className="typeform">
@@ -244,8 +244,8 @@ export default async function ManageOffer({ params, searchParams }: { params: Pr
         <section className="section">
           <details className="card" open={sp.enroll === "1"}>
             <summary className="row between" style={{ cursor: "pointer" }}><b>تسجيل طالب يدوياً</b><span className="link small">سجّل ودفع في المقر</span></summary>
-            <form id="kf-enrollWalkIn" action={enrollWalkInAction} className="formstack" style={{ marginTop: 12 }}>
-            <KeepForm formId="kf-enrollWalkIn" />
+            <form id={`kf-enrollWalkIn-${id}`} action={enrollWalkInAction} className="formstack" style={{ marginTop: 12 }}>
+            <KeepForm formId={`kf-enrollWalkIn-${id}`} />
               <input type="hidden" name="offering_id" value={id} />
               <input type="hidden" name="back" value={path} />
               <div className="typeform">

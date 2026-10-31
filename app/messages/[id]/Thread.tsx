@@ -4,7 +4,7 @@ import { useEffect, useRef, useState, useTransition } from "react";
 import { createClient } from "@/lib/supabase/client";
 import { sendMessageAction } from "@/app/actions";
 import { dayLong, isoDay, time } from "@/lib/format";
-import { PAGE_SIZE, firstStamp, lastStamp, mergeMessages, type Msg } from "@/lib/messages";
+import { PAGE_SIZE, firstStamp, mergeMessages, pollFrom, type Msg } from "@/lib/messages";
 
 const COLS = "id,sender_id,body,created_at,read_at";
 
@@ -35,9 +35,9 @@ export function Thread({ conversationId, me, initial, hasOlder: hasOlder0, canWr
     async function poll() {
       if (document.hidden) return;
       const cur = msgsRef.current ?? [];
-      const since = lastStamp(cur);
+      const since = pollFrom(cur);
       let q = supabase.from("messages").select(COLS).eq("conversation_id", conversationId).order("created_at").limit(100);
-      if (since) q = q.gt("created_at", since);
+      if (since) q = q.gte("created_at", since);
       const unreadMine = cur.filter((m) => m.sender_id === me && !m.read_at && !m.id.startsWith("tmp-")).map((m) => m.id).slice(-50);
       const [{ data }, { data: receipts }] = await Promise.all([
         q,
@@ -60,10 +60,10 @@ export function Thread({ conversationId, me, initial, hasOlder: hasOlder0, canWr
     if (!before) return;
     setLoadingOlder(true);
     const { data } = await createClient().from("messages").select(COLS).eq("conversation_id", conversationId)
-      .lt("created_at", before).order("created_at", { ascending: false }).limit(PAGE_SIZE);
+      .lte("created_at", before).order("created_at", { ascending: false }).limit(PAGE_SIZE + 1);   // lte + merge: same-second messages are not skipped
     setLoadingOlder(false);
     const older = ((data ?? []) as Msg[]).slice().reverse();
-    setHasOlder(older.length === PAGE_SIZE);
+    setHasOlder(older.length > PAGE_SIZE);
     if (older.length) setMsgs((m) => mergeMessages(m, older));
   }
 

@@ -58,6 +58,8 @@ select case when ((now() + interval '3 hours') at time zone 'Asia/Jerusalem')::d
                and ((now() + interval '4 hours') at time zone 'Asia/Jerusalem')::date = (now() at time zone 'Asia/Jerusalem')::date
   then t_ok('a lesson later today (3 hours ahead) can be booked', $$select create_booking((select priv from ids), null, date_trunc('minute', now()) + interval '3 hours', null, 'bit', false, 'online')$$)
   else t_ok('same-day check skipped (less than 4 hours left today)', $$select 1$$) end;
+update offerings set allow_weekly = true where id = (select priv from ids);
+select t_err('a weekly series cannot start 20 minutes from now (review finding)', $$select create_weekly_booking((select priv from ids), null, date_trunc('minute', now()) + interval '20 minutes', null, 'bit')$$);
 reset role;
 
 \echo '===== BUG-05 removing a child never moves their bookings to the parent'
@@ -68,6 +70,12 @@ select t_is('the booking still belongs to يوسف', $$select count(*)::text fro
 select t_ok('removing سلمى (no bookings) works', $$delete from children where id = (select kid2 from ids)$$);
 select t_ok('cancel يوسف''s lesson', $$select cancel_booking((select id from bookings where child_id = (select kid from ids) and status = 'confirmed'))$$);
 select t_ok('now يوسف can be removed', $$delete from children where id = (select kid from ids)$$);
+reset role;
+insert into children (guardian_id, name) values ('90000000-0000-0000-0000-00000000000d', 'ليان');
+insert into lesson_packages (offering_id, user_id, child_id, size, remaining, price, pay_method)
+  values ((select priv from ids), '90000000-0000-0000-0000-00000000000d', (select id from children where name='ليان'), 5, 5, 600, 'bit');
+set role authenticated; set request.jwt.claim.sub='90000000-0000-0000-0000-00000000000d';
+select t_err('a child with an active package: refused, and told to ask the teacher', $$delete from children where name = 'ليان'$$);
 reset role;
 
 \echo '===== BUG-26 one attendance record: the teacher''s report and the institute''s register agree'

@@ -30,7 +30,7 @@ export default async function Attendance({ params, searchParams }: { params: Pro
           <b>{(s as any).offering?.title}</b>
           <p className="small muted">اللقاء {s.seq} · {dayLong(s.starts_at)} {time(s.starts_at)}{(s as any).room ? ` · ${(s as any).room.name}` : ""}</p>
         </div>
-        {sp.saved && <p className="okmsg">حُفظ الحضور ({sp.saved} طالب).</p>}
+        {sp.saved && <p className="okmsg">{sp.saved === "0" ? "لم يُختر حضور أو غياب لأي طالب، فلم يتغير شيء." : `حُفظ الحضور (${sp.saved} من الطلاب).`}</p>}
         <ErrorNote msg={sp.error} />
         <input type="hidden" name="session_id" value={sid} />
         <input type="hidden" name="path" value={path} />

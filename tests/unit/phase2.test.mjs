@@ -78,3 +78,12 @@ test("BUG-03: chat merge keeps every message, newest last, no duplicates, temp r
   thread = mergeMessages(thread, [{ ...real, read_at: "2026-11-01T12:00:00Z" }]);
   assert.equal(thread.at(-1).read_at, "2026-11-01T12:00:00Z", "read receipts update in place");
 });
+
+test("BUG-03 review: ordering by instant, and the polling cursor overlaps the last message", () => {
+  const { mergeMessages, pollFrom } = require(`${dir}/messages.js`);
+  const a = { id: "a", sender_id: "x", body: "1", created_at: "2026-11-01T10:00:00+00:00", read_at: null };
+  const b = { id: "b", sender_id: "x", body: "2", created_at: "2026-11-01T10:00:00.5+00:00", read_at: null };
+  assert.deepEqual(mergeMessages([], [b, a]).map((m) => m.id), ["a", "b"]);
+  assert.ok(Date.parse(pollFrom([a, b])) < Date.parse(b.created_at));
+  assert.equal(pollFrom([]), null);
+});

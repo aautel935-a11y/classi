@@ -68,8 +68,8 @@ export default async function TeacherCalendar({ searchParams }: { searchParams: 
 
   // Free hours: exactly the times students are offered (same privateSlots as the offer page: BUG-16).
   const rows: Row[] = list.map((it) => ({ at: it.starts_at, end: new Date(new Date(it.starts_at).getTime() + it.minutes * 60000).toISOString(), item: it }));
-  for (const sl of privateSlots(hours ?? [], list.map((it) => ({ starts_at: it.starts_at, minutes: it.minutes })), lesson, [day], t.buffer_minutes ?? 0)) {
-    if (!sl.busy) rows.push({ at: sl.at, end: new Date(new Date(sl.at).getTime() + lesson * 60000).toISOString(), free: true });
+  for (const sl of privateSlots(hours ?? [], list.map((it) => ({ starts_at: it.starts_at, minutes: it.minutes })), lesson, [day], t.buffer_minutes ?? 0, 0)) {
+    if (!sl.busy && sl.at > nowIso) rows.push({ at: sl.at, end: new Date(new Date(sl.at).getTime() + lesson * 60000).toISOString(), free: true });
   }
   rows.sort((a, b) => a.at.localeCompare(b.at));
   const back = (extra = "") => <input type="hidden" name="day" value={day + extra} />;

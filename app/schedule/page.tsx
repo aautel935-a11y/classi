@@ -72,8 +72,10 @@ export default async function Schedule({ searchParams }: { searchParams: Promise
   });
 
   // Upcoming lessons first, soonest on top; past ones folded away, newest first (BUG-18).
-  const upcoming = visible.filter(({ at }) => !at || at >= now);
-  const past = visible.filter(({ at }) => at && at < now).reverse().slice(0, 30);
+  // A lesson stays in "upcoming" until it ends (so its online link is there during the lesson).
+  const endOf = (x: (typeof visible)[number]) => (x.at ? new Date(new Date(x.at).getTime() + (x.r.offering.minutes || 60) * 60000).toISOString() : null);
+  const upcoming = visible.filter((x) => !x.at || (endOf(x) ?? "") >= now);
+  const past = visible.filter((x) => x.at && (endOf(x) ?? "") < now).reverse();
   const renderLesson = ({ r, at, room, changed }: (typeof visible)[number]) => (
           <div key={r.id} className="card lesson">
             <div className="date">

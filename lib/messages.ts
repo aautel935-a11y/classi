@@ -16,13 +16,23 @@ export function mergeMessages(current: Msg[], incoming: Msg[]): Msg[] {
     if (temp) byId.delete(temp.id);
     byId.set(m.id, { ...byId.get(m.id), ...m });
   }
-  return [...byId.values()].sort((a, b) => a.created_at.localeCompare(b.created_at) || a.id.localeCompare(b.id));
+  // Compare instants, not strings ("…10:00:00+00:00" vs "…10:00:00.5+00:00" sort wrongly as text).
+  return [...byId.values()].sort((a, b) => Date.parse(a.created_at) - Date.parse(b.created_at) || (a.id < b.id ? -1 : a.id > b.id ? 1 : 0));
 }
 
 /** The newest real (non-temporary) message time, for "give me what came after". */
 export function lastStamp(msgs: Msg[]): string | null {
   for (let i = msgs.length - 1; i >= 0; i--) if (!msgs[i].id.startsWith("tmp-")) return msgs[i].created_at;
   return null;
+}
+
+/**
+ * Polling cursor: a little before the last message, so messages with the same timestamp, or written by a
+ * transaction that committed slightly later, are not skipped. mergeMessages drops the overlap.
+ */
+export function pollFrom(msgs: Msg[], overlapMs = 10000): string | null {
+  const last = lastStamp(msgs);
+  return last ? new Date(Date.parse(last) - overlapMs).toISOString() : null;
 }
 
 /** The oldest message time, for "load older". */

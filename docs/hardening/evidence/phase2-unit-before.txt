@@ -1,0 +1,270 @@
+TAP version 13
+# Subtest: fromLocal: Israel winter time is UTC+2
+ok 1 - fromLocal: Israel winter time is UTC+2
+  ---
+  duration_ms: 30.219608
+  type: 'test'
+  ...
+# Subtest: fromLocal: Israel summer time is UTC+3
+ok 2 - fromLocal: Israel summer time is UTC+3
+  ---
+  duration_ms: 0.512307
+  type: 'test'
+  ...
+# Subtest: fromLocal: day after DST ends (2026-10-25)
+ok 3 - fromLocal: day after DST ends (2026-10-25)
+  ---
+  duration_ms: 0.435447
+  type: 'test'
+  ...
+# Subtest: fromLocal: day after DST starts (2027-03-26)
+ok 4 - fromLocal: day after DST starts (2027-03-26)
+  ---
+  duration_ms: 0.350697
+  type: 'test'
+  ...
+# Subtest: time/isoDay/weekday round-trip in Israel time
+ok 5 - time/isoDay/weekday round-trip in Israel time
+  ---
+  duration_ms: 1.971355
+  type: 'test'
+  ...
+# Subtest: datesOn: next N meetings on chosen weekdays
+ok 6 - datesOn: next N meetings on chosen weekdays
+  ---
+  duration_ms: 0.751775
+  type: 'test'
+  ...
+# Subtest: nextDays starts tomorrow by default (group start dates)
+ok 7 - nextDays starts tomorrow by default (group start dates)
+  ---
+  duration_ms: 0.424498
+  type: 'test'
+  ...
+# Subtest: BUG-02: booking days can start today
+not ok 8 - BUG-02: booking days can start today
+  ---
+  duration_ms: 1.465621
+  type: 'test'
+  location: '/home/claude/classi/tests/unit/lib.test.mjs:33:1'
+  failureType: 'testCodeFailure'
+  error: |-
+    Expected values to be strictly deep-equal:
+    + actual - expected
+    
+      [
+    -   '2026-11-01',
+        '2026-11-02',
+        '2026-11-03',
+    +   '2026-11-04'
+      ]
+    
+  code: 'ERR_ASSERTION'
+  name: 'AssertionError'
+  expected:
+    0: '2026-11-01'
+    1: '2026-11-02'
+    2: '2026-11-03'
+  actual:
+    0: '2026-11-02'
+    1: '2026-11-03'
+    2: '2026-11-04'
+  operator: 'deepStrictEqual'
+  stack: |-
+    TestContext.<anonymous> (file:///home/claude/classi/tests/unit/lib.test.mjs:34:10)
+    Test.runInAsyncScope (node:async_hooks:214:14)
+    Test.run (node:internal/test_runner/test:1047:25)
+    Test.processPendingSubtests (node:internal/test_runner/test:744:18)
+    Test.postRun (node:internal/test_runner/test:1173:19)
+    Test.run (node:internal/test_runner/test:1101:12)
+    async Test.processPendingSubtests (node:internal/test_runner/test:744:7)
+  ...
+# Subtest: BUG-01: Saturday is a normal day (weekday 6)
+not ok 9 - BUG-01: Saturday is a normal day (weekday 6)
+  ---
+  duration_ms: 0.616853
+  type: 'test'
+  location: '/home/claude/classi/tests/unit/lib.test.mjs:36:1'
+  failureType: 'testCodeFailure'
+  error: '2026-11-02,2026-11-03,2026-11-04,2026-11-05,2026-11-06,2026-11-08,2026-11-09'
+  code: 'ERR_ASSERTION'
+  name: 'AssertionError'
+  expected: true
+  actual: false
+  operator: '=='
+  stack: |-
+    TestContext.<anonymous> (file:///home/claude/classi/tests/unit/lib.test.mjs:38:10)
+    Test.runInAsyncScope (node:async_hooks:214:14)
+    Test.run (node:internal/test_runner/test:1047:25)
+    Test.processPendingSubtests (node:internal/test_runner/test:744:18)
+    Test.postRun (node:internal/test_runner/test:1173:19)
+    Test.run (node:internal/test_runner/test:1101:12)
+    async Test.processPendingSubtests (node:internal/test_runner/test:744:7)
+  ...
+# Subtest: BUG-02: today's slots less than 2 hours away are shown as busy, later ones as free
+ok 10 - BUG-02: today's slots less than 2 hours away are shown as busy, later ones as free
+  ---
+  duration_ms: 7.287998
+  type: 'test'
+  ...
+# Subtest: slots: 90-minute lessons do not overlap
+ok 11 - slots: 90-minute lessons do not overlap
+  ---
+  duration_ms: 1.204583
+  type: 'test'
+  ...
+# Subtest: slots: 45 + 15 break = every hour
+ok 12 - slots: 45 + 15 break = every hour
+  ---
+  duration_ms: 1.462439
+  type: 'test'
+  ...
+# Subtest: slots: next free time starts when a longer booking ends
+ok 13 - slots: next free time starts when a longer booking ends
+  ---
+  duration_ms: 1.323484
+  type: 'test'
+  ...
+# Subtest: slots: break is respected around a booking
+ok 14 - slots: break is respected around a booking
+  ---
+  duration_ms: 1.632515
+  type: 'test'
+  ...
+# Subtest: slots: whole-day vacation block closes the day
+ok 15 - slots: whole-day vacation block closes the day
+  ---
+  duration_ms: 0.899433
+  type: 'test'
+  ...
+# Subtest: slots: two ranges in one day
+ok 16 - slots: two ranges in one day
+  ---
+  duration_ms: 2.83388
+  type: 'test'
+  ...
+# Subtest: slots: no availability on other weekdays
+ok 17 - slots: no availability on other weekdays
+  ---
+  duration_ms: 0.409506
+  type: 'test'
+  ...
+# Subtest: slots: a lesson never runs past the end of the range
+ok 18 - slots: a lesson never runs past the end of the range
+  ---
+  duration_ms: 0.698222
+  type: 'test'
+  ...
+# Subtest: cleanMobile accepts Israeli mobile formats
+ok 19 - cleanMobile accepts Israeli mobile formats
+  ---
+  duration_ms: 0.321116
+  type: 'test'
+  ...
+# Subtest: cleanMobile rejects landlines and junk
+ok 20 - cleanMobile rejects landlines and junk
+  ---
+  duration_ms: 0.090092
+  type: 'test'
+  ...
+# Subtest: waLink builds wa.me link with encoded Arabic text
+ok 21 - waLink builds wa.me link with encoded Arabic text
+  ---
+  duration_ms: 0.331761
+  type: 'test'
+  ...
+# Subtest: googleCalLink uses UTC start/end and lesson length
+ok 22 - googleCalLink uses UTC start/end and lesson length
+  ---
+  duration_ms: 0.812723
+  type: 'test'
+  ...
+# Subtest: icsFile is valid, escapes commas and has a 1-hour alarm
+ok 23 - icsFile is valid, escapes commas and has a 1-hour alarm
+  ---
+  duration_ms: 1.16946
+  type: 'test'
+  ...
+# node:internal/modules/cjs/loader:1383
+#   const err = new Error(message);
+#               ^
+# Error: Cannot find module '/tmp/tmp.bfOqCg1tRU/phone.js'
+# Require stack:
+# - /home/claude/classi/tests/unit/phase2.test.mjs
+#     at Function._resolveFilename (node:internal/modules/cjs/loader:1383:15)
+#     at defaultResolveImpl (node:internal/modules/cjs/loader:1025:19)
+#     at resolveForCJSWithHooks (node:internal/modules/cjs/loader:1030:22)
+#     at Function._load (node:internal/modules/cjs/loader:1192:37)
+#     at TracingChannel.traceSync (node:diagnostics_channel:328:14)
+#     at wrapModuleLoad (node:internal/modules/cjs/loader:237:24)
+#     at Module.require (node:internal/modules/cjs/loader:1463:12)
+#     at require (node:internal/modules/helpers:147:16)
+#     at file:///home/claude/classi/tests/unit/phase2.test.mjs:9:37
+#     at ModuleJob.run (node:internal/modules/esm/module_job:343:25) {
+#   code: 'MODULE_NOT_FOUND',
+#   requireStack: [ '/home/claude/classi/tests/unit/phase2.test.mjs' ]
+# }
+# Node.js v22.22.0
+# Subtest: /home/claude/classi/tests/unit/phase2.test.mjs
+not ok 2 - /home/claude/classi/tests/unit/phase2.test.mjs
+  ---
+  duration_ms: 39.64559
+  type: 'test'
+  location: '/home/claude/classi/tests/unit/phase2.test.mjs:1:1'
+  failureType: 'testCodeFailure'
+  exitCode: 1
+  signal: ~
+  error: 'test failed'
+  code: 'ERR_TEST_FAILURE'
+  ...
+# Subtest: SEC-09 safePath refuses every off-site form
+ok 25 - SEC-09 safePath refuses every off-site form
+  ---
+  duration_ms: 3.526348
+  type: 'test'
+  ...
+# Subtest: SEC-09 safePath keeps normal paths with query and hash
+ok 26 - SEC-09 safePath keeps normal paths with query and hash
+  ---
+  duration_ms: 1.449437
+  type: 'test'
+  ...
+# Subtest: BUG-20 withQuery picks ? or &
+ok 27 - BUG-20 withQuery picks ? or &
+  ---
+  duration_ms: 0.3506
+  type: 'test'
+  ...
+# Subtest: SEC-26 errorText blocks phishing lures but keeps real messages
+ok 28 - SEC-26 errorText blocks phishing lures but keeps real messages
+  ---
+  duration_ms: 1.368822
+  type: 'test'
+  ...
+# Subtest: SEC-29 ICS: a carriage return in a title cannot inject a property
+ok 29 - SEC-29 ICS: a carriage return in a title cannot inject a property
+  ---
+  duration_ms: 1.581955
+  type: 'test'
+  ...
+# Subtest: SEC-29 ICS: long Arabic lines are folded at 75 octets without splitting characters
+ok 30 - SEC-29 ICS: long Arabic lines are folded at 75 octets without splitting characters
+  ---
+  duration_ms: 0.649686
+  type: 'test'
+  ...
+# Subtest: I-2 escapeHtml
+ok 31 - I-2 escapeHtml
+  ---
+  duration_ms: 0.388226
+  type: 'test'
+  ...
+1..31
+# tests 31
+# suites 0
+# pass 28
+# fail 3
+# cancelled 0
+# skipped 0
+# todo 0
+# duration_ms 254.651488

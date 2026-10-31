@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import { TOWNS } from "@/lib/types";
 import { safePath } from "@/lib/safe";
+import { clearKeptForms } from "@/components/KeepForm";
 import { digitsOnly, toE164 } from "@/lib/phone";
 import { friendlyError } from "@/lib/errors";
 
@@ -164,6 +165,8 @@ function otpError(m: string) {
 /** Sign in or sign up with a phone number and a 6-digit SMS code. */
 export function LoginForm({ next: rawNext, initial = "in" }: { next: string; initial?: "in" | "up" }) {
   const next = safePath(rawNext, "/");
+  // A new sign-in on this device: forget any form values another person typed in this tab.
+  useEffect(() => { clearKeptForms(); }, []);
   const router = useRouter();
   const [useEmail, setUseEmail] = useState(false);
   const [mode, setMode] = useState<"in" | "up">(initial);

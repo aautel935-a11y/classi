@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { Icon } from "@/components/Icon";
-import { setEmailRemindersAction } from "@/app/actions";
+import { markAllReadAction, setEmailRemindersAction } from "@/app/actions";
+import { RefreshOnce } from "@/components/RefreshOnce";
 import { PushToggle } from "@/components/PushToggle";
 import { requireUser } from "@/lib/session";
 import { dayLong, time } from "@/lib/format";
@@ -29,6 +30,12 @@ export default async function Notifications() {
         <div className="row between">
           <h1>الإشعارات</h1>
           {unread && <span className="small muted">{unreadIds.length} جديد</span>}
+          {unread && <RefreshOnce />}
+          {unreadIds.length >= 60 && (
+            <form action={markAllReadAction}>
+              <button className="link small">تعليم الكل كمقروء</button>
+            </form>
+          )}
         </div>
         <PushToggle />
         <form action={setEmailRemindersAction} className="row between small">

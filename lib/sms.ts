@@ -26,6 +26,7 @@ export async function sendSms(phone: string, message: string, test = process.env
         },
       }),
       cache: "no-store",
+      signal: AbortSignal.timeout(6000),   // never let one slow request eat the dispatcher's time budget (BUG-22)
     });
     const j = (await r.json().catch(() => ({}))) as { status?: number | string; message?: string; shipment_id?: string };
     const ok = r.ok && Number(j.status) === 0;

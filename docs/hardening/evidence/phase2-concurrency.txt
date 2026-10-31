@@ -1,0 +1,4 @@
+PASS: installments after two simultaneous confirmations = 3/3
+PASS: bookings on one institute slot after two simultaneous requests = 1
+PASS: bookings on one teacher slot after two simultaneous requests = 1
+concurrency: 3 passed, 0 failed

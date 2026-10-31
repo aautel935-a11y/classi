@@ -46,8 +46,8 @@ export default async function ReviewPage({ searchParams }: { searchParams: Promi
 
   return (
     <div className="wrap">
-      <form id="kf-leaveReview" action={leaveReviewAction} className="section formstack">
-            <KeepForm formId="kf-leaveReview" />
+      <form id={`kf-leaveReview-${booking}`} action={leaveReviewAction} className="section formstack">
+            <KeepForm formId={`kf-leaveReview-${booking}`} />
         <Link className="back" href="/schedule"><Icon name="back" />جدولي</Link>
         <h1>كيف كانت الحصة مع {ownerName}؟</h1>
         <p className="muted">{x.offering?.title}{x.child?.name ? ` · ${x.child.name}` : ""}</p>

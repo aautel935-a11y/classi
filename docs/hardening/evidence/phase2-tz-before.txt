@@ -1,0 +1,4 @@
+# BUG-21 before the fix: the previous lib/format.ts (commit fbfb396) compiled and run under two server time zones
+UTC 2026-10-25T00:30:00.000Z,2027-03-26T00:30:00.000Z
+Asia/Jerusalem 2026-10-24T23:30:00.000Z,2027-03-26T01:30:00.000Z
+# after the fix (tests/unit/phase2.test.mjs, "BUG-21"): identical under UTC, Asia/Jerusalem and America/New_York

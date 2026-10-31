@@ -29,7 +29,9 @@ export async function POST(request: NextRequest) {
   // flight, sending runs in parallel lanes, and the SMS log is written after every batch.
   const started = Date.now();
   const totals = { items: 0, pushed: 0, removed: 0, emailed: 0, texted: 0, failed: 0, batches: 0 };
-  while (Date.now() - started < 18000) {
+  // Each batch has a hard ceiling (every request times out after 6 s), so starting a batch before 12 s always
+  // finishes well inside Vercel's 30 s limit.
+  while (Date.now() - started < 12000) {
     const { data, error } = await db.rpc("claim_push", { p_secret: secret, p_limit: 25 });
     if (error) return totals.batches ? NextResponse.json({ ok: true, ...totals }) : NextResponse.json({ error: "unauthorized" }, { status: 401 });
     const claim = data as Claim;
@@ -38,7 +40,6 @@ export async function POST(request: NextRequest) {
     totals.batches++;
     totals.items += items.length;
     await deliver(db, secret, claim, items, totals);
-    if (items.length < 25) break;
   }
   return NextResponse.json({ ok: true, ...totals });
 }
@@ -54,7 +55,7 @@ async function deliver(db: ReturnType<typeof publicClient>, secret: string, clai
         await webpush.sendNotification(
           s,
           JSON.stringify({ title: "Classi", body: it.body, url: it.link ?? "/notifications", tag: it.kind.startsWith("reminder") ? `r-${it.id}` : undefined }),
-          { TTL: it.kind.startsWith("reminder") ? 3600 : 86400, urgency: it.kind === "reminder_soon" || it.kind === "message" ? "high" : "normal" }
+          { TTL: it.kind.startsWith("reminder") ? 3600 : 86400, urgency: it.kind === "reminder_soon" || it.kind === "message" ? "high" : "normal", timeout: 6000 }
         );
       } catch (e: any) {
         if (e?.statusCode === 404 || e?.statusCode === 410) dead.push(s.endpoint);
@@ -75,6 +76,7 @@ async function deliver(db: ReturnType<typeof publicClient>, secret: string, clai
     const res = await runPool(items.filter((it) => it.email), 2, async (it) => {
       const r = await fetch("https://api.resend.com/emails", {
         method: "POST",
+        signal: AbortSignal.timeout(6000),
         headers: { Authorization: `Bearer ${key}`, "Content-Type": "application/json" },
         body: JSON.stringify({
           from: `Classi <${from.replace(/^.*<|>.*$/g, "")}>`,

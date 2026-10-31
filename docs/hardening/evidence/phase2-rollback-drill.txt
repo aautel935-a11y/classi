@@ -1,4 +1,3 @@
-NOTICE:  database "ct_drill" does not exist, skipping
 PASS: after rollback, flow_test (7 expected refusals)
 PASS: after rollback, roles_test (4 expected refusals)
 PASS: after rollback, hardening_test (2 expected refusals)

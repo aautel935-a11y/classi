@@ -61,15 +61,17 @@ language plpgsql security definer set search_path = public as $$
 begin
   if not exists (select 1 from profiles where id = old.guardian_id) then return old; end if;   -- account being deleted
   if coalesce(current_setting('classi.bypass_active', true), '') = 'on' then return old; end if;
+  if exists (select 1 from lesson_packages p where p.child_id = old.id and p.status = 'active') then
+    raise exception 'لـ% رزمة حصص فعّالة. اطلب من المعلم إلغاء الرزمة أو إنهاءها أولاً، ثم احذف الاسم.', old.name;
+  end if;
   if exists (
        select 1 from bookings b left join sessions s on s.id = b.session_id
         where b.child_id = old.id and b.status in ('pending','confirmed')
           and (coalesce(b.starts_at, s.starts_at) > now()
                or (b.starts_at is null and b.session_id is null
                    and exists (select 1 from sessions x where x.offering_id = b.offering_id and not x.cancelled and x.starts_at > now()))))
-     or exists (select 1 from lesson_packages p where p.child_id = old.id and p.status = 'active')
      or exists (select 1 from recurring_series r where r.child_id = old.id and r.status <> 'cancelled') then
-    raise exception 'لـ% حصص قادمة أو رزمة أو موعد أسبوعي. ألغِها أولاً من جدولك، ثم احذف الاسم.', old.name;
+    raise exception 'لـ% حصص قادمة أو موعد أسبوعي. ألغِها أولاً من جدولك، ثم احذف الاسم.', old.name;
   end if;
   return old;
 end $$;
@@ -84,7 +86,9 @@ create or replace function public.bookings_zzz_lead_time() returns trigger
 language plpgsql security definer set search_path = public as $$
 declare v_type offering_type;
 begin
-  if auth.uid() is null or new.booked_by is distinct from auth.uid() or new.starts_at is null or new.series_id is not null then return new; end if;
+  if auth.uid() is null or new.booked_by is distinct from auth.uid() or new.starts_at is null then return new; end if;
+  -- weekly series: only the first lesson needs the notice (the later weeks are days away by definition)
+  if new.series_id is not null and exists (select 1 from bookings b where b.series_id = new.series_id) then return new; end if;
   select type into v_type from offerings where id = new.offering_id;
   if v_type <> 'private' or is_offering_owner(new.offering_id) or is_admin() then return new; end if;
   if new.starts_at < now() + make_interval(mins => coalesce(nullif(setting('min_lead_minutes'), '')::int, 120)) then
@@ -94,6 +98,73 @@ begin
 end $$;
 drop trigger if exists bookings_zzz_lead_time on public.bookings;
 create trigger bookings_zzz_lead_time before insert on public.bookings for each row execute function bookings_zzz_lead_time();
+
+------------------------------------------------------------------------------------------------------------
+-- Rollback support for phase 1: the teacher-hours booking rule can be lifted alone with a setting
+-- (app_settings rule_teacher_hours = 'off'), instead of dropping the whole bookings_zzz_rules trigger.
+-- Same function as in 20261031000000_production_hardening.sql plus that one switch.
+------------------------------------------------------------------------------------------------------------
+create or replace function public.bookings_zzz_rules() returns trigger
+language plpgsql security definer set search_path = public as $$
+declare o offerings%rowtype; v_local timestamp; v_end timestamp; v_n int;
+begin
+  -- Only bookings a student makes for themselves; teachers, institutes, walk-ins and scheduled jobs are not limited here.
+  if auth.uid() is null or new.booked_by is distinct from auth.uid() then return new; end if;
+  select * into o from offerings where id = new.offering_id;
+  if is_offering_owner(o.id) or is_admin() then return new; end if;
+
+  if new.pay_method is null or new.pay_method not in ('bit','cash','card','installments','package') then
+    raise exception 'طريقة دفع غير معروفة';
+  end if;
+  if new.pay_method = 'package' and new.package_id is null then
+    if new.series_id is not null then
+      -- weekly series: the weeks after the package runs out are paid normally (as before), not labelled "package"
+      new.pay_method := 'cash';
+    else
+      raise exception 'لا توجد رزمة فعّالة لهذا الطالب مع هذا العرض';
+    end if;
+  end if;
+
+  if o.type = 'private' and new.starts_at is not null then
+    if o.teacher_id is not null and coalesce(setting('rule_teacher_hours'), 'on') <> 'off' then
+      -- inside the teacher's published hours (Israel time); rollback-only switch: app_settings rule_teacher_hours = 'off'
+
+      v_local := new.starts_at at time zone 'Asia/Jerusalem';
+      v_end := v_local + make_interval(mins => coalesce(new.minutes, o.minutes));
+      if not exists (select 1 from availability a
+                      where a.teacher_id = o.teacher_id and a.weekday = extract(dow from v_local)::int
+                        and a.start_time <= v_local::time and v_end::date = v_local::date and v_end::time <= a.end_time) then
+        raise exception 'هذا الموعد خارج ساعات المعلم المتاحة';
+      end if;
+    else
+      -- private lessons of an institute: one booking per time slot of that offer
+      perform pg_advisory_xact_lock(hashtext('offering:' || o.id::text));
+      if exists (select 1 from bookings b where b.offering_id = o.id and b.status in ('pending','confirmed') and b.starts_at is not null
+                   and tstzrange(b.starts_at, b.starts_at + make_interval(mins => b.minutes))
+                    && tstzrange(new.starts_at, new.starts_at + make_interval(mins => coalesce(new.minutes, o.minutes)))) then
+        raise exception 'الموعد لم يعد متاحاً، اختر موعداً آخر';
+      end if;
+    end if;
+    if new.series_id is null then
+      select count(*) into v_n from bookings b where b.offering_id = o.id and b.booked_by = auth.uid()
+         and b.status in ('pending','confirmed') and b.series_id is null and b.starts_at > now();
+      if v_n >= coalesce(nullif(setting('max_open_bookings_per_offer'), '')::int, 8) then
+        raise exception 'لديك حجوزات قادمة كثيرة مع هذا العرض. للمواعيد الثابتة استخدم الحجز الأسبوعي.';
+      end if;
+    end if;
+  elsif o.type = 'group' and new.session_id is not null then
+    if exists (select 1 from bookings b where b.session_id = new.session_id and b.booked_by = auth.uid()
+                 and b.child_id is not distinct from new.child_id and b.status in ('pending','confirmed')) then
+      raise exception 'هذا الطالب مسجّل في هذا اللقاء';
+    end if;
+  elsif o.type in ('course','recorded') then
+    if exists (select 1 from bookings b where b.offering_id = o.id and b.session_id is null and b.booked_by = auth.uid()
+                 and b.child_id is not distinct from new.child_id and b.status in ('pending','confirmed')) then
+      raise exception 'هذا الطالب مسجّل في هذا العرض';
+    end if;
+  end if;
+  return new;
+end $$;
 
 ------------------------------------------------------------------------------------------------------------
 -- BUG-26: the institute's attendance register and the teacher's lesson report stay in step both ways
@@ -114,6 +185,6 @@ create trigger attendance_to_report after insert or update of present on public.
 ------------------------------------------------------------------------------------------------------------
 -- Least privilege (phase 1): new trigger functions are not callable; the new RPC is granted explicitly.
 ------------------------------------------------------------------------------------------------------------
-revoke execute on function public.replace_availability(jsonb, int), public.children_guard_delete(),
+revoke execute on function public.replace_availability(jsonb, int), public.children_guard_delete(), public.bookings_zzz_rules(),
   public.bookings_zzz_lead_time(), public.attendance_to_report() from public, anon, authenticated;
 grant execute on function public.replace_availability(jsonb, int) to authenticated;

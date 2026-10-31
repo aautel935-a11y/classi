@@ -50,8 +50,8 @@ export default async function ReportPage({ searchParams }: { searchParams: Promi
     const at = x.starts_at ?? x.session?.starts_at;
     return (
       <div className="wrap">
-        <form id="kf-writeReport" action={writeReportAction} className="section formstack">
-            <KeepForm formId="kf-writeReport" />
+        <form id={`kf-writeReport-${booking}`} action={writeReportAction} className="section formstack">
+            <KeepForm formId={`kf-writeReport-${booking}`} />
           <Link className="back" href={back}><Icon name="back" />رجوع</Link>
           <h1>تقرير الحصة</h1>
           <p className="muted">{x.offering?.title} · <b>{who}</b>{at ? ` · ${dayLong(at)} ${time(at)}` : ""}</p>
@@ -82,8 +82,8 @@ export default async function ReportPage({ searchParams }: { searchParams: Promi
   const shared = list.find((l) => l.summary);
   return (
     <div className="wrap">
-      <form id="kf-writeSessionReports" action={writeSessionReportsAction} className="section formstack">
-            <KeepForm formId="kf-writeSessionReports" />
+      <form id={`kf-writeSessionReports-${session}`} action={writeSessionReportsAction} className="section formstack">
+            <KeepForm formId={`kf-writeSessionReports-${session}`} />
         <Link className="back" href={back}><Icon name="back" />رجوع</Link>
         <h1>تقرير اللقاء</h1>
         <p className="muted">{x.offering?.title} · اللقاء {x.seq} · {dayLong(x.starts_at)} {time(x.starts_at)}</p>

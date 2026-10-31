@@ -1,0 +1,232 @@
+TAP version 13
+# Subtest: fromLocal: Israel winter time is UTC+2
+ok 1 - fromLocal: Israel winter time is UTC+2
+  ---
+  duration_ms: 1.796375
+  type: 'test'
+  ...
+# Subtest: fromLocal: Israel summer time is UTC+3
+ok 2 - fromLocal: Israel summer time is UTC+3
+  ---
+  duration_ms: 0.517553
+  type: 'test'
+  ...
+# Subtest: fromLocal: day after DST ends (2026-10-25)
+ok 3 - fromLocal: day after DST ends (2026-10-25)
+  ---
+  duration_ms: 0.160457
+  type: 'test'
+  ...
+# Subtest: fromLocal: day after DST starts (2027-03-26)
+ok 4 - fromLocal: day after DST starts (2027-03-26)
+  ---
+  duration_ms: 0.135196
+  type: 'test'
+  ...
+# Subtest: time/isoDay/weekday round-trip in Israel time
+ok 5 - time/isoDay/weekday round-trip in Israel time
+  ---
+  duration_ms: 1.591131
+  type: 'test'
+  ...
+# Subtest: datesOn: next N meetings on chosen weekdays
+ok 6 - datesOn: next N meetings on chosen weekdays
+  ---
+  duration_ms: 0.724928
+  type: 'test'
+  ...
+# Subtest: nextDays starts tomorrow by default (group start dates)
+ok 7 - nextDays starts tomorrow by default (group start dates)
+  ---
+  duration_ms: 0.36061
+  type: 'test'
+  ...
+# Subtest: BUG-02: booking days can start today
+ok 8 - BUG-02: booking days can start today
+  ---
+  duration_ms: 0.247558
+  type: 'test'
+  ...
+# Subtest: BUG-01: Saturday is a normal day (weekday 6)
+ok 9 - BUG-01: Saturday is a normal day (weekday 6)
+  ---
+  duration_ms: 1.024389
+  type: 'test'
+  ...
+# Subtest: BUG-02: today's slots less than 2 hours away are shown as busy, later ones as free
+ok 10 - BUG-02: today's slots less than 2 hours away are shown as busy, later ones as free
+  ---
+  duration_ms: 1.91895
+  type: 'test'
+  ...
+# Subtest: slots: 90-minute lessons do not overlap
+ok 11 - slots: 90-minute lessons do not overlap
+  ---
+  duration_ms: 0.288734
+  type: 'test'
+  ...
+# Subtest: slots: 45 + 15 break = every hour
+ok 12 - slots: 45 + 15 break = every hour
+  ---
+  duration_ms: 0.154547
+  type: 'test'
+  ...
+# Subtest: slots: next free time starts when a longer booking ends
+ok 13 - slots: next free time starts when a longer booking ends
+  ---
+  duration_ms: 0.207654
+  type: 'test'
+  ...
+# Subtest: slots: break is respected around a booking
+ok 14 - slots: break is respected around a booking
+  ---
+  duration_ms: 0.146526
+  type: 'test'
+  ...
+# Subtest: slots: whole-day vacation block closes the day
+ok 15 - slots: whole-day vacation block closes the day
+  ---
+  duration_ms: 0.141563
+  type: 'test'
+  ...
+# Subtest: slots: two ranges in one day
+ok 16 - slots: two ranges in one day
+  ---
+  duration_ms: 0.969081
+  type: 'test'
+  ...
+# Subtest: slots: no availability on other weekdays
+ok 17 - slots: no availability on other weekdays
+  ---
+  duration_ms: 0.109896
+  type: 'test'
+  ...
+# Subtest: slots: a lesson never runs past the end of the range
+ok 18 - slots: a lesson never runs past the end of the range
+  ---
+  duration_ms: 0.101659
+  type: 'test'
+  ...
+# Subtest: cleanMobile accepts Israeli mobile formats
+ok 19 - cleanMobile accepts Israeli mobile formats
+  ---
+  duration_ms: 0.29448
+  type: 'test'
+  ...
+# Subtest: cleanMobile rejects landlines and junk
+ok 20 - cleanMobile rejects landlines and junk
+  ---
+  duration_ms: 0.083146
+  type: 'test'
+  ...
+# Subtest: waLink builds wa.me link with encoded Arabic text
+ok 21 - waLink builds wa.me link with encoded Arabic text
+  ---
+  duration_ms: 0.197405
+  type: 'test'
+  ...
+# Subtest: googleCalLink uses UTC start/end and lesson length
+ok 22 - googleCalLink uses UTC start/end and lesson length
+  ---
+  duration_ms: 0.406334
+  type: 'test'
+  ...
+# Subtest: icsFile is valid, escapes commas and has a 1-hour alarm
+ok 23 - icsFile is valid, escapes commas and has a 1-hour alarm
+  ---
+  duration_ms: 0.512002
+  type: 'test'
+  ...
+# Subtest: BUG-24: Arabic-Indic and Persian digits become 0-9
+ok 24 - BUG-24: Arabic-Indic and Persian digits become 0-9
+  ---
+  duration_ms: 1.68645
+  type: 'test'
+  ...
+# Subtest: BUG-24: phone fields accept Arabic digits
+ok 25 - BUG-24: phone fields accept Arabic digits
+  ---
+  duration_ms: 0.373313
+  type: 'test'
+  ...
+# Subtest: BUG-23: database errors become Arabic messages; Arabic messages pass through
+ok 26 - BUG-23: database errors become Arabic messages; Arabic messages pass through
+  ---
+  duration_ms: 0.539447
+  type: 'test'
+  ...
+# Subtest: BUG-22: runPool sends with bounded concurrency and keeps every result, even failures
+ok 27 - BUG-22: runPool sends with bounded concurrency and keeps every result, even failures
+  ---
+  duration_ms: 25.78034
+  type: 'test'
+  ...
+# Subtest: BUG-21: fromLocal gives the same instant whatever the server time zone
+ok 28 - BUG-21: fromLocal gives the same instant whatever the server time zone
+  ---
+  duration_ms: 116.372515
+  type: 'test'
+  ...
+# Subtest: BUG-03: chat merge keeps every message, newest last, no duplicates, temp replaced
+ok 29 - BUG-03: chat merge keeps every message, newest last, no duplicates, temp replaced
+  ---
+  duration_ms: 5.942808
+  type: 'test'
+  ...
+# Subtest: BUG-03 review: ordering by instant, and the polling cursor overlaps the last message
+ok 30 - BUG-03 review: ordering by instant, and the polling cursor overlaps the last message
+  ---
+  duration_ms: 0.385025
+  type: 'test'
+  ...
+# Subtest: SEC-09 safePath refuses every off-site form
+ok 31 - SEC-09 safePath refuses every off-site form
+  ---
+  duration_ms: 1.797011
+  type: 'test'
+  ...
+# Subtest: SEC-09 safePath keeps normal paths with query and hash
+ok 32 - SEC-09 safePath keeps normal paths with query and hash
+  ---
+  duration_ms: 0.191962
+  type: 'test'
+  ...
+# Subtest: BUG-20 withQuery picks ? or &
+ok 33 - BUG-20 withQuery picks ? or &
+  ---
+  duration_ms: 0.190082
+  type: 'test'
+  ...
+# Subtest: SEC-26 errorText blocks phishing lures but keeps real messages
+ok 34 - SEC-26 errorText blocks phishing lures but keeps real messages
+  ---
+  duration_ms: 0.793969
+  type: 'test'
+  ...
+# Subtest: SEC-29 ICS: a carriage return in a title cannot inject a property
+ok 35 - SEC-29 ICS: a carriage return in a title cannot inject a property
+  ---
+  duration_ms: 0.880012
+  type: 'test'
+  ...
+# Subtest: SEC-29 ICS: long Arabic lines are folded at 75 octets without splitting characters
+ok 36 - SEC-29 ICS: long Arabic lines are folded at 75 octets without splitting characters
+  ---
+  duration_ms: 0.2682
+  type: 'test'
+  ...
+# Subtest: I-2 escapeHtml
+ok 37 - I-2 escapeHtml
+  ---
+  duration_ms: 0.151748
+  type: 'test'
+  ...
+1..37
+# tests 37
+# suites 0
+# pass 37
+# fail 0
+# cancelled 0
+# skipped 0
+# todo 0
+# duration_ms 349.5989

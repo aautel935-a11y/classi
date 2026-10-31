@@ -6,7 +6,7 @@ import { ErrorNote } from "@/components/ErrorNote";
 import { KeepForm } from "@/components/KeepForm";
 
 export const dynamic = "force-dynamic";
-const DAYS = ["الأحد", "الاثنين", "الثلاثاء", "الأربعاء", "الخميس", "الجمعة"];
+const DAYS = ["الأحد", "الاثنين", "الثلاثاء", "الأربعاء", "الخميس", "الجمعة", "السبت"];
 
 export default async function NewCourse({ searchParams }: { searchParams: Promise<Record<string, string | undefined>> }) {
   const sp = await searchParams;

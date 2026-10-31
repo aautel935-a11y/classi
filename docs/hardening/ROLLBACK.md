@@ -58,7 +58,7 @@
 | سقف SMS | رسائل ضرورية لا تُرسل | رفع الحد: `insert into app_settings(key,value) values ('sms_daily_cap_per_user','10') on conflict (key) do update set value=excluded.value;` (والسقف العام `sms_daily_cap`، الافتراضي 400) | الحد يبقى موجوداً |
 | حدود رموز الدخول | أرقام حقيقية تُرفض | المفتاحان `otp_per_hour` (افتراضي 5) و`otp_per_day` (افتراضي 15) | الأرقام غير الإسرائيلية تبقى مرفوضة |
 | حد الحجوزات المفتوحة | طالب صادق يُرفض | `max_open_bookings_per_offer` (افتراضي 8) | باقي قواعد الحجز |
-| قاعدة ساعات المعلم | حجز صحيح يُرفض بسبب الساعات | **مفتاح مؤقت:** `insert into app_settings(key,value) values ('rule_teacher_hours','off') on conflict (key) do update set value='off';` ثم احذفه بعد الإصلاح: `delete from app_settings where key='rule_teacher_hours';` (جُرّب: يرفع قاعدة الساعات وحدها) | طريقة الدفع، تكرار المقعد، الحد الأعلى، قفل المعهد |
+| قاعدة ساعات المعلم | حجز صحيح يُرفض بسبب الساعات | **مفتاح مؤقت:** `insert into app_settings(key,value) values ('rule_teacher_hours','off') on conflict (key) do update set value='off';` ثم احذفه بعد الإصلاح: `delete from app_settings where key='rule_teacher_hours';` (جُرّب: يرفع قاعدة الساعات وحدها). **يتطلب** migration المرحلة 2، لأن المفتاح أُضيف فيها حتى يصل إلى أي قاعدة طُبّقت عليها المرحلة 1 سابقاً | طريقة الدفع، تكرار المقعد، الحد الأعلى، قفل المعهد |
 | حد دعوات الطاقم | معهد كبير يحتاج أكثر | `staff_invites_per_day` (افتراضي 10) | الموافقة إلزامية |
 | موافقة المعلم على الطاقم | معلم بلا حساب لا يُضم | **لا تراجع للقيد.** الحل: أن يُنشئ المعلم حساباً ويقبل الدعوة. أو يضيفه الأدمن (`postgres`) يدوياً بعد موافقته المكتوبة: `insert into institute_teachers(institute_id, teacher_id, status) values (…, …, 'accepted');` | التقويم لا يُعطَّل بدورة وهمية |
 | حماية الحسابات الموقوفة | موقوف يحتاج إنهاء أمر | فكّ الإيقاف من لوحة الأدمن، أو الأدمن ينفذ العملية بنفسه (الأدمن مستثنى). **لا تحذف الـ trigger** | — |
@@ -70,7 +70,7 @@
 ### المرحلة 2: `20261031010000_functional_fixes.sql`
 
 - **أولاً** تراجع عن التطبيق، لأنه يستدعي `replace_availability`.
-- **ثم:** `supabase/rollback/20261031010000_functional_fixes.down.sql`. يحذف الـ triggers الثلاثة والدالة، ويبقي عمود `hours_confirmed_at` لأنه غير ضار.
+- **ثم:** `supabase/rollback/20261031010000_functional_fixes.down.sql`. يحذف الـ triggers الثلاثة والدالة. يبقى عمود `hours_confirmed_at` ونسخة `bookings_zzz_rules` التي تحمل مفتاح `rule_teacher_hours`، وكلاهما غير ضار: الدالة هي نفسها مع مفتاح إضافي.
 - **جُرّب:** `supabase/tests/rollback_drill.sh` بنى القاعدة، وطبّق ملف التراجع، ثم شغّل 9 مجموعات. **كلها نجحت، ومنها `security_test`**، أي أن حماية المرحلة 1 بقيت كاملة (`evidence/phase2-rollback-drill.txt`).
 
 **تراجع جزئي داخل المرحلة 2:**

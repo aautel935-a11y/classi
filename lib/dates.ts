@@ -34,7 +34,8 @@ export function privateSlots(
   busy: { starts_at: string; minutes: number }[],
   minutes: number,
   days = nextDays(8, new Date(), true),
-  bufferMinutes = 0
+  bufferMinutes = 0,
+  leadMinutes = 120   // students need 2 hours' notice; the teacher's own calendar passes 0
 ): Slot[] {
   const now = Date.now();
   const slots: Slot[] = [];
@@ -59,7 +60,7 @@ export function privateSlots(
           const bs = new Date(x.starts_at).getTime();
           return bs - buf < end && bs + x.minutes * 60000 + buf > start;
         });
-        slots.push({ day, time, at: new Date(start).toISOString(), busy: hits.length > 0 || start < now + 2 * 3600000 });
+        slots.push({ day, time, at: new Date(start).toISOString(), busy: hits.length > 0 || start < now + leadMinutes * 60000 });
         if (hits.length === 0) { m += step; continue; }
         const freeAt = Math.max(...hits.map((x) => new Date(x.starts_at).getTime() + x.minutes * 60000 + buf));
         m = Math.max(m + 5, Math.ceil((freeAt - dayStart) / 60000 / 5) * 5);

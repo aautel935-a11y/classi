@@ -243,8 +243,8 @@ export async function newOfferingAction(form: FormData) {
   // The link and the meetings belong to the offer: if either cannot be saved, the new offer is removed again
   // (it has no bookings yet), so a teacher never ends up with a published group that has no meetings (BUG-09).
   const fail = async (e: { code?: string; message?: string }) => {
-    await supabase.from("offerings").delete().eq("id", o.id);
-    redirect(`/teach/new?error=${encodeURIComponent(friendlyError(e))}`);
+    const { data: gone } = await supabase.from("offerings").delete().eq("id", o.id).select("id");
+    redirect(`/teach/new?error=${encodeURIComponent(friendlyError(e) + (gone?.length ? "" : " حُفظ العرض ناقصاً، احذفه أو أكمله من لوحتك."))}`);
   };
   if (link) {
     const { error: le } = await supabase.from("offering_links").upsert({ offering_id: o.id, url: link });
@@ -345,8 +345,8 @@ export async function newCourseAction(form: FormData) {
   );
   if (se) {
     // No course without its meetings (BUG-09): remove the new, unbooked course and report why.
-    await supabase.from("offerings").delete().eq("id", o.id);
-    redirect(`/manage/new-course?error=${encodeURIComponent(friendlyError(se))}`);
+    const { data: gone } = await supabase.from("offerings").delete().eq("id", o.id).select("id");
+    redirect(`/manage/new-course?error=${encodeURIComponent(friendlyError(se) + (gone?.length ? "" : " حُفظت الدورة بلا لقاءات، أكملها من صفحتها."))}`);
   }
   revalidatePath("/manage");
   redirect(`/manage/course/${o.id}`);
@@ -426,7 +426,7 @@ export async function updateTeacherAction(form: FormData) {
   if (!user) redirect("/login?next=/teach");
   // Check everything first; nothing is written when a field is wrong (BUG-10: a bad video link used to erase the saved one).
   const video = str(form, "intro_video");
-  if (video && !/^https:\/\/\S{6,290}$/.test(video)) redirect(`/teach?error=${encodeURIComponent("رابط الفيديو يجب أن يبدأ بـ https://")}#profile`);
+  if (video && !/^https:\/\/\S{6,290}$/.test(video)) redirect(`/teach?error=${encodeURIComponent("رابط الفيديو غير صحيح. انسخ الرابط الكامل من YouTube (يبدأ بـ https://).")}#profile`);
   const wa = form.has("whatsapp") && str(form, "whatsapp") ? cleanMobile(str(form, "whatsapp")) : null;
   if (form.has("whatsapp") && str(form, "whatsapp") && !wa) redirect(`/teach?error=${encodeURIComponent("رقم الواتساب غير صحيح. اكتب رقم جوال مثل 050-1234567.")}#profile`);
   const { error } = await supabase
@@ -505,7 +505,7 @@ export async function saveAvailabilityAction(form: FormData) {
   const { supabase, user } = await client();
   if (!user) redirect("/login?next=/teach");
   // "9:00" or "09:00:00" -> "09:00"; the database validates the rest.
-  const hhmm = (v: string) => (/^\d{1,2}:\d{2}/.test(v) ? v.padStart(5, "0").slice(0, 5) : v);
+  const hhmm = (v: string) => { const m = v.match(/^(\d{1,2}):(\d{2})/); return m ? `${m[1].padStart(2, "0")}:${m[2]}` : v; };
   const rows: { weekday: number; start: string; end: string }[] = [];
   for (let w = 0; w <= 6; w++) {
     if (form.get(`on_${w}`) !== "on") continue;
