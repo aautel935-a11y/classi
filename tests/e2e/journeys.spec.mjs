@@ -12,7 +12,11 @@ function trace(page) {
   const add = (x) => page.__events.push(x);
   page.on("console", (m) => { if (m.type() === "error" || m.type() === "warning") add(`console.${m.type()}: ${m.text().slice(0, 200)}`); });
   page.on("pageerror", (e) => add(`pageerror: ${e.message.slice(0, 200)}`));
-  page.on("response", (r) => { if (r.request().method() === "POST") add(`POST ${new URL(r.url()).pathname} -> ${r.status()}`); });
+  page.on("response", async (r) => {
+    if (r.request().method() !== "POST") return;
+    const h = r.headers();
+    add(`POST ${new URL(r.url()).pathname} -> ${r.status()} loc=${h.location ?? ""} redirect=${h["x-action-redirect"] ?? ""} type=${h["content-type"] ?? ""} action=${r.request().headers()["next-action"] ? "fetch" : "form"}`);
+  });
   page.on("framenavigated", (f) => { if (f === page.mainFrame()) add(`nav ${f.url()}`); });
 }
 
@@ -35,7 +39,10 @@ test("9. teacher: sign up, profile, hours with Saturday, new offer (and the form
   await page.goto("/teach", { waitUntil: "networkidle" });
   await page.locator("#bio").fill("أشرح الرياضيات خطوة بخطوة.");
   await page.getByRole("button", { name: "حفظ الملف" }).click();
-  await expect(page.locator("#hours")).toBeVisible({ timeout: 30_000 });
+  await expect(page.locator("#hours")).toBeVisible({ timeout: 30_000 }).catch(async (e) => {
+    const n = await sql("select count(*)::int n from teachers where user_id = $1", [S.teacherUser]);
+    throw new Error(`${e.message}\n[page] teacher rows after save: ${n[0].n}`);
+  });
   S.teacherId = (await sql("select id from teachers where user_id = $1", [S.teacherUser]))[0].id;
 
   // Hours: Sunday-Thursday as suggested, plus Saturday 09:00-13:00 (BUG-01), saved in one transaction (BUG-04)
