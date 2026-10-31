@@ -9,24 +9,15 @@ const S = {}; // shared between the steps of one project
 
 function trace(page) {
   page.__events = [];
-  // Server action responses: keep the start of the payload (Playwright cannot read bodies of 303 responses).
-  page.route("**/*", async (route) => {
-    const req = route.request();
-    if (req.method() !== "POST" || !req.headers()["next-action"]) return route.fallback();
-    const resp = await route.fetch();
-    const body = await resp.text();
-    const zero = body.split("\n").find((l) => l.startsWith("0:")) ?? "";
-    page.__events.push(`action body ${body.length}: dashboard=${body.includes("أوقاتي المتاحة")} setup=${body.includes("يظهر ملفك للطلاب")} line0=${zero.slice(0, 400)}`);
-    await route.fulfill({ response: resp, body });
-  });
   const add = (x) => page.__events.push(x);
   page.on("console", (m) => { if (m.type() !== "debug") add(`console.${m.type()}: ${m.text().slice(0, 200)}`); });
   page.on("pageerror", (e) => add(`pageerror: ${e.message.slice(0, 200)}`));
   page.on("response", async (r) => {
+    if (r.url().includes("_rsc=")) { add(`GET rsc ${new URL(r.url()).search.slice(0, 60)} -> ${r.status()} cookie=${!!r.headers()["set-cookie"]} at ${Date.now() % 100000}`); return; }
     if (r.request().method() !== "POST") return;
     const h = r.headers();
     if (h["content-type"]?.includes("x-component")) { const b = await r.text().catch((e) => "body? " + e.message); add(`body ${b.length}: ${b.slice(0, 240).replace(/\s+/g, " ")}`); }
-    add(`POST ${new URL(r.url()).pathname} -> ${r.status()} loc=${h.location ?? ""} redirect=${h["x-action-redirect"] ?? ""} type=${h["content-type"] ?? ""} action=${r.request().headers()["next-action"] ? "fetch" : "form"} tree=${(r.request().headers()["next-router-state-tree"] ?? "none").length} vary=${h.vary ?? ""}`);
+    add(`POST ${new URL(r.url()).pathname} -> ${r.status()} loc=${h.location ?? ""} redirect=${h["x-action-redirect"] ?? ""} type=${h["content-type"] ?? ""} action=${r.request().headers()["next-action"] ? "fetch" : "form"} tree=${(r.request().headers()["next-router-state-tree"] ?? "none").length} cookie=${(h["set-cookie"] ?? "").split("\n").map((c) => c.split("=")[0]).join("+")} revalidated=${h["x-action-revalidated"] ?? ""} at ${Date.now() % 100000}`);
   });
   page.__pending = new Map();
   page.on("request", (r) => page.__pending.set(r, r.url()));
@@ -39,7 +30,7 @@ function trace(page) {
 test.afterEach(async ({ browser }, info) => {
   if (info.status === info.expectedStatus) return;
   for (const ctx of browser.contexts()) for (const p of ctx.pages()) {
-    for (const e of (p.__events ?? []).slice(-14)) console.log(`[page] event: ${e}`);
+    for (const e of (p.__events ?? []).filter((x) => !x.includes("Content Security")).slice(-30)) console.log(`[page] event: ${e}`);
     console.log(`[page] invalid fields: ${await p.evaluate(() => [...document.querySelectorAll("form :invalid")].map((e) => e.id || e.getAttribute("name")).join(",")).catch(() => "?")}`);
     const msg = await p.locator(".err, .okmsg, [role=alert], .note").allTextContents().catch(() => []);
     const h = await p.locator("h1, h2").first().textContent().catch(() => "");
@@ -73,6 +64,7 @@ test("9. teacher: sign up, profile, hours with Saturday, new offer (and the form
   await hours.locator('input[name="from_6"]').fill("09:00");
   await hours.locator('input[name="to_6"]').fill("13:00");
   await hours.getByRole("button", { name: "حفظ الأوقات" }).click();
+  for (let i = 0; i < 6; i++) { await page.waitForTimeout(1000); console.log(`[page] tick ${i}: ${await Promise.race([page.evaluate(() => location.href), new Promise((r) => setTimeout(() => r("main thread busy"), 1500))])}`); }
   await expect(page.getByText(/حُفظت الأوقات \(6 فترة\)/)).toBeVisible();
 
   // New offer: a server-side error must not wipe the form (BUG-07)
