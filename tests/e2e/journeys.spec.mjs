@@ -28,6 +28,10 @@ function trace(page) {
     if (h["content-type"]?.includes("x-component")) { const b = await r.text().catch((e) => "body? " + e.message); add(`body ${b.length}: ${b.slice(0, 240).replace(/\s+/g, " ")}`); }
     add(`POST ${new URL(r.url()).pathname} -> ${r.status()} loc=${h.location ?? ""} redirect=${h["x-action-redirect"] ?? ""} type=${h["content-type"] ?? ""} action=${r.request().headers()["next-action"] ? "fetch" : "form"} tree=${(r.request().headers()["next-router-state-tree"] ?? "none").length} vary=${h.vary ?? ""}`);
   });
+  page.__pending = new Map();
+  page.on("request", (r) => page.__pending.set(r, r.url()));
+  page.on("requestfinished", (r) => page.__pending.delete(r));
+  page.on("requestfailed", (r) => { page.__pending.delete(r); add(`requestfailed ${r.url().slice(0, 120)} ${r.failure()?.errorText}`); });
   page.on("framenavigated", (f) => { if (f === page.mainFrame()) add(`nav ${f.url()}`); });
 }
 
@@ -52,6 +56,12 @@ test("9. teacher: sign up, profile, hours with Saturday, new offer (and the form
   await page.getByRole("button", { name: "حفظ الملف" }).click();
   await expect(page.locator("#hours")).toBeVisible({ timeout: 15_000 }).catch(async () => {
     console.log("[page] STUCK after teacher setup action; reloading to continue the diagnosis");
+    console.log(`[page] pending requests: ${[...page.__pending.values()].map((u) => u.slice(0, 120)).join(" , ")}`);
+    console.log(`[page] next router: ${await page.evaluate(() => typeof window.next?.router?.push).catch((e) => e.message)}`);
+    await page.evaluate(() => window.next?.router?.push("/teach?probe=1")).catch(() => {});
+    await page.waitForTimeout(4000);
+    console.log(`[page] after router.push: url=${page.url()} dashboard=${await page.locator("#hours").count()} pending=${[...page.__pending.values()].map((u) => u.slice(0, 120)).join(" , ")}`);
+    for (const e of page.__events.slice(-8)) console.log(`[page] event: ${e}`);
     await page.reload();
     await expect(page.locator("#hours")).toBeVisible();
   });
