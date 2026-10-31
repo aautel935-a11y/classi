@@ -3,6 +3,7 @@ import webpush from "web-push";
 import { publicClient } from "@/lib/supabase/public";
 import { SITE } from "@/lib/site";
 import { sendSms, smsConfigured } from "@/lib/sms";
+import { escapeHtml } from "@/lib/escape";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 30;
@@ -92,6 +93,3 @@ export async function POST(request: NextRequest) {
   return NextResponse.json({ ok: true, items: items.length, pushed, removed: dead.length, emailed, texted });
 }
 
-function escapeHtml(s: string) {
-  return s.replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c]!);
-}

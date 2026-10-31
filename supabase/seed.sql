@@ -88,8 +88,8 @@ join public.teachers t on t.name = v.teacher
 join public.subjects s on s.name = v.subj
 join public.levels l on l.name = v.level;
 
-insert into public.institute_teachers (institute_id, teacher_id)
-select distinct institute_id, course_teacher_id from public.offerings where type = 'course';
+insert into public.institute_teachers (institute_id, teacher_id, status, invited_at)
+select distinct institute_id, course_teacher_id, 'accepted', null::timestamptz from public.offerings where type = 'course';
 
 -- Generate dated sessions from the schedule note (weekday names + HH:MM).
 create or replace function pg_temp.weekdays(note text) returns int[] language sql as $$

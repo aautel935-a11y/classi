@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import { TOWNS } from "@/lib/types";
+import { safePath } from "@/lib/safe";
 
 const ROLES = [
   ["guardian", "ولي أمر"],
@@ -12,7 +13,8 @@ const ROLES = [
   ["institute", "معهد"],
 ] as const;
 
-function EmailForm({ next, onBack }: { next: string; onBack: () => void }) {
+function EmailForm({ next: rawNext, onBack }: { next: string; onBack: () => void }) {
+  const next = safePath(rawNext, "/");
   const router = useRouter();
   const [mode, setMode] = useState<"in" | "up" | "reset">("in");
   const [role, setRole] = useState<string>("guardian");
@@ -163,7 +165,8 @@ function otpError(m: string) {
 }
 
 /** Sign in or sign up with a phone number and a 6-digit SMS code. */
-export function LoginForm({ next, initial = "in" }: { next: string; initial?: "in" | "up" }) {
+export function LoginForm({ next: rawNext, initial = "in" }: { next: string; initial?: "in" | "up" }) {
+  const next = safePath(rawNext, "/");
   const router = useRouter();
   const [useEmail, setUseEmail] = useState(false);
   const [mode, setMode] = useState<"in" | "up">(initial);

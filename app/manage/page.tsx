@@ -11,6 +11,8 @@ import { TOWNS } from "@/lib/types";
 import { ShareProfile } from "@/components/ShareProfile";
 import { SITE } from "@/lib/site";
 import { dayLong, time } from "@/lib/format";
+import { ErrorNote } from "@/components/ErrorNote";
+import { errorText } from "@/lib/safe";
 
 export const dynamic = "force-dynamic";
 
@@ -25,7 +27,7 @@ export default async function Manage({ searchParams }: { searchParams: Promise<R
         <form action={instituteSetupAction} className="section">
           <h1>حساب المعهد</h1>
           <p className="muted">يظهر المعهد للطلاب بعد مراجعة الوثائق.</p>
-          {sp.error && <p className="err">{sp.error}</p>}
+          <ErrorNote msg={sp.error} />
           <label className="field" htmlFor="name">اسم المعهد<input id="name" name="name" required defaultValue={profile?.full_name ?? ""} /></label>
           <div className="typeform">
             <label className="field" htmlFor="town">البلد<select id="town" name="town" defaultValue={profile?.town ?? "باقة الغربية"}>{TOWNS.map((x) => <option key={x}>{x}</option>)}</select></label>
@@ -42,7 +44,7 @@ export default async function Manage({ searchParams }: { searchParams: Promise<R
     supabase.from("offerings").select("id,title,seats,schedule_note,review_status,course_teacher:teachers!offerings_course_teacher_id_fkey(name)").eq("institute_id", inst.id).eq("type", "course").order("created_at"),
     supabase.rpc("seats_overview"),
     supabase.from("rooms").select("id,name").eq("institute_id", inst.id).order("name"),
-    supabase.from("institute_teachers").select("teacher:teachers(id,name)").eq("institute_id", inst.id),
+    supabase.from("institute_teachers").select("status,teacher:teachers(id,name)").eq("institute_id", inst.id),
     supabase.from("teachers").select("id,name,town").order("name"),
     supabase.from("change_log").select("id,body,notified_count,created_at").order("created_at", { ascending: false }).limit(5),
     supabase.rpc("owner_waitlist"),
@@ -88,7 +90,7 @@ export default async function Manage({ searchParams }: { searchParams: Promise<R
 
       <PaymentsOwner rows={(pays ?? []) as PayRow[]} summary={((Array.isArray(money) ? money[0] : money) ?? null) as MoneySummary | null} back="/manage#payments" hasBit={!!bitLocal} flash={sp.ok} />
 
-      <WaitlistOwner rows={waitlist} back="/manage" flash={sp.wl} error={sp.error} />
+      <WaitlistOwner rows={waitlist} back="/manage" flash={sp.wl} error={errorText(sp.error) ?? undefined} />
 
       <ShareProfile url={`${SITE}/institute/${inst.id}`} name={inst.name} />
 
@@ -163,12 +165,14 @@ export default async function Manage({ searchParams }: { searchParams: Promise<R
       <section className="section" id="staff">
         <h2>معلمو المعهد</h2>
         {sp.saved === "staff_removed" && <p className="okmsg">أُزيل المعلم من الطاقم ومن دوراته، ولم يعد يرى طلاب المعهد.</p>}
+        {sp.saved === "staff_invited" && <p className="okmsg">أُرسلت الدعوة. ينضم المعلم إلى الطاقم بعد أن يقبلها من لوحته.</p>}
+        <p className="small muted">يُضاف المعلم إلى الطاقم ويمكن تعيينه لدورة بعد أن يقبل دعوتك.</p>
         <div className="stack" style={{ gap: 6 }}>
           {(staff ?? []).map((s: any) => s.teacher && (
             <div key={s.teacher.id} className="row between card" style={{ padding: "8px 12px" }}>
-              <span>أ. {s.teacher.name}</span>
+              <span>أ. {s.teacher.name}{s.status === "invited" && <span className="badge" style={{ marginInlineStart: 6 }}>بانتظار القبول</span>}</span>
               <details>
-                <summary className="link small" style={{ color: "var(--bad)" }}>إزالة</summary>
+                <summary className="link small" style={{ color: "var(--bad)" }}>{s.status === "invited" ? "سحب الدعوة" : "إزالة"}</summary>
                 <form action={removeStaffAction} style={{ marginTop: 6 }}>
                   <input type="hidden" name="teacher_id" value={s.teacher.id} />
                   <button className="btn sm badb">تأكيد: إزالته من المعهد ودوراته</button>
@@ -182,7 +186,7 @@ export default async function Manage({ searchParams }: { searchParams: Promise<R
           <select name="teacher_id" aria-label="اختر معلماً" style={{ flex: 1, minWidth: 0, padding: 10, borderRadius: "var(--r-sm)", border: "1px solid var(--line)", background: "var(--card)" }}>
             {(allTeachers ?? []).filter((t) => !staffIds.has(t.id)).map((t) => <option key={t.id} value={t.id}>{t.name} · {t.town}</option>)}
           </select>
-          <button className="btn sm">إضافة</button>
+          <button className="btn sm">دعوة</button>
         </form>
       </section>
     </div>

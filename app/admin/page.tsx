@@ -7,6 +7,7 @@ import { requireUser } from "@/lib/session";
 import { dayLong, time } from "@/lib/format";
 import { runHealthChecks } from "@/lib/health";
 import { OpsTab } from "./OpsTab";
+import { ErrorNote } from "@/components/ErrorNote";
 
 export const dynamic = "force-dynamic";
 
@@ -38,7 +39,7 @@ export default async function Admin({ searchParams }: { searchParams: Promise<Re
     <div className="wrap">
       <div className="section">
         <h1>لوحة الإدارة</h1>
-        {sp.error && <p className="err">{sp.error}</p>}
+        <ErrorNote msg={sp.error} />
         {sp.done && <p className="okmsg">{sp.done === "cancel" ? "أُلغي الحجز ووصل الطرفين إشعار بالسبب." : sp.done === "payment" ? "حُسمت حالة الدفع ووصل الطرفين إشعار." : sp.done === "message" ? "أُرسلت الرسالة." : "تم."}</p>}
         <nav className="tabs" aria-label="أقسام الإدارة">
           {TABS.map(([k, l]) => (

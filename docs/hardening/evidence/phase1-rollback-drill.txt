@@ -1,0 +1,7 @@
+# Local rollback drill, 31/10/2026 (fresh database with all migrations incl. 20261031000000)
+before rollback: authenticated can run notify_admins = false
+GRANT   (grant execute on all functions in schema public to anon, authenticated)
+after grant-all: = true
+Saturday 03:00 refused: هذا الموعد خارج ساعات المعلم المتاحة
+DROP TRIGGER   (drop trigger bookings_zzz_rules on public.bookings)
+after drop trigger: Saturday 03:00 accepted

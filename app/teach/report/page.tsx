@@ -5,6 +5,8 @@ import { writeReportAction, writeSessionReportsAction } from "@/app/actions";
 import { requireUser } from "@/lib/session";
 import { dayLong, time } from "@/lib/format";
 import { LEVELS } from "@/lib/types";
+import { ErrorNote } from "@/components/ErrorNote";
+import { safePath } from "@/lib/safe";
 
 export const dynamic = "force-dynamic";
 
@@ -33,7 +35,7 @@ export default async function ReportPage({ searchParams }: { searchParams: Promi
   const session = uuid(sp.session);
   if (!booking && !session) notFound();
   const { supabase } = await requireUser(`/teach/report?${booking ? `booking=${booking}` : `session=${session}`}`);
-  const back = sp.back && sp.back.startsWith("/") ? sp.back : "/teach";
+  const back = safePath(sp.back, "/teach");
 
   if (booking) {
     const [{ data: b }, { data: r }] = await Promise.all([
@@ -51,7 +53,7 @@ export default async function ReportPage({ searchParams }: { searchParams: Promi
           <Link className="back" href={back}><Icon name="back" />رجوع</Link>
           <h1>تقرير الحصة</h1>
           <p className="muted">{x.offering?.title} · <b>{who}</b>{at ? ` · ${dayLong(at)} ${time(at)}` : ""}</p>
-          {sp.error && <p className="err">{sp.error}</p>}
+          <ErrorNote msg={sp.error} />
           {r && <p className="note"><Icon name="check" />كتبت تقريراً لهذه الحصة. التعديل يرسل إشعاراً جديداً لولي الأمر.</p>}
           <input type="hidden" name="booking_id" value={booking} />
           <input type="hidden" name="back" value={back} />
@@ -82,7 +84,7 @@ export default async function ReportPage({ searchParams }: { searchParams: Promi
         <Link className="back" href={back}><Icon name="back" />رجوع</Link>
         <h1>تقرير اللقاء</h1>
         <p className="muted">{x.offering?.title} · اللقاء {x.seq} · {dayLong(x.starts_at)} {time(x.starts_at)}</p>
-        {sp.error && <p className="err">{sp.error}</p>}
+        <ErrorNote msg={sp.error} />
         {list.length === 0 && <div className="empty">لا طلاب مؤكدون في هذا اللقاء.</div>}
         <input type="hidden" name="session_id" value={session!} />
         <input type="hidden" name="back" value={back} />

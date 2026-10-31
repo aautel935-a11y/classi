@@ -1,0 +1,104 @@
+===== SEC-01 internal functions are not callable by app users
+FAIL: notify_admins (phishing to admins) -> it was allowed
+FAIL: report_target (child name for any booking) -> it was allowed
+FAIL: review_prompts -> it was allowed
+FAIL: subscription_reminders -> it was allowed
+FAIL: recount_rating -> it was allowed
+FAIL: waitlist_notify_next -> it was allowed
+FAIL: package_apply_existing -> it was allowed
+FAIL: waitlist_position -> it was allowed
+PASS: sms_allow (refused: function sms_allow(uuid) does not exist)
+PASS: the app's own calls still work (my_header_counts)
+FAIL: anon: owner_bookings -> it was allowed
+PASS: anon: public setting
+PASS: anon: seats_overview
+FAIL: trigger functions callable by authenticated -> got 29, expected 0
+FAIL: functions callable by anon (exact list) -> got auth_phone_sync,block_inactive_booking,bookings_installments,bookings_pay_status,bookings_return_package,bookings_seat_guard,bookings_set_price,bookings_use_package,claim_otp,claim_push,clean_phone,conversation_owner,default_availability,drop_push_subscriptions,fmt_time,handle_new_user,health_ping,hhmm,installment_amount,is_active_user,is_admin,is_conversation_member,is_conversation_reported,is_offering_owner,is_offering_staff,log_sms,notifications_mark_push,notifications_skip_nobody,notify_link_change,offering_owner_user,offering_owner_verified,offerings_guard_edit,offerings_minutes_follow,offerings_review,on_content_report,on_message,on_report,owner_bookings,owner_has_access,paid_until,profile_created_notify,profile_review,profiles_phone_guard,profiles_walkin_notice,protect_admin_fields,protect_offering_moderation,protect_profile_roles,reviews_recount,seats_overview,seats_taken,series_start,series_window_weeks,setting,sms_kinds,teacher_buffer,teacher_busy,test_approve_all,waitlist_on_booking,waitlist_on_seats, expected claim_otp,claim_push,drop_push_subscriptions,health_ping,is_active_user,is_admin,is_conversation_member,is_conversation_reported,is_offering_owner,is_offering_staff,log_sms,my_teacher_id,offering_owner_verified,owner_has_access,seats_overview,setting,teacher_buffer,teacher_busy
+===== SEC-02 institute staff needs consent; no SMS from staff changes
+PASS: attacker creates an (unverified) institute
+FAIL: unverified institute adds any teacher to its staff -> it was allowed
+FAIL: attacker removes a teacher it never had -> it was allowed
+PASS: owner cannot add staff as already accepted (refused: column "status" of relation "institute_teachers" does not exist)
+PASS: verified institute invites Samer
+FAIL: SEC-04: invited (not accepted) teacher as course teacher -> it was allowed
+PASS: owner accepts the invitation on the teacher's behalf (refused: column "status" of relation "institute_teachers" does not exist)
+FAIL: Samer was told in the app (not SMS) -> got schedule_changed:true, expected staff_invite:false
+FAIL: Samer sees the invitation -> function my_staff_invites() does not exist
+FAIL: Samer accepts -> function answer_staff_invite(uuid, boolean) does not exist
+PASS: accepted teacher can now be the course teacher
+PASS: owner removes Samer
+FAIL: removal is not an SMS kind -> got true, expected false
+PASS: invite #1 today
+FAIL: invites above the daily cap -> it was allowed
+===== SEC-04 nobody can block a teacher's calendar with a fake course
+FAIL: attacker names Samer as its course teacher -> it was allowed
+FAIL: a 600-minute meeting -> it was allowed
+FAIL: a negative-length meeting -> it was allowed
+FAIL: SEC-33: another institute's room -> it was allowed
+===== SEC-03 / SEC-10 phone numbers stay private; walk-ins are linked by the phone's owner
+PASS: walk-in with a registered parent's phone
+PASS: walk-in with an unknown phone
+FAIL: booking is not linked automatically -> got 1, expected 0
+FAIL: can_link says the same for both numbers (no lookup) -> got false,false, expected true,true
+FAIL: institute asks to link (registered number) -> الحجز مربوط بحساب سابقاً
+FAIL: institute asks to link (unknown number): same answer -> لا يوجد حساب في Classi بهذا الرقم بعد
+FAIL: parent got an invitation (not a booking) -> got booking_answer, expected link_request
+PASS: someone else cannot accept it (refused: function accept_booking_link(uuid) does not exist)
+FAIL: parent sees the pending link -> function my_link_requests() does not exist
+FAIL: parent accepts -> function my_link_requests() does not exist
+PASS: now it is the parent's booking = 1
+FAIL: phone-change code is queued for SMS but never emailed -> got 1:1, expected 1:0
+===== SEC-08 sign-in codes: Israeli mobiles only, rate-limited
+FAIL: foreign number refused -> got null, expected 400
+FAIL: 6th code within an hour refused -> got null, expected 429
+===== SEC-02/07 SMS budget per person per day
+FAIL: 10 SMS-type notifications -> at most 6 SMS -> got 10, expected 6
+===== SEC-06 notifications can only be marked read
+FAIL: rewrite own notification (kind/body/push) -> it was allowed
+PASS: mark own notifications read
+===== SEC-17 / 27 / 22 booking rules
+FAIL: private lesson outside the teacher's hours (Saturday 03:00) -> it was allowed
+FAIL: unknown payment method -> it was allowed
+PASS: "from the package" without a package (refused: الموعد لم يعد متاحاً، اختر موعداً آخر)
+FAIL: normal booking inside hours -> الموعد لم يعد متاحاً، اختر موعداً آخر
+PASS: 2nd open booking
+FAIL: 3rd open booking above the cap -> it was allowed
+PASS: group seat
+FAIL: same student, same meeting, again -> it was allowed
+===== SEC-07 a booking withdrawn right away does not text the teacher
+PASS: cancel the group seat at once
+FAIL: teacher notification kind -> got booking_cancelled:true, expected booking_withdrawn:false
+===== SEC-14 / SEC-15 no cancelling or reviewing around a lesson that has not been taught
+FAIL: cancel a meeting that already happened -> it was allowed
+PASS: review before the lesson took place (refused: يمكنك التقييم بعد الحصة الأولى)
+FAIL: review after the meeting -> يمكنك تقييم حصة حجزتها فقط
+FAIL: review of a cancelled booking is hidden -> got null, expected true
+===== SEC-16 / SEC-24 content and payment numbers
+PASS: book the recorded course (unpaid)
+FAIL: content link before payment -> got 1, expected 0
+PASS: cancel it
+FAIL: Bit number after cancelling -> got 1, expected 0
+===== SEC-13 a suspended teacher cannot change anything
+FAIL: suspended: hide own offer -> it was allowed
+FAIL: suspended: change hours -> it was allowed
+===== SEC-05 deleting never erases bookings, payments or reviews
+PASS: Samer tries to delete his booked private offer
+FAIL: offer and its bookings are still there -> got 0/0, expected 1/2
+PASS: Samer tries to delete a booked meeting
+FAIL: the meeting is still there -> got 1, expected 2
+FAIL: even the database owner cannot cascade-delete booked offers -> it was allowed
+===== SEC-18 deleting an account keeps the other side's history
+PASS: parent deletes the account
+FAIL: past lesson stays with the teacher, anonymised -> got null, expected confirmed:حساب محذوف:true
+PASS: institute owner who rescheduled can still delete the account
+FAIL: …and delete it -> update or delete on table "profiles" violates foreign key constraint "change_log_changed_by_fkey" on table "change_log"
+===== SEC-19 / SEC-20 anonymous visitors see no internal columns
+FAIL: anon reads review booking/user/child ids -> it was allowed
+PASS: anon reads public review fields
+FAIL: anon reads unapproved edits and moderation notes -> it was allowed
+PASS: anon reads the public teacher card
+PASS: anon reads the catalogue
+===== SEC-28 photo links must be Classi storage
+FAIL: tracking-pixel avatar -> it was allowed
+===== SEC-31 attendance only for bookings of that offer
+FAIL: attendance on a foreign booking -> it was allowed

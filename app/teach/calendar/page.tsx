@@ -6,6 +6,7 @@ import {
 import { requireUser } from "@/lib/session";
 import { ConfirmPay, PayBadge } from "@/components/Pay";
 import { dayNum, dayShort, dayLong, fromLocal, isoDay, monthName, time } from "@/lib/format";
+import { ErrorNote } from "@/components/ErrorNote";
 
 export const dynamic = "force-dynamic";
 
@@ -90,7 +91,7 @@ export default async function TeacherCalendar({ searchParams }: { searchParams: 
         <h1>جدولي وإدارة الساعات</h1>
         <p className="small muted">أغلق ساعات، أضف طلابك لساعة فارغة، أو غيّر موعد أي حصة. كل تغيير يصل للطالب فوراً.</p>
         {sp.ok && <p className="okmsg">{sp.ok.startsWith("blocked:") ? `أُغلقت الساعة لـ${sp.ok.split(":")[1]} أسابيع.` : OK[sp.ok]}{sp.ok === "added" && sp.n && Number(sp.n) > 1 ? ` (${sp.n} حصص)` : ""}{sp.skipped ? ` لم تُحجز هذه الأسابيع لأنها مشغولة: ${sp.skipped}` : ""}</p>}
-        {sp.error && <p className="err">{sp.error}</p>}
+        <ErrorNote msg={sp.error} />
 
         <details className="card" id="vacation">
           <summary className="row between" style={{ cursor: "pointer" }}><b>عطلة أو إغلاق أيام</b><span className="link small">إغلاق يوم أو أكثر دفعة واحدة</span></summary>

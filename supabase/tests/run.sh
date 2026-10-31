@@ -1,36 +1,17 @@
 #!/bin/sh
-# Fresh database, apply schema + seed, run the flow test.
+# Fresh database, apply schema + seed, run one test file (default: flow_test).
+#   sh supabase/tests/run.sh roles_test            -> database classi_test
+#   DB=ct_roles sh supabase/tests/run.sh roles_test -> its own database (lets suites run side by side)
+# Requires a local Postgres on /var/tmp/pgc:54329 (see README). Never point this at a real Supabase project.
 set -e
-P="psql -h /var/tmp/pgc -p 54329 -U postgres -q"
-$P -c "drop database if exists classi_test" -c "create database classi_test"
-D="$P -d classi_test -v ON_ERROR_STOP=1"
-$P -d classi_test -c "drop role if exists anon" -c "drop role if exists authenticated" -c "drop role if exists service_role" 2>/dev/null || true
-$D -f "$(dirname "$0")/supabase_stub.sql"
-$D -f "$(dirname "$0")/../migrations/20261024000000_init.sql"
-$D -f "$(dirname "$0")/../migrations/20261024010000_photos_admin.sql"
-$D -f "$(dirname "$0")/../migrations/20261024020000_role_test_fixes.sql"
-$D -f "$(dirname "$0")/../migrations/20261024030000_edit_and_messages.sql"
-$D -f "$(dirname "$0")/../migrations/20261024040000_moderation_health.sql"
-$D -f "$(dirname "$0")/../migrations/20261024050000_recurring.sql"
-$D -f "$(dirname "$0")/../migrations/20261024060000_waitlist.sql"
-$D -f "$(dirname "$0")/../migrations/20261025000000_reminders.sql"
-$D -f "$(dirname "$0")/../migrations/20261025010000_teacher_calendar.sql"
-$D -f "$(dirname "$0")/../migrations/20261025020000_trial_packages.sql"
-$D -f "$(dirname "$0")/../migrations/20261025030000_lesson_reports.sql"
-$D -f "$(dirname "$0")/../migrations/20261025040000_payments.sql"
-$D -f "$(dirname "$0")/../migrations/20261026000000_sms.sql"
-$D -f "$(dirname "$0")/../migrations/20261026010000_content_review.sql"
-$D -f "$(dirname "$0")/../migrations/20261026020000_launch.sql"
-$D -f "$(dirname "$0")/../migrations/20261026030000_operations.sql"
-$D -f "$(dirname "$0")/../migrations/20261026040000_hardening.sql"
-$D -f "$(dirname "$0")/../migrations/20261026050000_phone_login.sql"
-$D -f "$(dirname "$0")/../migrations/20261026060000_contact_share.sql"
-$D -f "$(dirname "$0")/../migrations/20261026070000_otp_email_fallback.sql"
-$D -f "$(dirname "$0")/../migrations/20261026080000_admin_ops.sql"
-$D -f "$(dirname "$0")/../migrations/20261026090000_today_reminders.sql"
-$D -f "$(dirname "$0")/../migrations/20261027000000_security_lint.sql"
-$D -f "$(dirname "$0")/../migrations/20261027010000_one_approval.sql"
-$D -f "$(dirname "$0")/../migrations/20261027020000_support.sql"
-$D -f "$(dirname "$0")/../seed.sql"
-$D -f "$(dirname "$0")/grants.sql"
-$P -d classi_test -f "$(dirname "$0")/${1:-flow_test}.sql"
+T="$(cd "$(dirname "$0")" && pwd)"
+DB=${DB:-classi_test}
+P="psql -h ${PGSOCK:-/var/tmp/pgc} -p ${PGPORT:-54329} -U postgres -q"
+$P -c "drop database if exists $DB" -c "create database $DB" >/dev/null
+D="env PGOPTIONS=-cclient_min_messages=warning $P -d $DB -v ON_ERROR_STOP=1"
+$D -f "$T/supabase_stub.sql" >/dev/null
+# Every migration, in file-name order (the same order Supabase applies them).
+for f in "$T"/../migrations/*.sql; do $D -f "$f" >/dev/null; done
+$D -f "$T/../seed.sql" >/dev/null
+$D -f "$T/grants.sql" >/dev/null
+$P -d $DB -f "$T/${1:-flow_test}.sql"

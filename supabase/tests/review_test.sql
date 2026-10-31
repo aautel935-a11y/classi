@@ -33,7 +33,7 @@ reset role;
 
 \echo '===== 3. Samer changes bio and photo on his verified profile -> held'
 set role authenticated; set request.jwt.claim.sub='40000000-0000-0000-0000-000000000002';
-update teachers set bio = 'نبذة جديدة', photo_url = 'https://x/p.jpg' where user_id = auth.uid();
+update teachers set bio = 'نبذة جديدة', photo_url = 'https://demo.supabase.co/storage/v1/object/public/avatars/x/p.jpg' where user_id = auth.uid();
 select 'profile live' t, left(bio, 20) bio, photo_url, pending_changes from teachers where user_id = auth.uid();
 reset role;
 

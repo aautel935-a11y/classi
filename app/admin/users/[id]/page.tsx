@@ -5,6 +5,7 @@ import { adminHideAction, adminMessageAction, adminSetStatusAction } from "@/app
 import { requireUser } from "@/lib/session";
 import { dayLong, time } from "@/lib/format";
 import { TYPES, type OfferingType } from "@/lib/types";
+import { ErrorNote } from "@/components/ErrorNote";
 
 export const dynamic = "force-dynamic";
 const STATUS: Record<string, string> = { active: "فعّال", suspended: "موقوف مؤقتاً", banned: "محظور" };
@@ -49,7 +50,7 @@ export default async function AdminUser({ params, searchParams }: { params: Prom
         <Link className="back" href="/admin?tab=users"><Icon name="back" />الحسابات</Link>
         <h1>{u.full_name || "بدون اسم"}</h1>
         <span className="small muted" dir="ltr" style={{ textAlign: "right" }}>{u.email}</span>
-        {sp.error && <p className="err">{sp.error}</p>}
+        <ErrorNote msg={sp.error} />
         {sp.done && <p className="okmsg">تم.</p>}
         <div className="summary">
           <div><span>الحالة</span><span className={u.status === "active" ? "" : "err-text"}>{STATUS[u.status]}{u.suspended_until && u.status === "suspended" ? ` حتى ${dayLong(u.suspended_until)}` : ""}</span></div>

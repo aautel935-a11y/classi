@@ -124,7 +124,7 @@ set role authenticated; set request.jwt.claim.sub = '91000000-0000-0000-0000-000
 select cancel_booking((select b.id from bookings b join offerings o on o.id = b.offering_id where o.title = 'رياضيات 5 وحدات، حصة فردية' and b.booked_by = auth.uid()));
 reset role;
 select 'after cancel' t, status from bookings b join offerings o on o.id = b.offering_id where o.title = 'رياضيات 5 وحدات، حصة فردية';
-select 'teacher told' t, n.body from notifications n where n.user_id = (select tch from d) and n.kind = 'booking_cancelled';
+select 'teacher told' t, n.body from notifications n where n.user_id = (select tch from d) and n.kind in ('booking_cancelled','booking_withdrawn');
 select 'busy after cancel (expect none)' t, count(*) from teacher_busy((select id from teachers where name = 'أحمد ياسين'), ((select tue from d) + time '00:00') at time zone 'Asia/Jerusalem', ((select tue from d) + time '23:59') at time zone 'Asia/Jerusalem');
 set role authenticated; set request.jwt.claim.sub = '91000000-0000-0000-0000-000000000004';
 select 'book the freed 16:00 again' t, create_booking((select id from offerings where title = 'رياضيات 5 وحدات، حصة فردية'), (select id from children where name = 'كريم'),

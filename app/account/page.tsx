@@ -5,6 +5,7 @@ import { TOWNS, type Role } from "@/lib/types";
 import { PhotoUpload } from "@/components/PhotoUpload";
 import { PhoneLink } from "@/components/PhoneLink";
 import Link from "next/link";
+import { ErrorNote } from "@/components/ErrorNote";
 
 export const dynamic = "force-dynamic";
 
@@ -65,7 +66,7 @@ export default async function Account({ searchParams }: { searchParams: Promise<
         )}
 
         <h2>بياناتي</h2>
-        {sp.error && <p className="err">{sp.error}</p>}
+        <ErrorNote msg={sp.error} />
         <PhoneLink loginPhone={user.phone ? `+${String(user.phone).replace(/^\+/, "")}` : null} profilePhone={me?.phone ?? null} />
         <form action={updateProfileAction} className="card formstack">
           <label className="field" htmlFor="full_name">الاسم<input id="full_name" name="full_name" defaultValue={profile?.full_name ?? ""} /></label>

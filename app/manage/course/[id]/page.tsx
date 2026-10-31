@@ -9,6 +9,7 @@ import { EditSession } from "./EditSession";
 import { OfferExtras } from "@/components/OfferExtras";
 import { ConfirmPay, PayBadge } from "@/components/Pay";
 import { WaitlistOwner, type WRow } from "@/components/WaitlistOwner";
+import { ErrorNote } from "@/components/ErrorNote";
 
 export const dynamic = "force-dynamic";
 
@@ -37,7 +38,7 @@ export default async function ManageOffer({ params, searchParams }: { params: Pr
     supabase.from("offering_links").select("url,note").eq("offering_id", id).maybeSingle(),
     supabase.from("subjects").select("id,name").order("id"),
     supabase.from("levels").select("id,name").order("sort"),
-    o.institute_id ? supabase.from("institute_teachers").select("teacher:teachers(id,name)").eq("institute_id", o.institute_id) : Promise.resolve({ data: [] as any[] }),
+    o.institute_id ? supabase.from("institute_teachers").select("teacher:teachers(id,name)").eq("institute_id", o.institute_id).eq("status", "accepted") : Promise.resolve({ data: [] as any[] }),
     supabase.rpc("owner_waitlist", { p_offering: id }),
     supabase.rpc("owner_packages", { p_offering: id }),
   ]);
@@ -63,14 +64,14 @@ export default async function ManageOffer({ params, searchParams }: { params: Pr
         {sp.saved === "link" && <p className="okmsg">حُفظ الرابط. يراه الطلاب المؤكَّدون في جدولهم.</p>}
         {sp.ok === "payment" && <p className="okmsg">حُدّثت حالة الدفع.</p>}
         {sp.ok === "cancelled" && <p className="okmsg">أُلغي اللقاء ووصل إشعار للمعلم ولكل المشتركين.</p>}
-        {sp.ok === "linked" && <p className="okmsg">رُبط التسجيل بحساب ولي الأمر. يرى الآن المواعيد والتقارير والدفعات في جدوله.</p>}
-        {sp.ok === "enrolled" && <p className="okmsg">سُجّل الطالب. {sp.linked === "1" ? "رقمه مسجّل في Classi فوصله إشعار ويرى الدورة في جدوله." : "يظهر في قائمة الطلاب ويُحسب من المقاعد."}</p>}
+        {sp.ok === "link_requested" && <p className="okmsg">إن كان لصاحب الرقم حساب في Classi، وصلته دعوة لربط التسجيل بحسابه. يصلك إشعار عندما يقبل.</p>}
+        {sp.ok === "enrolled" && <p className="okmsg">سُجّل الطالب. يظهر في قائمة الطلاب ويُحسب من المقاعد. يستطيع ولي الأمر ربط التسجيل بحسابه برقم الهاتف نفسه.</p>}
         {sp.saved === "package" && <p className="okmsg">أُلغيت الرزمة ووصل ولي الأمر إشعار. الحصص القادمة بقيت محجوزة بالسعر العادي.</p>}
         {sp.saved === "offer" && <p className="okmsg">حُفظت التعديلات. السعر والمقاعد وطريقة الحجز تسري فوراً؛ تعديل العنوان والمادة والعروض الاختيارية يظهر بعد موافقة الإدارة.</p>}
         {(o as any).review_status === "pending" && <p className="note"><Icon name="clock" />العرض بانتظار موافقة الإدارة ولا يظهر للطلاب بعد.</p>}
         {(o as any).review_status === "rejected" && <p className="err">لم تتم الموافقة على العرض{(o as any).review_note ? `: ${(o as any).review_note}` : ""}. عدّل العرض ليُراجع من جديد.</p>}
         {(o as any).review_status === "approved" && (o as any).pending_changes && <p className="note"><Icon name="clock" />لديك تعديلات بانتظار موافقة الإدارة. يرى الطلاب النسخة الحالية حتى الموافقة.</p>}
-        {sp.error && <p className="err">{sp.error}</p>}
+        <ErrorNote msg={sp.error} />
       </div>
 
       {owner && (
@@ -287,7 +288,7 @@ export default async function ManageOffer({ params, searchParams }: { params: Pr
                 <form action={linkWalkInAction}>
                   <input type="hidden" name="booking_id" value={b.booking_id} />
                   <input type="hidden" name="back" value={path} />
-                  <button className="btn sm okb" title="هذا الرقم انضم إلى Classi">اربط بحساب ولي الأمر</button>
+                  <button className="btn sm okb" title="تصل دعوة لصاحب الرقم إن كان له حساب">ادعُ ولي الأمر للربط</button>
                 </form>
               )}
               {owner && !b.offline && (

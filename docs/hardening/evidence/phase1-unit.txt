@@ -1,0 +1,204 @@
+TAP version 13
+# Subtest: fromLocal: Israel winter time is UTC+2
+ok 1 - fromLocal: Israel winter time is UTC+2
+  ---
+  duration_ms: 14.965885
+  type: 'test'
+  ...
+# Subtest: fromLocal: Israel summer time is UTC+3
+ok 2 - fromLocal: Israel summer time is UTC+3
+  ---
+  duration_ms: 0.623092
+  type: 'test'
+  ...
+# Subtest: fromLocal: day after DST ends (2026-10-25)
+ok 3 - fromLocal: day after DST ends (2026-10-25)
+  ---
+  duration_ms: 0.386983
+  type: 'test'
+  ...
+# Subtest: fromLocal: day after DST starts (2027-03-26)
+ok 4 - fromLocal: day after DST starts (2027-03-26)
+  ---
+  duration_ms: 0.342152
+  type: 'test'
+  ...
+# Subtest: time/isoDay/weekday round-trip in Israel time
+ok 5 - time/isoDay/weekday round-trip in Israel time
+  ---
+  duration_ms: 1.971935
+  type: 'test'
+  ...
+# Subtest: datesOn: next N meetings on chosen weekdays
+ok 6 - datesOn: next N meetings on chosen weekdays
+  ---
+  duration_ms: 0.816967
+  type: 'test'
+  ...
+# Subtest: nextDays starts tomorrow (documented behaviour)
+ok 7 - nextDays starts tomorrow (documented behaviour)
+  ---
+  duration_ms: 0.506352
+  type: 'test'
+  ...
+# Subtest: nextDays skips Saturday
+ok 8 - nextDays skips Saturday
+  ---
+  duration_ms: 0.363439
+  type: 'test'
+  ...
+# Subtest: BUG-01: Saturday availability is never offered to students
+not ok 9 - BUG-01: Saturday availability is never offered to students # TODO remove the Saturday skip or hide Saturday in /teach
+  ---
+  duration_ms: 7.423833
+  type: 'test'
+  location: '/home/claude/classi/tests/unit/lib.test.mjs:37:1'
+  failureType: 'testCodeFailure'
+  error: |-
+    The expression evaluated to a falsy value:
+    
+      assert.ok(privateSlots([sat], [], 60, days).length > 0)
+    
+  code: 'ERR_ASSERTION'
+  name: 'AssertionError'
+  expected: true
+  actual: false
+  operator: '=='
+  stack: |-
+    TestContext.<anonymous> (file:///home/claude/classi/tests/unit/lib.test.mjs:40:10)
+    Test.runInAsyncScope (node:async_hooks:214:14)
+    Test.run (node:internal/test_runner/test:1047:25)
+    Test.processPendingSubtests (node:internal/test_runner/test:744:18)
+    Test.postRun (node:internal/test_runner/test:1173:19)
+    Test.run (node:internal/test_runner/test:1101:12)
+    async Test.processPendingSubtests (node:internal/test_runner/test:744:7)
+  ...
+# Subtest: slots: 90-minute lessons do not overlap
+ok 10 - slots: 90-minute lessons do not overlap
+  ---
+  duration_ms: 1.383183
+  type: 'test'
+  ...
+# Subtest: slots: 45 + 15 break = every hour
+ok 11 - slots: 45 + 15 break = every hour
+  ---
+  duration_ms: 1.41522
+  type: 'test'
+  ...
+# Subtest: slots: next free time starts when a longer booking ends
+ok 12 - slots: next free time starts when a longer booking ends
+  ---
+  duration_ms: 1.345507
+  type: 'test'
+  ...
+# Subtest: slots: break is respected around a booking
+ok 13 - slots: break is respected around a booking
+  ---
+  duration_ms: 1.736743
+  type: 'test'
+  ...
+# Subtest: slots: whole-day vacation block closes the day
+ok 14 - slots: whole-day vacation block closes the day
+  ---
+  duration_ms: 0.817502
+  type: 'test'
+  ...
+# Subtest: slots: two ranges in one day
+ok 15 - slots: two ranges in one day
+  ---
+  duration_ms: 2.474765
+  type: 'test'
+  ...
+# Subtest: slots: no availability on other weekdays
+ok 16 - slots: no availability on other weekdays
+  ---
+  duration_ms: 0.411203
+  type: 'test'
+  ...
+# Subtest: slots: a lesson never runs past the end of the range
+ok 17 - slots: a lesson never runs past the end of the range
+  ---
+  duration_ms: 0.580766
+  type: 'test'
+  ...
+# Subtest: cleanMobile accepts Israeli mobile formats
+ok 18 - cleanMobile accepts Israeli mobile formats
+  ---
+  duration_ms: 0.290612
+  type: 'test'
+  ...
+# Subtest: cleanMobile rejects landlines and junk
+ok 19 - cleanMobile rejects landlines and junk
+  ---
+  duration_ms: 0.088307
+  type: 'test'
+  ...
+# Subtest: waLink builds wa.me link with encoded Arabic text
+ok 20 - waLink builds wa.me link with encoded Arabic text
+  ---
+  duration_ms: 0.245235
+  type: 'test'
+  ...
+# Subtest: googleCalLink uses UTC start/end and lesson length
+ok 21 - googleCalLink uses UTC start/end and lesson length
+  ---
+  duration_ms: 0.716181
+  type: 'test'
+  ...
+# Subtest: icsFile is valid, escapes commas and has a 1-hour alarm
+ok 22 - icsFile is valid, escapes commas and has a 1-hour alarm
+  ---
+  duration_ms: 0.961381
+  type: 'test'
+  ...
+# Subtest: SEC-09 safePath refuses every off-site form
+ok 23 - SEC-09 safePath refuses every off-site form
+  ---
+  duration_ms: 1.144054
+  type: 'test'
+  ...
+# Subtest: SEC-09 safePath keeps normal paths with query and hash
+ok 24 - SEC-09 safePath keeps normal paths with query and hash
+  ---
+  duration_ms: 1.294432
+  type: 'test'
+  ...
+# Subtest: BUG-20 withQuery picks ? or &
+ok 25 - BUG-20 withQuery picks ? or &
+  ---
+  duration_ms: 0.203808
+  type: 'test'
+  ...
+# Subtest: SEC-26 errorText blocks phishing lures but keeps real messages
+ok 26 - SEC-26 errorText blocks phishing lures but keeps real messages
+  ---
+  duration_ms: 0.82207
+  type: 'test'
+  ...
+# Subtest: SEC-29 ICS: a carriage return in a title cannot inject a property
+ok 27 - SEC-29 ICS: a carriage return in a title cannot inject a property
+  ---
+  duration_ms: 1.202156
+  type: 'test'
+  ...
+# Subtest: SEC-29 ICS: long Arabic lines are folded at 75 octets without splitting characters
+ok 28 - SEC-29 ICS: long Arabic lines are folded at 75 octets without splitting characters
+  ---
+  duration_ms: 0.255748
+  type: 'test'
+  ...
+# Subtest: I-2 escapeHtml
+ok 29 - I-2 escapeHtml
+  ---
+  duration_ms: 0.314315
+  type: 'test'
+  ...
+1..29
+# tests 29
+# suites 0
+# pass 28
+# fail 0
+# cancelled 0
+# skipped 0
+# todo 1
+# duration_ms 171.834071

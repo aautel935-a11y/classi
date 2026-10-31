@@ -1,0 +1,22 @@
+# suite            expected "ERROR" lines (deliberate refusals the suite checks)
+flow_test           7
+roles_test          4
+messages_test       6
+moderation_test     5
+recurring_test      4
+waitlist_test       3
+reminders_test      3
+calendar_test       6
+trial_packages_test 3
+reports_test        3
+payments_test       4
+sms_test            1
+review_test         2
+launch_test         4
+ops_test            6
+hardening_test      2
+phone_login_test    1
+admin_ops_test      4
+today_test          0
+e2e_test            2
+security_test       0

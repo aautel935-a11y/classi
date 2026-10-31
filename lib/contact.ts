@@ -25,7 +25,8 @@ export function googleCalLink(title: string, startIso: string, minutes: number, 
 
 /** One or more events as an .ics file (Apple Calendar, Outlook, any phone). */
 export function icsFile(events: { uid: string; title: string; start: string; minutes: number; details: string; location?: string }[]) {
-  const esc = (t: string) => t.replace(/\\/g, "\\\\").replace(/\n/g, "\\n").replace(/[,;]/g, (m) => `\\${m}`);
+  // RFC 5545 text: escape \ , ; and every kind of line break (a bare \r would start a new property).
+  const esc = (t: string) => t.replace(/\\/g, "\\\\").replace(/\r\n|\r|\n/g, "\\n").replace(/[,;]/g, (m) => `\\${m}`);
   const lines = ["BEGIN:VCALENDAR", "VERSION:2.0", "PRODID:-//Classi//AR", "CALSCALE:GREGORIAN", "METHOD:PUBLISH"];
   for (const ev of events) {
     const s = new Date(ev.start);
@@ -38,5 +39,20 @@ export function icsFile(events: { uid: string; title: string; start: string; min
     );
   }
   lines.push("END:VCALENDAR");
-  return lines.join("\r\n");
+  return lines.map(foldIcsLine).join("\r\n");
+}
+
+/** RFC 5545 §3.1: lines longer than 75 octets continue on the next line after CRLF + space (never splitting a character). */
+export function foldIcsLine(line: string): string {
+  const enc = new TextEncoder();
+  if (enc.encode(line).length <= 75) return line;
+  const parts: string[] = [];
+  let cur = "", size = 0, limit = 75;
+  for (const ch of line) {
+    const n = enc.encode(ch).length;
+    if (size + n > limit) { parts.push(cur); cur = ""; size = 0; limit = 74; }
+    cur += ch; size += n;
+  }
+  parts.push(cur);
+  return parts.join("\r\n ");
 }

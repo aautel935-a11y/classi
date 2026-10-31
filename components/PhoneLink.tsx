@@ -90,7 +90,7 @@ export function PhoneLink({ loginPhone, profilePhone }: { loginPhone: string | n
       )}
       {phone && (
         <div className="row between small" style={{ flexWrap: "wrap", gap: 8 }}>
-          <span className="muted">لم تصل الرسالة؟ نرسل الرمز أيضاً إلى بريدك الإلكتروني.</span>
+          <span className="muted">لم تصل الرسالة؟ تأكد أن الرقم صحيح وأنه رقم جوال إسرائيلي، ثم اطلب رمزاً جديداً بعد دقيقة.</span>
           {wait > 0 ? <span className="muted num">إعادة الإرسال بعد {wait} ث</span> : <button type="button" className="link" onClick={resend} disabled={busy}>أرسل الرمز مرة أخرى</button>}
           <button type="button" className="link" onClick={() => { setPhone(null); setMsg(null); }}>تغيير الرقم</button>
         </div>

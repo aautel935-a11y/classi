@@ -1,5 +1,6 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { createClient } from "@/lib/supabase/server";
+import { safePath } from "@/lib/safe";
 
 // Email confirmation link lands here: open the session, apply the chosen role.
 export async function GET(request: NextRequest) {
@@ -7,7 +8,7 @@ export async function GET(request: NextRequest) {
   const code = url.searchParams.get("code");
   const next = url.searchParams.get("next") ?? "/";
   const role = url.searchParams.get("role");
-  const safeNext = next.startsWith("/") ? next : "/";
+  const safeNext = safePath(next, "/");
   const supabase = await createClient();
   if (code) {
     const { data, error } = await supabase.auth.exchangeCodeForSession(code);

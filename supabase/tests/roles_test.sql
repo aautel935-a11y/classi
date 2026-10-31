@@ -50,7 +50,14 @@ set role authenticated; set request.jwt.claim.sub='10000000-0000-0000-0000-00000
 update profiles set roles='{institute}', active_role='institute' where id=auth.uid();
 insert into institutes (owner_id,name,town,bio) values (auth.uid(),'معهد الأمل','باقة الغربية','دورات تقوية');
 insert into rooms (institute_id,name) select id,'قاعة أ' from institutes where owner_id=auth.uid();
-insert into institute_teachers select i.id,t.id from institutes i, teachers t where i.owner_id=auth.uid() and t.name='هالة زوم';
+-- staff needs a verified institute and the teacher's consent (see security_test); here the admin verifies and the teacher accepts
+reset role;
+update institutes set verify='verified' where name='معهد الأمل';
+set role authenticated; set request.jwt.claim.sub='10000000-0000-0000-0000-000000000003';
+insert into institute_teachers (institute_id, teacher_id) select i.id,t.id from institutes i, teachers t where i.owner_id=auth.uid() and t.name='هالة زوم';
+reset role;
+update institute_teachers set status='accepted' where teacher_id=(select id from teachers where name='هالة زوم');
+set role authenticated; set request.jwt.claim.sub='10000000-0000-0000-0000-000000000003';
 insert into offerings (type,institute_id,course_teacher_id,title,subject_id,level_id,places,price,seats,schedule_note,start_date,sessions_count,minutes,default_room_id)
   select 'course',i.id,t.id,'دورة إنجليزي مكثفة',2,5,'{center,online}',600,10,'الأحد 18:00',current_date+5,3,90,r.id
   from institutes i join rooms r on r.institute_id=i.id, teachers t where i.owner_id=auth.uid() and t.name='هالة زوم';
@@ -134,8 +141,8 @@ reset role;
 \echo '===== 14. MODE + self-booking'
 set role authenticated; set request.jwt.claim.sub='10000000-0000-0000-0000-000000000004';
 select 'home on online-only offer (expect error)' t;
-select create_booking((select id from offerings where title='إنجليزي محادثة عبر زوم'), null, ((current_date + 3) + time '18:00') at time zone 'Asia/Jerusalem', null, 'bit', false, 'home');
-select 'online mode on Samer (home+online)' t, create_booking((select id from offerings where title='رياضيات بجروت 5 وحدات'), null, ((current_date + 3) + time '18:00') at time zone 'Asia/Jerusalem', null, 'bit', false, 'online') is not null ok;
+select create_booking((select id from offerings where title='إنجليزي محادثة عبر زوم'), null, (test_day(1) + time '18:00') at time zone 'Asia/Jerusalem', null, 'bit', false, 'home');
+select 'online mode on Samer (home+online)' t, create_booking((select id from offerings where title='رياضيات بجروت 5 وحدات'), null, (test_day(1) + time '18:00') at time zone 'Asia/Jerusalem', null, 'bit', false, 'online') is not null ok;
 reset role;
 set role authenticated; set request.jwt.claim.sub='10000000-0000-0000-0000-000000000002';
 select 'teacher books own offer (expect error)' t;

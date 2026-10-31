@@ -25,7 +25,7 @@ insert into children (guardian_id, name, grade) values ('00000000-0000-0000-0000
 select 'private booking' t, create_booking((select id from offerings where title='رياضيات بجروت 5 وحدات'), (select id from children where name='يوسف'), ((date_trunc('week', now()) + interval '14 days 16 hours')::timestamp at time zone 'Asia/Jerusalem'), null, 'bit') is not null ok;
 select 'double booking (expect error)' t; select create_booking((select id from offerings where title='رياضيات بجروت 5 وحدات'), null, ((date_trunc('week', now()) + interval '14 days 16 hours')::timestamp at time zone 'Asia/Jerusalem'));
 select 'group seat' t, create_booking((select id from offerings where title like 'مجموعة تقوية رياضيات%'), null, null, (select s.id from sessions s join offerings o on o.id=s.offering_id where o.title like 'مجموعة تقوية رياضيات%' order by seq limit 1)) is not null ok;
-select 'course enrol' t, create_booking((select id from offerings where title='دورة بجروت رياضيات 5 وحدات'), (select id from children where name='يوسف'), null, null, '3 دفعات') is not null ok;
+select 'course enrol' t, create_booking((select id from offerings where title='دورة بجروت رياضيات 5 وحدات'), (select id from children where name='يوسف'), null, null, 'installments') is not null ok;
 select 'parent sees own bookings' t, count(*) from bookings;
 select 'parent cannot reschedule (expect error)' t; select reschedule_session((select s.id from sessions s join offerings o on o.id=s.offering_id where o.title='دورة بجروت رياضيات 5 وحدات' and seq=3), now()+interval '30 days');
 reset role;

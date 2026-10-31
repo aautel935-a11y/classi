@@ -2,6 +2,7 @@ import { newCourseAction } from "@/app/actions";
 import { requireUser } from "@/lib/session";
 import { redirect } from "next/navigation";
 import { isoDay } from "@/lib/format";
+import { ErrorNote } from "@/components/ErrorNote";
 
 export const dynamic = "force-dynamic";
 const DAYS = ["الأحد", "الاثنين", "الثلاثاء", "الأربعاء", "الخميس", "الجمعة"];
@@ -15,14 +16,14 @@ export default async function NewCourse({ searchParams }: { searchParams: Promis
     supabase.from("subjects").select("id,name").order("id"),
     supabase.from("levels").select("id,name").order("sort"),
     supabase.from("rooms").select("id,name").eq("institute_id", inst.id).order("name"),
-    supabase.from("institute_teachers").select("teacher:teachers(id,name)").eq("institute_id", inst.id),
+    supabase.from("institute_teachers").select("teacher:teachers(id,name)").eq("institute_id", inst.id).eq("status", "accepted"),
   ]);
   const start = isoDay(new Date(Date.now() + 7 * 864e5));
   return (
     <div className="wrap">
       <form action={newCourseAction} className="section">
         <h1>دورة جديدة</h1>
-        {sp.error && <p className="err">{sp.error}</p>}
+        <ErrorNote msg={sp.error} />
         <label className="field" htmlFor="title">اسم الدورة<input id="title" name="title" required minLength={3} placeholder="دورة بجروت رياضيات 5 وحدات" /></label>
         <div className="typeform">
           <label className="field" htmlFor="subject_id">المادة<select id="subject_id" name="subject_id">{(subjects ?? []).map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}</select></label>

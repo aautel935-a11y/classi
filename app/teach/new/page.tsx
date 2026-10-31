@@ -1,5 +1,6 @@
 import { requireUser } from "@/lib/session";
 import { NewOfferForm } from "./NewOfferForm";
+import { errorText } from "@/lib/safe";
 
 export const dynamic = "force-dynamic";
 
@@ -12,7 +13,7 @@ export default async function NewOffer({ searchParams }: { searchParams: Promise
   ]);
   return (
     <div className="wrap">
-      <NewOfferForm subjects={subjects ?? []} levels={levels ?? []} error={sp.error} />
+      <NewOfferForm subjects={subjects ?? []} levels={levels ?? []} error={errorText(sp.error) ?? undefined} />
     </div>
   );
 }

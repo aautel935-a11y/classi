@@ -1,0 +1,5 @@
+# Same script (supabase/tests/concurrency_test.sh) on the schema WITHOUT 20261031000000_production_hardening.sql
+FAIL: installments after two simultaneous confirmations -> got 4/3, expected 3/3
+FAIL: bookings on one institute slot after two simultaneous requests -> got 2, expected 1
+PASS: bookings on one teacher slot after two simultaneous requests = 1
+concurrency: 1 passed, 2 failed

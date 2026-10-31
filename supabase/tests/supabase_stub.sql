@@ -1,5 +1,15 @@
 -- Minimal stand-in for Supabase's auth schema and roles, for local tests only.
-create role anon nologin; create role authenticated nologin; create role service_role nologin bypassrls;
+-- Roles are cluster-wide, so create them only when missing (several test databases can share a server).
+do $$ begin
+  if not exists (select 1 from pg_roles where rolname = 'anon') then create role anon nologin; end if;
+  if not exists (select 1 from pg_roles where rolname = 'authenticated') then create role authenticated nologin; end if;
+  if not exists (select 1 from pg_roles where rolname = 'service_role') then create role service_role nologin bypassrls; end if;
+end $$;
+-- Supabase gives anon/authenticated EXECUTE on every new function and ALL on every new table in public
+-- (documented default privileges). Mirror that, so tests see the same exposure production has.
+alter default privileges in schema public grant execute on functions to anon, authenticated, service_role;
+alter default privileges in schema public grant all on tables to anon, authenticated, service_role;
+alter default privileges in schema public grant all on sequences to anon, authenticated, service_role;
 create schema auth;
 create table auth.users (id uuid primary key default gen_random_uuid(), phone text, email text, raw_user_meta_data jsonb default '{}', banned_until timestamptz, last_sign_in_at timestamptz);
 create function auth.uid() returns uuid language sql stable as $$ select nullif(current_setting('request.jwt.claim.sub', true), '')::uuid $$;

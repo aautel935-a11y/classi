@@ -19,25 +19,26 @@ select 'after' t, count(*) filter (where not cancelled) active, max(seq) last_se
 select 'new last 7 days after previous' t, (select starts_at from sessions where offering_id=(select crs from ids) order by seq desc limit 1)
   - (select starts_at from sessions where offering_id=(select crs from ids) order by seq desc offset 1 limit 1) gap;
 
-\echo '===== 2. Walk-in, father joins a week later with the same phone; institute links'
+\echo '===== 2. Walk-in, father joins a week later with the same phone and links it himself (SEC-03)'
 set role authenticated; set request.jwt.claim.sub='40000000-0000-0000-0000-000000000007';
 select 'walk-in' t, institute_enroll((select crs from ids), 'سليم', '052-777 1234', 'installments', true) is not null;
-select 'can link yet?' t, can_link from owner_bookings((select crs from ids)) where student_name='سليم';
-select 'link too early (expect error)' t;
-select institute_link_booking((select booking_id from owner_bookings((select crs from ids)) where student_name='سليم'));
+select 'can link (same answer whether or not the number has an account)' t, can_link from owner_bookings((select crs from ids)) where student_name='سليم';
+select 'institute asks before dad has an account (no error, nothing revealed)' t, institute_link_booking((select booking_id from owner_bookings((select crs from ids)) where student_name='سليم'))::text = '' ok;
 reset role; reset request.jwt.claim.sub;
 update profiles set phone = clean_phone('0527771234') where id='40000000-0000-0000-0000-000000000005';
-select 'owner told' t, body from notifications where user_id='40000000-0000-0000-0000-000000000007' and body like 'انضم%';
+select 'institute NOT told who joined (expect 0)' t, count(*) from notifications where user_id='40000000-0000-0000-0000-000000000007' and kind = 'booking_answer';
+select 'dad told about the walk-in' t, kind, body from notifications where user_id='40000000-0000-0000-0000-000000000005';
 set role authenticated; set request.jwt.claim.sub='40000000-0000-0000-0000-000000000005';
-select 'dad sees before link (expect 0)' t, count(*) from bookings where booked_by = auth.uid();
+select 'dad sees before accepting (expect 0)' t, count(*) from bookings where booked_by = auth.uid();
+select 'dad sees the request' t, student_name from my_link_requests();
+select accept_booking_link((select booking_id from my_link_requests() limit 1));
+select 'dad sees it' t, count(*) from bookings where booked_by = auth.uid();
 reset role;
 set role authenticated; set request.jwt.claim.sub='40000000-0000-0000-0000-000000000007';
-select 'can link now' t, can_link from owner_bookings((select crs from ids)) where student_name='سليم';
-select institute_link_booking((select booking_id from owner_bookings((select crs from ids)) where student_name='سليم'));
 select 'after link' t, offline, can_link, installments_paid from owner_bookings((select crs from ids)) where student_name='سليم';
+select 'institute told' t, body from notifications where user_id = auth.uid() and kind = 'link_answer';
 reset role;
 set role authenticated; set request.jwt.claim.sub='40000000-0000-0000-0000-000000000005';
-select 'dad sees it' t, count(*) from bookings where booked_by = auth.uid();
 select 'dad cannot link others (expect error)' t;
 select institute_link_booking((select id from bookings where booked_by = auth.uid()));
 reset role;

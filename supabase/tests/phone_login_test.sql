@@ -41,6 +41,8 @@ select 'email signup ignores typed phone' t, phone from profiles where id = '500
 update auth.users set phone = '972523334444' where id = '50000000-0000-0000-0000-000000000002';
 select 'after verified change' t, phone from profiles where id = '50000000-0000-0000-0000-000000000002';
 
-\echo '===== 6. Email kept with the code for the fallback'
-select send_sms_hook('{"user":{"phone":"","phone_change":"972529998877","email":"majd@t"},"sms":{"otp":"654321","sms_type":"phone_change"}}');
+\echo '===== 6. Sign-in codes keep the account email for the fallback; phone-change codes never do (SEC-10)'
+select send_sms_hook('{"user":{"phone":"972529998877","email":"majd@t"},"sms":{"otp":"654321"}}');
 select 'claim with email' t, claim_otp('s3cret') -> 0 ->> 'email' email, claim_otp('s3cret') = '[]'::jsonb emptied;
+select send_sms_hook('{"user":{"phone":"","phone_change":"972529998866","email":"majd@t"},"sms":{"otp":"654322","sms_type":"phone_change"}}');
+select 'phone change: no email (expect empty)' t, claim_otp('s3cret') -> 0 ->> 'email' email;

@@ -1,5 +1,6 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { createClient } from "@/lib/supabase/server";
+import { safePath } from "@/lib/safe";
 
 // Links in Classi's emails (sign-up confirmation, password reset) land here.
 // They carry a one-time token instead of relying on a cookie, so they work even
@@ -10,7 +11,7 @@ export async function GET(request: NextRequest) {
   const type = url.searchParams.get("type") as "signup" | "email" | "recovery" | "invite" | "magiclink" | "email_change" | null;
   const fallback = type === "recovery" ? "/account/password" : "/";
   const next = url.searchParams.get("next") ?? fallback;
-  const safeNext = next.startsWith("/") && !next.startsWith("//") ? next : fallback;
+  const safeNext = safePath(next, fallback);
 
   if (token_hash && type) {
     const supabase = await createClient();

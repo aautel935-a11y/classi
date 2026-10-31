@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { Icon } from "@/components/Icon";
-import { cancelBookingAction, cancelSeriesAction, leaveWaitlistAction } from "@/app/actions";
+import { answerLinkAction, cancelBookingAction, cancelSeriesAction, leaveWaitlistAction } from "@/app/actions";
 import { requireUser } from "@/lib/session";
 import { PushToggle } from "@/components/PushToggle";
 import { PayBadge, PayForStudent, installmentAmount } from "@/components/Pay";
@@ -9,6 +9,7 @@ import { dayLong, dayNum, dayShort, monthName, time } from "@/lib/format";
 import { googleCalLink } from "@/lib/contact";
 import { SITE } from "@/lib/site";
 import { WhatsAppButton } from "@/components/WhatsAppButton";
+import { ErrorNote } from "@/components/ErrorNote";
 
 export const dynamic = "force-dynamic";
 
@@ -29,12 +30,14 @@ export default async function Schedule({ searchParams }: { searchParams: Promise
     .in("status", ["pending", "confirmed"])
     .order("created_at", { ascending: false });
   const rows = ((data ?? []) as unknown as Row[]).filter((r) => r.offering);
-  const [{ data: links }, { data: wl }, { count: unreadReports0 }, { data: payNums }] = await Promise.all([
+  const [{ data: links }, { data: wl }, { count: unreadReports0 }, { data: payNums }, { data: linkReqs }] = await Promise.all([
     supabase.from("offering_links").select("offering_id,url,note"),
     supabase.rpc("my_waitlist"),
     supabase.from("lesson_reports").select("id", { count: "exact", head: true }).eq("student_user", user.id).is("read_at", null),
     supabase.rpc("my_pay_numbers"),
+    supabase.rpc("my_link_requests"),
   ]);
+  const linkRequests = (linkReqs ?? []) as { booking_id: string; offering_title: string; owner_name: string; student_name: string }[];
   const payOf = (oid: string) => ((payNums ?? []) as { offering_id: string; owner_name: string; bit_phone: string | null }[]).find((p) => p.offering_id === oid);
   const unreadReports = unreadReports0 ?? 0;
   const waits = (wl ?? []) as { id: string; offering_id: string; offering_title: string; owner_name: string; child_name: string | null; status: string; reply: string | null; pos: number | null }[];
@@ -81,7 +84,32 @@ export default async function Schedule({ searchParams }: { searchParams: Promise
           </div>
         )}
         {sp.cancelled_series && <p className="okmsg">أُلغي الموعد الأسبوعي ({sp.cancelled_series} حصص قادمة).</p>}
-        {sp.error && <p className="err">{sp.error}</p>}
+        <ErrorNote msg={sp.error} />
+        {sp.ok === "linked" && <p className="okmsg">رُبط التسجيل بحسابك. تجد المواعيد والتقارير والدفعات هنا.</p>}
+        {sp.ok === "link_declined" && <p className="okmsg">شكراً. أبلغنا المعهد أن الرقم ليس لولي أمر هذا الطالب.</p>}
+        {linkRequests.length > 0 && (
+          <div className="card stack" id="links" style={{ gap: 8 }}>
+            <b>تسجيلات برقم هاتفك</b>
+            <p className="small muted">سجّل معهد أو معلم طالباً برقم هاتفك. إن كان ابنك أو ابنتك، اربط التسجيل بحسابك لترى المواعيد والتقارير والدفعات.</p>
+            {linkRequests.map((r) => (
+              <div key={r.booking_id} className="row between" style={{ flexWrap: "wrap", gap: 8 }}>
+                <span>{r.student_name} · {r.offering_title} · {r.owner_name}</span>
+                <span className="row" style={{ gap: 6 }}>
+                  <form action={answerLinkAction}>
+                    <input type="hidden" name="booking_id" value={r.booking_id} />
+                    <input type="hidden" name="accept" value="1" />
+                    <button className="btn sm okb">اربط بحسابي</button>
+                  </form>
+                  <form action={answerLinkAction}>
+                    <input type="hidden" name="booking_id" value={r.booking_id} />
+                    <input type="hidden" name="accept" value="0" />
+                    <button className="btn sm ghost">ليس ابني/ابنتي</button>
+                  </form>
+                </span>
+              </div>
+            ))}
+          </div>
+        )}
         <div className="row between">
           <p className="small muted">كل الحصص والدورات لك ولأبنائك في مكان واحد.</p>
           <Link className="btn sm ghost" href="/reports"><Icon name="check" />تقارير الحصص{unreadReports > 0 ? ` (${unreadReports})` : ""}</Link>

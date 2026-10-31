@@ -3,6 +3,7 @@ import { Avatar } from "@/components/Avatar";
 import { Icon } from "@/components/Icon";
 import { requireUser } from "@/lib/session";
 import { dayLong, isoDay, time } from "@/lib/format";
+import { ErrorNote } from "@/components/ErrorNote";
 
 export const dynamic = "force-dynamic";
 
@@ -18,7 +19,7 @@ export default async function Messages({ searchParams }: { searchParams: Promise
     <div className="wrap">
       <div className="section">
         <h1>الرسائل</h1>
-        {sp.error && <p className="err">{sp.error}</p>}
+        <ErrorNote msg={sp.error} />
         {list.length === 0 && (
           <div className="empty">
             لا محادثات بعد. افتح صفحة معلم أو معهد واضغط «راسل» لتسأل قبل الحجز.

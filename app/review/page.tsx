@@ -4,6 +4,7 @@ import { notFound } from "next/navigation";
 import { Icon } from "@/components/Icon";
 import { leaveReviewAction } from "@/app/actions";
 import { requireUser } from "@/lib/session";
+import { ErrorNote } from "@/components/ErrorNote";
 
 export const dynamic = "force-dynamic";
 
@@ -48,7 +49,7 @@ export default async function ReviewPage({ searchParams }: { searchParams: Promi
         <Link className="back" href="/schedule"><Icon name="back" />جدولي</Link>
         <h1>كيف كانت الحصة مع {ownerName}؟</h1>
         <p className="muted">{x.offering?.title}{x.child?.name ? ` · ${x.child.name}` : ""}</p>
-        {sp.error && <p className="err">{sp.error}</p>}
+        <ErrorNote msg={sp.error} />
         {mine && <p className="note"><Icon name="check" />قيّمت هذا المعلم من قبل. التقييم الجديد يحلّ مكان السابق.</p>}
         <input type="hidden" name="booking_id" value={booking} />
         <fieldset className="rating">

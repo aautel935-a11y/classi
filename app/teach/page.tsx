@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { Icon } from "@/components/Icon";
 import { OfferCard } from "@/components/OfferCard";
-import { deleteOfferingAction, respondAction, startBookingConversationAction, saveAvailabilityAction, teacherSetupAction, toggleOfferingAction, updateTeacherAction } from "@/app/actions";
+import { answerStaffInviteAction, deleteOfferingAction, respondAction, startBookingConversationAction, saveAvailabilityAction, teacherSetupAction, toggleOfferingAction, updateTeacherAction } from "@/app/actions";
 import { PhotoUpload } from "@/components/PhotoUpload";
 import { PushToggle } from "@/components/PushToggle";
 import { SubscriptionBox, type Plan, type SubRequest } from "@/components/SubscriptionBox";
@@ -13,6 +13,7 @@ import { OFFERING_SELECT, TOWNS, type Offering } from "@/lib/types";
 import { ShareProfile } from "@/components/ShareProfile";
 import { SITE } from "@/lib/site";
 import { dayLong, isoDay, time } from "@/lib/format";
+import { ErrorNote } from "@/components/ErrorNote";
 
 export const dynamic = "force-dynamic";
 
@@ -32,7 +33,7 @@ export default async function Teach({ searchParams }: { searchParams: Promise<Re
         <form action={teacherSetupAction} className="section">
           <h1>ملف المعلم</h1>
           <p className="muted">يظهر ملفك للطلاب بعد أن نراجع هويتك وشهاداتك.</p>
-          {sp.error && <p className="err">{sp.error}</p>}
+          <ErrorNote msg={sp.error} />
           <label className="field" htmlFor="name">الاسم كما يظهر للطلاب<input id="name" name="name" required defaultValue={profile?.full_name ?? ""} /></label>
           <div className="typeform">
             <label className="field" htmlFor="town">البلد<select id="town" name="town" defaultValue={profile?.town ?? "باقة الغربية"}>{TOWNS.map((x) => <option key={x}>{x}</option>)}</select></label>
@@ -47,7 +48,7 @@ export default async function Teach({ searchParams }: { searchParams: Promise<Re
     );
   }
 
-  const [{ data: bookings }, { data: offers }, { data: courseSessions }, { data: subjectList }, { data: hours }, { data: links }, { data: wl }, { data: pend }, { data: pays }, { data: money }, { data: bitRow }, { data: reviewRows }, { data: plans }, { data: subReq }, { data: paid }, { data: settings }, { data: myReviews }] = await Promise.all([
+  const [{ data: bookings }, { data: offers }, { data: courseSessions }, { data: subjectList }, { data: hours }, { data: links }, { data: wl }, { data: pend }, { data: pays }, { data: money }, { data: bitRow }, { data: reviewRows }, { data: plans }, { data: subReq }, { data: paid }, { data: settings }, { data: myReviews }, { data: invites }] = await Promise.all([
     supabase.rpc("owner_bookings"),
     supabase.from("offerings").select(OFFERING_SELECT).eq("teacher_id", t.id).order("created_at"),
     supabase
@@ -71,6 +72,7 @@ export default async function Teach({ searchParams }: { searchParams: Promise<Re
     supabase.rpc("paid_until", { p_teacher: t.id, p_institute: null }),
     supabase.from("app_settings").select("key,value"),
     supabase.from("reviews").select("id,stars,body,author_name,reply,created_at").eq("teacher_id", t.id).order("created_at", { ascending: false }).limit(30),
+    supabase.rpc("my_staff_invites"),
   ]);
   const setting = (k: string) => ((settings ?? []) as { key: string; value: string }[]).find((x) => x.key === k)?.value ?? "";
   const subsRequired = setting("subscriptions_required") === "true";
@@ -106,10 +108,10 @@ export default async function Teach({ searchParams }: { searchParams: Promise<Re
         )}
         {sp.ok && (
           <p className="okmsg">
-            {({ profile: "حُفظ ملفك. التعديلات على الاسم والنبذة والصورة والفيديو تظهر للطلاب بعد موافقة الإدارة.", hours: "حُفظت أوقاتك المتاحة.", hidden: "أُخفي العرض. لم يعد يظهر للطلاب.", shown: "العرض ظاهر الآن للطلاب.", deleted: "حُذف العرض.", published: "أُرسل العرض للمراجعة. يظهر للطلاب بعد موافقة الإدارة، ويصلك إشعار.", report: "أُرسل التقرير ووصل ولي الأمر إشعار.", payment: "حُدّثت حالة الدفع.", reply: "حُفظ ردّك على التقييم." } as Record<string, string>)[sp.ok] ?? "تم."}
+            {({ profile: "حُفظ ملفك. التعديلات على الاسم والنبذة والصورة والفيديو تظهر للطلاب بعد موافقة الإدارة.", hours: "حُفظت أوقاتك المتاحة.", hidden: "أُخفي العرض. لم يعد يظهر للطلاب.", shown: "العرض ظاهر الآن للطلاب.", deleted: "حُذف العرض.", published: "أُرسل العرض للمراجعة. يظهر للطلاب بعد موافقة الإدارة، ويصلك إشعار.", report: "أُرسل التقرير ووصل ولي الأمر إشعار.", payment: "حُدّثت حالة الدفع.", reply: "حُفظ ردّك على التقييم.", invite_accepted: "انضممت إلى طاقم المعهد. يستطيع الآن تعيينك لدوراته.", invite_declined: "اعتذرت عن الدعوة، ووصل المعهد إشعار." } as Record<string, string>)[sp.ok] ?? "تم."}
           </p>
         )}
-        {sp.error && <p className="err">{sp.error}</p>}
+        <ErrorNote msg={sp.error} />
         <PushToggle compact />
         <div className="stats">
           <div className="stat hl"><b className="num">{todays.length}</b><span>حصص اليوم</span></div>
@@ -120,6 +122,32 @@ export default async function Teach({ searchParams }: { searchParams: Promise<Re
           <div className="stat"><b className="num">{new Set(rows.filter((b) => b.status === "confirmed").map((b) => b.student_name)).size}</b><span>طلاب</span></div>
         </div>
       </div>
+
+      {((invites ?? []) as { institute_id: string; institute_name: string; town: string }[]).length > 0 && (
+        <section className="section" id="invites">
+          <h2>دعوات للانضمام إلى معهد</h2>
+          <p className="small muted">إن قبلت، تظهر ضمن طاقم المعهد ويستطيع تعيينك معلماً لدوراته، فتدخل لقاءاتها في تقويمك.</p>
+          <div className="stack" style={{ gap: 6 }}>
+            {((invites ?? []) as { institute_id: string; institute_name: string; town: string }[]).map((i) => (
+              <div key={i.institute_id} className="card row between" style={{ padding: "8px 12px", flexWrap: "wrap", gap: 8 }}>
+                <span>{i.institute_name}{i.town ? ` · ${i.town}` : ""}</span>
+                <span className="row" style={{ gap: 6 }}>
+                  <form action={answerStaffInviteAction}>
+                    <input type="hidden" name="institute_id" value={i.institute_id} />
+                    <input type="hidden" name="accept" value="1" />
+                    <button className="btn sm okb">قبول</button>
+                  </form>
+                  <form action={answerStaffInviteAction}>
+                    <input type="hidden" name="institute_id" value={i.institute_id} />
+                    <input type="hidden" name="accept" value="0" />
+                    <button className="btn sm ghost">اعتذار</button>
+                  </form>
+                </span>
+              </div>
+            ))}
+          </div>
+        </section>
+      )}
 
       <ShareProfile url={`${SITE}/teacher/${t.id}`} name={`أ. ${t.name}`} />
 

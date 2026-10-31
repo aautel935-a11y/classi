@@ -50,7 +50,7 @@ set role authenticated; set request.jwt.claim.sub='40000000-0000-0000-0000-00000
 select create_booking((select priv from ids), '50000000-0000-0000-0000-000000000001', (select mon from ids) + interval '2 days') is not null;
 select create_booking((select priv from ids), '50000000-0000-0000-0000-000000000001', (select mon from ids) + interval '3 days') is not null;
 select 'package now' t, remaining, status from lesson_packages;
-select 'third extra lesson pays normally' t, (select price from bookings where id = x) from create_booking((select priv from ids), '50000000-0000-0000-0000-000000000001', (select mon from ids) + interval '4 days') x;
+select 'third extra lesson pays normally' t, (select price from bookings where id = x) from create_booking((select priv from ids), '50000000-0000-0000-0000-000000000001', (select mon from ids) - interval '1 day') x;
 select cancel_booking((select id from bookings where package_id is not null order by starts_at desc limit 1));
 select 'after cancel' t, remaining, status from lesson_packages;
 select 'last-lesson notice' t, body from notifications where user_id = auth.uid() and body like '%آخر حصة%';
