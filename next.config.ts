@@ -30,6 +30,7 @@ const securityHeaders = [
 
 const nextConfig: NextConfig = {
   poweredByHeader: false,
+  compress: false, // EXPERIMENT (CI diagnosis)
   // Type and lint errors fail the build (SEC-35); CI runs tsc, next lint and next build on every push.
   async headers() {
     return [{ source: "/(.*)", headers: securityHeaders }];
