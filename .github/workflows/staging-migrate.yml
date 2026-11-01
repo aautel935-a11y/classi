@@ -43,12 +43,12 @@ jobs:
           rest="${u#postgresql://}"; rest="${rest#postgres://}"; cred="${rest%@*}"; hostpart="${rest##*@}"
           user="${cred%%:*}"; pass="${cred#*:}"
           yn() { if eval "$1"; then echo yes; else echo no; fi; }
-          echo "link had spaces or line breaks (removed): $(yn '[ "$u" != "$STAGING_DB_URL" ]')"
-          echo "user is postgres.nfipmylyahhogykikuqo: $(yn '[ "$user" = postgres.nfipmylyahhogykikuqo ]')"
-          echo "password still has [ or ] or YOUR-PASSWORD: $(yn 'case "$pass" in *"["*|*"]"*|*YOUR-PASSWORD*) true;; *) false;; esac')"
-          echo "password has @ / ? # % or : (must be letters and digits): $(yn 'case "$pass" in *[@/?#%:]*) true;; *) false;; esac')"
-          echo "password length at least 12: $(yn '[ ${#pass} -ge 12 ]')"
-          echo "host is the Supabase pooler on port 5432: $(yn 'case "$hostpart" in *.pooler.supabase.com:5432/postgres*) true;; *) false;; esac')"
+          echo "::notice title=link shape::link had spaces or line breaks (removed): $(yn '[ "$u" != "$STAGING_DB_URL" ]')"
+          echo "::notice title=link shape::user is postgres.nfipmylyahhogykikuqo: $(yn '[ "$user" = postgres.nfipmylyahhogykikuqo ]')"
+          echo "::notice title=link shape::password still has [ or ] or YOUR-PASSWORD: $(yn 'case "$pass" in *"["*|*"]"*|*YOUR-PASSWORD*) true;; *) false;; esac')"
+          echo "::notice title=link shape::password has @ / ? # % or : (must be letters and digits): $(yn 'case "$pass" in *[@/?#%:]*) true;; *) false;; esac')"
+          echo "::notice title=link shape::password length at least 12: $(yn '[ ${#pass} -ge 12 ]')"
+          echo "::notice title=link shape::host is the Supabase pooler on port 5432: $(yn 'case "$hostpart" in *.pooler.supabase.com:5432/postgres*) true;; *) false;; esac')"
       - name: TLS to the staging database
         env: { CA: "${{ vars.SUPABASE_CA_CERT }}" }
         run: |
