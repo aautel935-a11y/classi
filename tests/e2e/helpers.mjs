@@ -57,9 +57,11 @@ export const db = STAGING ? {
   setDemoBio: (teacher, bio) => sql("update teachers set bio = $1 where id = $2 and user_id is null", [bio, teacher]),
 };
 
-/** A unique Israeli mobile for this project and role: 0521xxxxxx (mobile project) / 0522xxxxxx (desktop). */
-export function phoneFor(testInfo, n) {
+/** A unique Israeli mobile for this project and role: 0521xxxxxx (mobile project) / 0522xxxxxx (desktop).
+ * Staging: a fresh number from the explicit allowlist (e2e.next_phone), the only accounts the test role can touch. */
+export async function phoneFor(testInfo, n) {
   const p = testInfo.project.name === "mobile" ? "1" : "2";
+  if (STAGING) return "0" + String((await one("select e2e.next_phone($1) as v", [Number(p)])).v).slice(3);
   const run = String(Date.now()).slice(-4);
   return `052${p}${run}${String(n).padStart(2, "0")}`.slice(0, 10);
 }

@@ -37,7 +37,7 @@ test.describe("accessibility (axe)", () => {
   });
 
   test("signed-in pages: account, schedule, notifications, messages", async ({ page }, info) => {
-    await signUp(page, { phone: phoneFor(info, 7), name: "فحص الوصول", role: "guardian" });
+    await signUp(page, { phone: await phoneFor(info, 7), name: "فحص الوصول", role: "guardian" });
     const serious = [];
     for (const [url, label] of [["/account", "account"], ["/schedule", "schedule"], ["/notifications", "notifications"], ["/messages", "messages"]]) {
       await page.goto(url, { waitUntil: "networkidle" });

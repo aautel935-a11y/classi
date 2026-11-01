@@ -1,7 +1,8 @@
 # Prepares the STAGING database (classi-staging): every migration in order, synthetic seed, scheduled jobs, photo
 # storage, server-to-server settings pointing at the staging app. Runs when the branch "staging-migrate" is pushed.
-# Needs, in the GitHub Environment "staging" (Settings -> Environments -> staging; deployment branches limited to
-# staging-test and staging-migrate, so no other branch, pull request or workflow can read them):
+# Needs, in the GitHub Environment "staging-db" (Settings -> Environments -> staging-db; deployment branch limited to
+# staging-migrate, required reviewer = the owner). It holds the full database connection, so the browser-test
+# Environment "staging" never contains it:
 #   secret   STAGING_DB_URL     connection string of the classi-staging database (Session pooler), never production
 #   variable STAGING_APP_URL    https://classi-staging....vercel.app (until it exists: https://classi-staging.invalid, an
 #                               address that never resolves, so the push job sends its secret nowhere)
@@ -28,7 +29,7 @@ jobs:
   migrate:
     runs-on: ubuntu-latest
     timeout-minutes: 20
-    environment: staging
+    environment: staging-db   # its own Environment: only this workflow, only branch staging-migrate, owner approval
     env:
       STAGING_APP_URL: ${{ vars.STAGING_APP_URL }}
     steps:

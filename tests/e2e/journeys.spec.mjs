@@ -34,7 +34,7 @@ test.afterEach(async ({ browser }, info) => {
 
 test("9. teacher: sign up, profile, hours with Saturday, new offer (and the form keeps input after an error)", async ({ browser }, info) => {
   const ctx = await browser.newContext(); const page = await ctx.newPage(); trace(page);
-  S.teacherPhone = phoneFor(info, 1);
+  S.teacherPhone = await phoneFor(info, 1);
   S.teacherUser = await signUp(page, { phone: S.teacherPhone, name: "معلمة الاختبار", role: "teacher" });
   await page.goto("/teach", { waitUntil: "networkidle" });
   await page.locator("#bio").fill("أشرح الرياضيات خطوة بخطوة.");
@@ -74,7 +74,7 @@ test("9. teacher: sign up, profile, hours with Saturday, new offer (and the form
 
 test("10. parent: sign up, add a child, book a private lesson; booking dialog closes with Esc", async ({ browser }, info) => {
   const ctx = await browser.newContext(); const page = await ctx.newPage();
-  S.parentPhone = phoneFor(info, 2);
+  S.parentPhone = await phoneFor(info, 2);
   S.parentUser = await signUp(page, { phone: S.parentPhone, name: "أم الاختبار", role: "guardian" });
   await page.goto("/account#children");
   await page.locator("#kid-name").fill("يوسف");
@@ -164,7 +164,7 @@ test("12. roles, two-step cancellation, and no form data leaking between records
   await shared.close();
 
   // Admin (role given in the database): the admin page opens and shows the booking-rule settings
-  const adminPhone = phoneFor(info, 3);
+  const adminPhone = await phoneFor(info, 3);
   const a = await browser.newContext(); const ap = await a.newPage();
   const adminId = await signUp(ap, { phone: adminPhone, name: "مدير الاختبار", role: "guardian" });
   await db.makeAdmin(adminId);

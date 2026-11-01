@@ -3,20 +3,24 @@
 -- The role e2e_staging gets NO table privileges and NO special attributes (no SUPERUSER, CREATEROLE, CREATEDB,
 -- REPLICATION or BYPASSRLS). It can only call the e2e_* functions below. Each function:
 --   * refuses to run unless this database is marked staging (app_secrets deploy_env = 'staging');
---   * acts only on TEST accounts: phone 97252[12]xxxxxx (the numbers tests/e2e/helpers.mjs phoneFor() makes),
---     signed up by phone (no e-mail) within the last 24 hours. The five manual test accounts (9725000000xx), the
---     demo listings and any other account are refused;
+--   * acts only on TEST accounts, defined by an explicit ALLOWLIST: e2e.test_phones, a fixed pool of 1,998 numbers
+--     (0521000001-0521000999 for the phone project, 0522000001-0522000999 for desktop) written here by the owner;
+--     e2e_staging cannot add to it. On top of the allowlist the account must have signed up by phone (no e-mail)
+--     within the last 24 hours. The five manual test accounts (9725000000xx), the demo listings and any other
+--     account are refused;
 --   * returns only what the test checks (an id, a code, a count, a status), never secrets or personal data.
--- The role is created NOLOGIN. The owner enables it in the Supabase SQL editor (never in chat):
---   alter role e2e_staging with login password '<generated, letters and digits>';
--- and stores postgresql://e2e_staging.nfipmylyahhogykikuqo:<password>@<pooler host>:5432/postgres as the GitHub
--- Environment "staging" secret STAGING_E2E_DB_URL. To lock it again: alter role e2e_staging nologin;
+-- The role is NOLOGIN, and running this file again always locks it again. The owner enables it only for a test
+-- session, in the Supabase SQL editor (never in chat), with an expiry:
+--   alter role e2e_staging with login password '<generated, letters and digits>' valid until '<now + 1 day>';
+-- stores postgresql://e2e_staging.nfipmylyahhogykikuqo:<password>@<pooler host>:5432/postgres as the GitHub
+-- Environment "staging" secret STAGING_E2E_DB_URL, and locks it afterwards:  alter role e2e_staging nologin;
 \set ON_ERROR_STOP 1
 begin;
 do $$ begin
   if not exists (select 1 from public.app_secrets where key = 'deploy_env' and value = 'staging') then
     raise exception 'refusing: this database is not marked staging';
   end if;
+  if current_user <> 'postgres' then raise exception 'run as postgres (the helpers'' owner)'; end if;
   if not exists (select 1 from pg_roles where rolname = 'e2e_staging') then
     create role e2e_staging nologin nosuperuser nocreaterole nocreatedb noreplication nobypassrls noinherit connection limit 3;
   end if;
@@ -31,6 +35,14 @@ create schema if not exists e2e;
 revoke all on schema e2e from public, anon, authenticated, service_role;
 grant usage on schema e2e to e2e_staging;
 
+-- The allowlist (owner-written; e2e_staging has no rights on these tables) and the numbers handed out to runs.
+create table if not exists e2e.test_phones (digits text primary key check (digits ~ '^97252[12]000[0-9]{3}$'), project int not null);
+insert into e2e.test_phones (digits, project)
+select '97252' || p || '000' || lpad(n::text, 3, '0'), p from generate_series(1, 2) p, generate_series(1, 999) n
+on conflict do nothing;
+create table if not exists e2e.reservations (digits text primary key references e2e.test_phones, reserved_at timestamptz not null default now());
+revoke all on e2e.test_phones, e2e.reservations from public, anon, authenticated, service_role, e2e_staging;
+
 -- Internal checks (not callable by anyone but the functions below, which run as their owner).
 create or replace function e2e._staging() returns void language plpgsql security definer set search_path = '' as $$
 begin
@@ -38,8 +50,8 @@ begin
     raise exception 'e2e helpers run only on the staging database';
   end if;
 end $$;
-create or replace function e2e._test_phone(p_digits text) returns boolean language sql immutable set search_path = '' as $$
-  select coalesce(p_digits, '') ~ '^97252[12][0-9]{6}$'
+create or replace function e2e._test_phone(p_digits text) returns boolean language sql stable security definer set search_path = '' as $$
+  select exists (select 1 from e2e.test_phones t where t.digits = p_digits)
 $$;
 create or replace function e2e._test_user(p_user uuid) returns boolean language sql stable security definer set search_path = '' as $$
   select exists (select 1 from auth.users u
@@ -49,6 +61,21 @@ $$;
 create or replace function e2e._test_teacher(p_teacher uuid) returns boolean language sql stable security definer set search_path = '' as $$
   select exists (select 1 from public.teachers t where t.id = p_teacher and e2e._test_user(t.user_id))
 $$;
+
+-- A fresh allowlisted number for a sign-up (never one that already has an account or was handed out in the last hour)
+create or replace function e2e.next_phone(p_project int) returns text language plpgsql security definer set search_path = '' as $$
+declare v text;
+begin
+  perform e2e._staging();
+  select t.digits into v from e2e.test_phones t
+   where t.project = p_project
+     and not exists (select 1 from auth.users u where regexp_replace(coalesce(u.phone, ''), '\D', '', 'g') = t.digits)
+     and not exists (select 1 from e2e.reservations r where r.digits = t.digits and r.reserved_at > now() - interval '1 hour')
+   order by t.digits limit 1 for update skip locked;
+  if v is null then raise exception 'the test number pool is used up (add numbers to e2e.test_phones)'; end if;
+  insert into e2e.reservations (digits) values (v) on conflict (digits) do update set reserved_at = now();
+  return v;
+end $$;
 
 -- Sign-in codes (only for test numbers; nothing else is ever in reach)
 create or replace function e2e.otp(p_digits text) returns text language plpgsql security definer set search_path = '' as $$
@@ -147,8 +174,10 @@ end $$;
 
 -- Execute rights: the callable helpers to e2e_staging only; the internal checks to nobody.
 revoke all on all functions in schema e2e from public, anon, authenticated, service_role;
-grant execute on function e2e.otp(text), e2e.otp_count(text), e2e.user_id(text), e2e.teacher_id(uuid),
+grant execute on function e2e.next_phone(int), e2e.otp(text), e2e.otp_count(text), e2e.user_id(text), e2e.teacher_id(uuid),
   e2e.latest_offer(uuid), e2e.offer_bookings(uuid), e2e.unread_count(uuid), e2e.verify_teacher(uuid),
   e2e.approve_offer(uuid), e2e.make_admin(uuid), e2e.public_offer(boolean), e2e.demo_teacher(),
   e2e.set_demo_bio(uuid, text) to e2e_staging;
+-- Locked until the owner opens it for a test session (running this file again always locks it).
+alter role e2e_staging nologin;
 commit;
