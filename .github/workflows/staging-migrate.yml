@@ -38,6 +38,17 @@ jobs:
           [ -n "$STAGING_DB_URL" ] || { echo "::error::secret STAGING_DB_URL is not set"; exit 1; }
           case "$STAGING_DB_URL" in *rfxhqcagdsuhkjzwbawx*) echo "::error::STAGING_DB_URL is the production project"; exit 1;; esac
           case "$STAGING_DB_URL" in *nfipmylyahhogykikuqo*) echo "target: classi-staging";; *) echo "::error::STAGING_DB_URL is not classi-staging (nfipmylyahhogykikuqo)"; exit 1;; esac
+          # Shape of the link, as yes/no only (nothing of the value is printed):
+          u="$(printf %s "$STAGING_DB_URL" | tr -d '[:space:]')"
+          rest="${u#postgresql://}"; rest="${rest#postgres://}"; cred="${rest%@*}"; hostpart="${rest##*@}"
+          user="${cred%%:*}"; pass="${cred#*:}"
+          yn() { if eval "$1"; then echo yes; else echo no; fi; }
+          echo "link had spaces or line breaks (removed): $(yn '[ "$u" != "$STAGING_DB_URL" ]')"
+          echo "user is postgres.nfipmylyahhogykikuqo: $(yn '[ "$user" = postgres.nfipmylyahhogykikuqo ]')"
+          echo "password still has [ or ] or YOUR-PASSWORD: $(yn 'case "$pass" in *"["*|*"]"*|*YOUR-PASSWORD*) true;; *) false;; esac')"
+          echo "password has @ / ? # % or : (must be letters and digits): $(yn 'case "$pass" in *[@/?#%:]*) true;; *) false;; esac')"
+          echo "password length at least 12: $(yn '[ ${#pass} -ge 12 ]')"
+          echo "host is the Supabase pooler on port 5432: $(yn 'case "$hostpart" in *.pooler.supabase.com:5432/postgres*) true;; *) false;; esac')"
       - name: TLS to the staging database
         env: { CA: "${{ vars.SUPABASE_CA_CERT }}" }
         run: |
@@ -51,10 +62,13 @@ jobs:
       - name: Migrations, seed, jobs, storage, settings
         env: { STAGING_DB_URL: "${{ secrets.STAGING_DB_URL }}" }
         run: |
+          STAGING_DB_URL="$(printf %s "$STAGING_DB_URL" | tr -d '[:space:]')"
           STAGING_APP_URL="${STAGING_APP_URL:-https://classi-staging.vercel.app}" sh scripts/staging/setup.sh 2>&1 | tee /tmp/setup.log
       - name: Synthetic accounts and activity for manual testing
         env: { STAGING_DB_URL: "${{ secrets.STAGING_DB_URL }}" }
-        run: psql "$STAGING_DB_URL" -v ON_ERROR_STOP=1 -q -f supabase/staging/staging_data.sql 2>&1 | tee /tmp/data.log
+        run: |
+          STAGING_DB_URL="$(printf %s "$STAGING_DB_URL" | tr -d '[:space:]')"
+          psql "$STAGING_DB_URL" -v ON_ERROR_STOP=1 -q -f supabase/staging/staging_data.sql 2>&1 | tee /tmp/data.log
       - name: Report (annotations)
         if: always()
         run: sh .github/report.sh "staging-db" /tmp/setup.log /tmp/data.log
