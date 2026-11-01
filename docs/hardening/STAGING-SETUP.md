@@ -139,12 +139,12 @@
 
 | # | الإجراء | الأثر |
 |---|---|---|
-| 1 | Vercel ← classi-staging ← Settings ← General ← **Pause Project** | كل عناوين المشروع تتوقف فوراً (`503`). الأسرع، ويُلغى بـ Resume |
-| 2 | Deployments ← كل نشر ناجح ← **Delete** | يحذف النشر نفسه، فلا يمكن إعادته بأي رابط |
+| 1 | **إيقاف المشروع (Pause):** أنفّذه أنا عبر ربط Vercel (`pause_project`)، أو أنت بالأمر `vercel project pause classi-staging` | النشر الإنتاجي للمشروع وعنوانه `classi-staging.vercel.app` يتوقفان فوراً (`503 DEPLOYMENT_PAUSED`). يُلغى بـ unpause |
+| 2 | Deployments ← **كل** نشر ناجح، بما فيها نشرات المعاينة (Preview) ← **Delete** | الإيقاف يشمل الإنتاج فقط، فهذا يزيل كل نسخة ناجحة، ولا يبقى رابط يعمل |
 | 3 | Deployment Protection ← Protection Bypass for Automation ← **Revoke**، واحذف `VERCEL_AUTOMATION_BYPASS_SECRET` من GitHub | يبطل أي سر تجاوز مسرّب |
 | 4 | Build Command ← `exit 1` | يمنع أي نشر جديد من فرع `staging` |
 | 5 | (عند الحاجة) Supabase ← classi-staging ← API Keys ← تدوير مفتاح anon، و`alter role e2e_staging nologin;` | يقطع وصول أي نسخة قديمة للقاعدة |
 
 **الحماية (Vercel Authentication على كل النشرات) تبقى مفعّلة في كل الأحوال**، فلا يصل للموقع إلا أعضاء فريق classi.
 
-**إن وافقت مسبقاً**، يمكنني تنفيذ الخطوة 1 فوراً عبر ربط Vercel عند أي مشكلة، ثم أبلغك.
+**إن وافقت مسبقاً**، يمكنني تنفيذ الخطوتين 1 و2 فوراً عبر ربط Vercel عند أي مشكلة، ثم أبلغك. هذا يخص classi-staging وحده، ولا يمس مشروع الإنتاج.
