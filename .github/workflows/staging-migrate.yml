@@ -1,0 +1,47 @@
+# Prepares the STAGING database (classi-staging): every migration in order, synthetic seed, scheduled jobs, photo
+# storage, server-to-server settings pointing at the staging app. Runs when the branch "staging-migrate" is pushed.
+# Needs (set by the owner in GitHub -> Settings -> Secrets and variables -> Actions):
+#   secret   STAGING_DB_URL     connection string of the classi-staging database (Session pooler), never production
+#   variable STAGING_APP_URL    https://classi-staging....vercel.app
+name: Staging database
+
+on:
+  push:
+    branches: [staging-migrate]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+defaults:
+  run:
+    shell: bash
+
+concurrency:
+  group: staging-db
+  cancel-in-progress: false
+
+jobs:
+  migrate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      STAGING_DB_URL: ${{ secrets.STAGING_DB_URL }}
+      STAGING_APP_URL: ${{ vars.STAGING_APP_URL }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: The target is the staging project (never production)
+        run: |
+          [ -n "$STAGING_DB_URL" ] || { echo "::error::secret STAGING_DB_URL is not set"; exit 1; }
+          case "$STAGING_DB_URL" in *rfxhqcagdsuhkjzwbawx*) echo "::error::STAGING_DB_URL is the production project"; exit 1;; esac
+          case "$STAGING_DB_URL" in *nfipmylyahhogykikuqo*) echo "target: classi-staging";; *) echo "::error::STAGING_DB_URL is not classi-staging (nfipmylyahhogykikuqo)"; exit 1;; esac
+      - uses: supabase/setup-cli@v1
+        with: { version: latest }
+      - name: Migrations, seed, jobs, storage, settings
+        run: |
+          STAGING_APP_URL="${STAGING_APP_URL:-https://classi-staging.vercel.app}" sh scripts/staging/setup.sh 2>&1 | tee /tmp/setup.log
+      - name: Synthetic accounts and activity for manual testing
+        run: psql "$STAGING_DB_URL" -v ON_ERROR_STOP=1 -q -f supabase/staging/staging_data.sql 2>&1 | tee /tmp/data.log
+      - name: Report (annotations)
+        if: always()
+        run: sh .github/report.sh "staging-db" /tmp/setup.log /tmp/data.log

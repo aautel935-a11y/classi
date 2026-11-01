@@ -6,7 +6,8 @@
     "deploymentEnabled": {
       "hardening/production-readiness": false,
       "hardening/**": false,
-      "staging-test": false
+      "staging-test": false,
+      "staging-migrate": false
     }
   }
 }
