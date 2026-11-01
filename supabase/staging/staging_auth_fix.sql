@@ -1,6 +1,7 @@
 -- STAGING ONLY. Makes the five manual test accounts complete Supabase Auth users, so they can sign in through the
 -- normal login screen with their test numbers: audience/role "authenticated" (the role in their session token) and
--- a "phone" identity. Idempotent: safe to run again. Only touches the five fixed ids; refuses a non-staging database.
+-- a "phone" identity, and empty strings instead of NULL in the token columns (Supabase Auth cannot read a NULL there:
+-- "converting NULL to string is unsupported"; rows it creates itself always hold ''). Idempotent: safe to run again. Only touches the five fixed ids; refuses a non-staging database.
 do $$
 declare has_identities boolean := to_regclass('auth.identities') is not null;
 begin
@@ -14,6 +15,17 @@ begin
                             '00000000-0000-4000-8000-000000000003', '00000000-0000-4000-8000-000000000004',
                             '00000000-0000-4000-8000-000000000005')$q$;
   end if;
+  -- every nullable text column of auth.users that Supabase Auth reads as a plain string (tokens and change fields)
+  declare c record;
+  begin
+    for c in select column_name from information_schema.columns
+              where table_schema = 'auth' and table_name = 'users' and data_type in ('character varying', 'text')
+                and (column_name like '%token%' or column_name in ('email_change', 'phone_change')) loop
+      execute format($q$update auth.users set %I = '' where %I is null and id in ('00000000-0000-4000-8000-000000000001',
+        '00000000-0000-4000-8000-000000000002', '00000000-0000-4000-8000-000000000003', '00000000-0000-4000-8000-000000000004',
+        '00000000-0000-4000-8000-000000000005')$q$, c.column_name, c.column_name);
+    end loop;
+  end;
   if has_identities then
     execute $q$insert into auth.identities (provider_id, user_id, provider, identity_data, last_sign_in_at, created_at, updated_at)
                select u.id::text, u.id, 'phone',
