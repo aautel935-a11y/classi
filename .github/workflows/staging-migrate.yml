@@ -48,6 +48,7 @@ jobs:
           echo "::notice title=link shape::password still has [ or ] or YOUR-PASSWORD: $(yn 'case "$pass" in *"["*|*"]"*|*YOUR-PASSWORD*) true;; *) false;; esac')"
           echo "::notice title=link shape::password has @ / ? # % or : (must be letters and digits): $(yn 'case "$pass" in *[@/?#%:]*) true;; *) false;; esac')"
           echo "::notice title=link shape::password length at least 12: $(yn '[ ${#pass} -ge 12 ]')"
+          case "$pass" in *"["*|*"]"*|*YOUR-PASSWORD*) echo "::error::the password in STAGING_DB_URL still has brackets or the YOUR-PASSWORD placeholder"; exit 1;; esac
           echo "::notice title=link shape::host is the Supabase pooler on port 5432: $(yn 'case "$hostpart" in *.pooler.supabase.com:5432/postgres*) true;; *) false;; esac')"
       - name: TLS to the staging database
         env: { CA: "${{ vars.SUPABASE_CA_CERT }}" }
@@ -57,6 +58,16 @@ jobs:
           if [ -n "$CA" ]; then printf '%s\n' "$CA" > "$RUNNER_TEMP/supabase-ca.crt"
             { echo "PGSSLMODE=verify-full"; echo "PGSSLROOTCERT=$RUNNER_TEMP/supabase-ca.crt"; } >> "$GITHUB_ENV"; echo "TLS: verify-full"
           else echo "PGSSLMODE=require" >> "$GITHUB_ENV"; echo "::warning::TLS encrypted but not verified: add the SUPABASE_CA_CERT variable"; fi
+      - name: Connection and identity check (must be classi-staging)
+        env: { STAGING_DB_URL: "${{ secrets.STAGING_DB_URL }}" }
+        run: |
+          STAGING_DB_URL="$(printf %s "$STAGING_DB_URL" | tr -d '[:space:]')"
+          # The cluster id of classi-staging (read through the Supabase connector; not a secret). Any other database stops here.
+          want=7702070854497379551
+          got="$(psql "$STAGING_DB_URL" -Atc "select system_identifier from pg_control_system()" 2>/tmp/conn.err)" || {
+            echo "::error title=connection::$(sed -E 's#postgres(ql)?://[^ ]*#[link hidden]#g' /tmp/conn.err | head -1)"; exit 1; }
+          [ "$got" = "$want" ] || { echo "::error title=identity::connected, but this is not the classi-staging database"; exit 1; }
+          echo "::notice title=connection::connected over TLS ($(psql "$STAGING_DB_URL" -Atc "select case when ssl then 'encrypted' else 'NOT encrypted' end from pg_stat_ssl where pid = pg_backend_pid()")); identity: classi-staging; accounts before setup: $(psql "$STAGING_DB_URL" -Atc "select count(*) from auth.users")"
       - uses: supabase/setup-cli@1dedf2c611547ede7232d26866dd3c56ab903bbb   # v1.7.3
         with: { version: 2.120.0 }
       - name: Migrations, seed, jobs, storage, settings
