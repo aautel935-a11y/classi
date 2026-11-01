@@ -1,4 +1,12 @@
 import type { NextConfig } from "next";
+import { deployProblems, deploySummary } from "./lib/deploy-guard";
+
+// Refuse to build a site with the wrong Supabase project or a secret key (checked on Vercel; values never printed).
+if (process.env.VERCEL) {
+  console.log(deploySummary(process.env));
+  const problems = deployProblems(process.env);
+  if (problems.length) throw new Error("deploy check failed:\n- " + problems.join("\n- "));
+}
 
 // Security headers on every response (audit SEC-12).
 // The enforced CSP only covers framing, plugins, <base> and form targets, which cannot break the app; a full
