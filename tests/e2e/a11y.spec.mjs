@@ -2,7 +2,7 @@
 // fail the test; the full list goes to the log. axe-core is installed in CI only (npm install --no-save axe-core).
 import { test, expect } from "@playwright/test";
 import { createRequire } from "node:module";
-import { signUp, phoneFor, sql } from "./helpers.mjs";
+import { signUp, phoneFor, db } from "./helpers.mjs";
 
 const require = createRequire(import.meta.url);
 let axePath = null;
@@ -24,8 +24,8 @@ test.describe("accessibility (axe)", () => {
   test.skip(!axePath, "axe-core not installed");
 
   test("public pages: home, search, offer, teacher, login", async ({ page }, info) => {
-    const offer = (await sql("select id from offerings where active and review_status = 'approved' and type = 'private' limit 1"))[0]?.id;
-    const teacher = (await sql("select id from teachers where verify = 'verified' limit 1"))[0]?.id;
+    const offer = await db.publicOffer(true);
+    const teacher = await db.demoTeacher();
     const pages = [["/", "home"], ["/search", "search"], [`/offer/${offer}`, "offer"], [`/teacher/${teacher}`, "teacher"], ["/login", "login"]];
     const serious = [];
     for (const [url, label] of pages) {

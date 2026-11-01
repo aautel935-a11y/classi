@@ -1,6 +1,6 @@
 // Public pages, read-only (8 scenarios, each on phone and desktop).
 import { test, expect } from "@playwright/test";
-import { expectNoSideScroll, sql } from "./helpers.mjs";
+import { db, expectNoSideScroll } from "./helpers.mjs";
 
 test("1. home: Arabic, right-to-left, no sideways scroll", async ({ page }) => {
   await page.goto("/");
@@ -23,8 +23,8 @@ test("2. search lists offers and filters by type", async ({ page }) => {
 });
 
 test("3. an offer page asks visitors to sign in before booking", async ({ page }) => {
-  const [o] = await sql("select id from offerings where type = 'private' and active order by created_at limit 1");
-  await page.goto(`/offer/${o.id}`);
+  const offer = await db.publicOffer(false);
+  await page.goto(`/offer/${offer}`);
   await expect(page.getByRole("link", { name: "سجّل الدخول للحجز" })).toBeVisible();
   await expectNoSideScroll(page);
 });
@@ -64,9 +64,9 @@ test("7. robots, sitemap, and closed internal endpoints", async ({ request }) =>
 });
 
 test("8. Arabic page with Hebrew and English text stays right-to-left and fits the screen", async ({ page }) => {
-  const [t] = await sql("select id from teachers where verify = 'verified' order by name limit 1");
-  await sql("update teachers set bio = $1 where id = $2", ["أعلّم العبرية للطلاب العرب. שלום, אני מורה לעברית. English welcome too — 5 יחידות לימוד ✓", t.id]);
-  await page.goto(`/teacher/${t.id}`);
+  const teacher = await db.demoTeacher();
+  await db.setDemoBio(teacher, "أعلّم العبرية للطلاب العرب. שלום, אני מורה לעברית. English welcome too — 5 יחידות לימוד ✓");
+  await page.goto(`/teacher/${teacher}`);
   await expect(page.getByText("שלום, אני מורה לעברית", { exact: false })).toBeVisible();
   await expect(page.locator("html")).toHaveAttribute("dir", "rtl");
   await expectNoSideScroll(page);

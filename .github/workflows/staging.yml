@@ -69,7 +69,7 @@ jobs:
           E2E_DB_URL: ${{ secrets.STAGING_E2E_DB_URL }}
           VERCEL_AUTOMATION_BYPASS_SECRET: ${{ secrets.VERCEL_AUTOMATION_BYPASS_SECRET }}
         run: |
-          OFFER="$(psql "$E2E_DB_URL" -Atc "select id from offerings where active and review_status = 'approved' and type = 'private' limit 1")"
+          OFFER="$(psql "$E2E_DB_URL" -Atc "select e2e.public_offer(true)")"
           CHROME="$(node -e "console.log(require('@playwright/test').chromium.executablePath())")"
           # The bypass secret goes only to the staging host (headers, not the URL); Lighthouse gets the resulting
           # deployment-scoped cookie instead of the secret, so the secret never reaches Supabase or any other host.

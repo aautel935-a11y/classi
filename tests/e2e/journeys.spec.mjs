@@ -1,7 +1,7 @@
 // Full journeys with real accounts on the local stack (4 scenarios, phone and desktop):
 // teacher -> admin -> parent booking -> messages and notifications -> cancellation, plus roles and form safety.
 import { test, expect } from "@playwright/test";
-import { expectNoSideScroll, phoneFor, signIn, signUp, sql } from "./helpers.mjs";
+import { db, expectNoSideScroll, phoneFor, signIn, signUp } from "./helpers.mjs";
 
 test.describe.configure({ mode: "serial" });
 
@@ -41,7 +41,7 @@ test("9. teacher: sign up, profile, hours with Saturday, new offer (and the form
   await page.getByRole("button", { name: "حفظ الملف" }).click();
   // Same-page redirect after a server action (with the old root loading.tsx the page stayed on the setup form)
   await expect(page.locator("#hours")).toBeVisible({ timeout: 15_000 });
-  S.teacherId = (await sql("select id from teachers where user_id = $1", [S.teacherUser]))[0].id;
+  S.teacherId = await db.teacherId(S.teacherUser);
 
   // Hours: Sunday-Thursday as suggested, plus Saturday 09:00-13:00 (BUG-01), saved in one transaction (BUG-04)
   const hours = page.locator("#kf-saveAvailability");
@@ -64,11 +64,11 @@ test("9. teacher: sign up, profile, hours with Saturday, new offer (and the form
   await page.locator("#link").fill("https://zoom.us/j/123");
   await page.getByRole("button", { name: "نشر العرض" }).click();
   await page.waitForURL(/\/teach\?ok=published/);
-  S.offerId = (await sql("select id from offerings where teacher_id = $1 order by created_at desc limit 1", [S.teacherId]))[0].id;
+  S.offerId = await db.latestOffer(S.teacherId);
 
   // The admin's part (verification and approval) is done in the database for speed; the admin UI is checked in step 12.
-  await sql("update teachers set verify = 'verified' where id = $1", [S.teacherId]);
-  await sql("update offerings set review_status = 'approved' where id = $1", [S.offerId]);
+  await db.verifyTeacher(S.teacherId);
+  await db.approveOffer(S.offerId);
   await ctx.close();
 });
 
@@ -101,7 +101,7 @@ test("10. parent: sign up, add a child, book a private lesson; booking dialog cl
   await dialog.getByRole("button", { name: "تأكيد الحجز" }).click();
   await page.waitForURL(/\/schedule/);
   await expect(page.getByText("رياضيات للاختبار الآلي").first()).toBeVisible();
-  const b = await sql("select status, child_id is not null as for_child from bookings where offering_id = $1", [S.offerId]);
+  const b = await db.offerBookings(S.offerId);
   expect(b).toEqual([{ status: "confirmed", for_child: true }]);
   await ctx.storageState({ path: `results/parent-${info.project.name}.json` });
   await ctx.close();
@@ -125,14 +125,14 @@ test("11. messages and notifications: parent writes, teacher reads; opening one 
   await tp.waitForLoadState("networkidle"); // opening the conversation marks its message notice read (asynchronously)
   await tp.waitForTimeout(1500);
 
-  const unreadBefore = Number((await sql("select count(*) from notifications where user_id = $1 and read_at is null", [S.teacherUser]))[0].count);
+  const unreadBefore = await db.unread(S.teacherUser);
   expect(unreadBefore).toBeGreaterThan(0);
   await tp.goto("/notifications");
-  const unreadAfterList = Number((await sql("select count(*) from notifications where user_id = $1 and read_at is null", [S.teacherUser]))[0].count);
+  const unreadAfterList = await db.unread(S.teacherUser);
   expect(unreadAfterList, "showing the list does not mark everything read").toBe(unreadBefore);
   await tp.locator("a.notice.unread").first().click();
   await tp.waitForLoadState();
-  const unreadAfterOpen = Number((await sql("select count(*) from notifications where user_id = $1 and read_at is null", [S.teacherUser]))[0].count);
+  const unreadAfterOpen = await db.unread(S.teacherUser);
   expect(unreadAfterOpen).toBe(unreadBefore - 1);
   await t.close();
 });
@@ -145,7 +145,7 @@ test("12. roles, two-step cancellation, and no form data leaking between records
   await pp.goto("/schedule");
   await pp.getByText("إلغاء الحجز").first().click();
   await pp.getByRole("button", { name: "تأكيد الإلغاء" }).click();
-  await expect.poll(async () => (await sql("select status from bookings where offering_id = $1", [S.offerId]))[0].status).toBe("cancelled");
+  await expect.poll(async () => (await db.offerBookings(S.offerId))[0].status).toBe("cancelled");
 
   // KeepForm is scoped per record: a saved copy for course A must never fill course B's form
   await pp.goto("/account?error=x");
@@ -167,7 +167,7 @@ test("12. roles, two-step cancellation, and no form data leaking between records
   const adminPhone = phoneFor(info, 3);
   const a = await browser.newContext(); const ap = await a.newPage();
   const adminId = await signUp(ap, { phone: adminPhone, name: "مدير الاختبار", role: "guardian" });
-  await sql("update profiles set roles = array['admin']::app_role[] where id = $1", [adminId]);
+  await db.makeAdmin(adminId);
   await ap.goto("/admin?tab=subs");
   await expect(ap.getByText("أقل مهلة لحجز حصة خصوصية")).toBeVisible();
   await a.close();

@@ -228,12 +228,13 @@ reset role;
 select t_err('even the database owner cannot cascade-delete booked offers', $$delete from offerings where id = (select priv from ids)$$);
 
 \echo '===== SEC-18 deleting an account keeps the other side''s history'
-update bookings set starts_at = now() - interval '2 days' where id = (select id from bookings where booked_by='60000000-0000-0000-0000-00000000000d' and offering_id=(select priv from ids) order by starts_at limit 1);
+-- the earliest booking that is still live (on some weekdays the earliest one is the cancelled Saturday test booking)
+update bookings set starts_at = now() - interval '2 days' where id = (select id from bookings where booked_by='60000000-0000-0000-0000-00000000000d' and offering_id=(select priv from ids) and status <> 'cancelled' order by starts_at limit 1);
 set role authenticated; set request.jwt.claim.sub='60000000-0000-0000-0000-00000000000d';
 select t_ok('parent deletes the account', $$select delete_my_account('احذف')$$);
 reset role;
 select t_is('past lesson stays with the teacher, anonymised', $$select status || ':' || offline_name || ':' || (booked_by is null)::text from bookings
-   where offering_id=(select priv from ids) and starts_at < now()$$, 'confirmed:حساب محذوف:true');
+   where offering_id=(select priv from ids) and starts_at < now() - interval '1 day'$$, 'confirmed:حساب محذوف:true');
 set role authenticated; set request.jwt.claim.sub='60000000-0000-0000-0000-00000000000c';
 select t_ok('institute owner who rescheduled can still delete the account', $$select reschedule_session((select id from sessions where offering_id=(select crs from ids) and starts_at > now() order by starts_at limit 1), now() + interval '20 days', null)$$);
 select t_ok('…and delete it', $$select delete_my_account('احذف')$$);
