@@ -1,7 +1,15 @@
 {
   "$schema": "https://openapi.vercel.sh/vercel.json",
-  "regions": ["fra1"],
-  "crons": [{ "path": "/api/health/cron", "schedule": "0 5 * * *" }],
+  "regions": [
+    "fra1"
+  ],
+  "crons": [
+    {
+      "path": "/api/health/cron",
+      "schedule": "0 5 * * *"
+    }
+  ],
+  "ignoreCommand": "if [ \"$VERCEL_GIT_COMMIT_REF\" = staging ] && [ \"$NEXT_PUBLIC_DEPLOY_ENV\" != staging ]; then echo \"staging branch: built only by the classi-staging project\"; exit 0; fi; exit 1",
   "git": {
     "deploymentEnabled": {
       "hardening/production-readiness": false,
