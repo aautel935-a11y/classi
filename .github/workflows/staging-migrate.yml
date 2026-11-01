@@ -3,7 +3,8 @@
 # Needs, in the GitHub Environment "staging" (Settings -> Environments -> staging; deployment branches limited to
 # staging-test and staging-migrate, so no other branch, pull request or workflow can read them):
 #   secret   STAGING_DB_URL     connection string of the classi-staging database (Session pooler), never production
-#   variable STAGING_APP_URL    https://classi-staging....vercel.app
+#   variable STAGING_APP_URL    https://classi-staging....vercel.app (until it exists: https://classi-staging.invalid, an
+#                               address that never resolves, so the push job sends its secret nowhere)
 # The secret is given only to the steps that use it (not to the CLI installer).
 name: Staging database
 
@@ -67,14 +68,14 @@ jobs:
           got="$(psql "$STAGING_DB_URL" -Atc "select system_identifier from pg_control_system()" 2>/tmp/conn.err)" || {
             echo "::error title=connection::$(sed -E 's#postgres(ql)?://[^ ]*#[link hidden]#g' /tmp/conn.err | head -1)"; exit 1; }
           [ "$got" = "$want" ] || { echo "::error title=identity::connected, but this is not the classi-staging database"; exit 1; }
-          echo "::notice title=connection::connected over TLS ($(psql "$STAGING_DB_URL" -Atc "select case when ssl then 'encrypted' else 'NOT encrypted' end from pg_stat_ssl where pid = pg_backend_pid()")); identity: classi-staging; accounts before setup: $(psql "$STAGING_DB_URL" -Atc "select count(*) from auth.users")"
+          echo "::notice title=connection::connected (TLS required: PGSSLMODE=$PGSSLMODE, psql refuses a plain connection); identity: classi-staging; accounts before setup: $(psql "$STAGING_DB_URL" -Atc "select count(*) from auth.users")"
       - uses: supabase/setup-cli@1dedf2c611547ede7232d26866dd3c56ab903bbb   # v1.7.3
         with: { version: 2.120.0 }
       - name: Migrations, seed, jobs, storage, settings
         env: { STAGING_DB_URL: "${{ secrets.STAGING_DB_URL }}" }
         run: |
           STAGING_DB_URL="$(printf %s "$STAGING_DB_URL" | tr -d '[:space:]')"
-          STAGING_APP_URL="${STAGING_APP_URL:-https://classi-staging.vercel.app}" sh scripts/staging/setup.sh 2>&1 | tee /tmp/setup.log
+          STAGING_APP_URL="${STAGING_APP_URL:-https://classi-staging.invalid}" sh scripts/staging/setup.sh 2>&1 | tee /tmp/setup.log
       - name: Synthetic accounts and activity for manual testing
         env: { STAGING_DB_URL: "${{ secrets.STAGING_DB_URL }}" }
         run: |
