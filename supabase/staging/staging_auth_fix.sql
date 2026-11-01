@@ -10,7 +10,8 @@ begin
   end if;
   if exists (select 1 from information_schema.columns where table_schema = 'auth' and table_name = 'users' and column_name = 'aud') then
     execute $q$update auth.users set aud = 'authenticated', role = 'authenticated',
-                 instance_id = coalesce(instance_id, '00000000-0000-0000-0000-000000000000')
+                 instance_id = coalesce(instance_id, '00000000-0000-0000-0000-000000000000'),
+                 created_at = coalesce(created_at, now()), updated_at = coalesce(updated_at, now())
                where id in ('00000000-0000-4000-8000-000000000001', '00000000-0000-4000-8000-000000000002',
                             '00000000-0000-4000-8000-000000000003', '00000000-0000-4000-8000-000000000004',
                             '00000000-0000-4000-8000-000000000005')$q$;
