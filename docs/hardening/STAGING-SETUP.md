@@ -87,15 +87,29 @@
 - يظهر شريط «نسخة تجريبية» في كل صفحة؛
 - **لا SMS حقيقي إلا من نشر الإنتاج لمشروع نطاقه classi.click** (`VERCEL_ENV=production` و`VERCEL_PROJECT_PRODUCTION_URL` من Vercel نفسه). أي مشروع آخر، أو معاينة، أو تشغيل محلي، يستعمل وضع الاختبار في 019، حتى لو نُسي `NEXT_PUBLIC_DEPLOY_ENV`.
 
-## الخطوة 4: أسرار اختبار Staging في GitHub
+## الخطوة 4: إعدادات GitHub للاختبارات (يدوياً)
 
-| النوع | الاسم | من أين |
+**بيئة `staging`** (Settings ← Environments ← staging):
+
+| النوع | الاسم | القيمة |
 |---|---|---|
-| Secret **في بيئة `staging`** | `VERCEL_AUTOMATION_BYPASS_SECRET` | Vercel ← classi-staging ← Settings ← Deployment Protection ← **Protection Bypass for Automation** ← Add |
-| Variable في بيئة `staging` | `STAGING_URL` | رابط نشر Staging (`https://classi-staging-….vercel.app`، بلا مسار بعده) |
-| Variable في بيئة `staging` | `STAGING_APP_URL` | الرابط نفسه |
+| Deployment branches | — | `staging-test` **فقط** (احذف `staging-migrate` منها) |
+| Required reviewers | — | أنت (موصى به) |
+| Variable | `STAGING_URL` | `https://classi-staging.vercel.app` |
+| Secret | `VERCEL_AUTOMATION_BYPASS_SECRET` | Vercel ← classi-staging ← Settings ← Deployment Protection ← Protection Bypass for Automation ← Add |
+| Secret | `STAGING_OTP_TEACHER` | رمز `972500000001` كما وضعته في Supabase ← Authentication ← Phone ← Test numbers |
+| Secret | `STAGING_OTP_INSTITUTE` | رمز `972500000002` |
+| Secret | `STAGING_OTP_PARENT` | رمز `972500000003` |
+| Secret | `STAGING_OTP_STUDENT` | رمز `972500000004` |
+| Secret | `STAGING_OTP_ADMIN` | رمز `972500000005` |
+| **احذف** | `STAGING_DB_URL` و`STAGING_E2E_DB_URL` | إن وُجدا هنا أو في Repository secrets. سير العمل يرفض التشغيل إن رآهما |
 
-**بعدها:** أدفع الفرع `staging-test`، فيعمل سير العمل «Staging»، وفيه Playwright (هاتف وكمبيوتر) وaxe وLighthouse على Staging.
+**بيئة `staging-db` (جديدة):**
+- Deployment branches: `staging-migrate` فقط؛
+- Required reviewers: أنت؛
+- Secret `STAGING_DB_URL`: انقله إليها من `staging`.
+
+**تنبيه:** رموز الاختبار في Supabase لها تاريخ انتهاء. حدّثها هناك وفي GitHub معاً عند انتهائها.
 
 ## الخطوة 5: Turnstile لـ Staging (اختياري)
 
@@ -117,46 +131,40 @@
 | لا رسائل حقيقية | `NEXT_PUBLIC_DEPLOY_ENV=staging` يفرض وضع الاختبار (مختبَر)، ولا يوجد رمز 019 في Staging |
 | لا بيانات حقيقية | البيانات مولّدة (`supabase/staging/staging_data.sql`). لا نسخ من الإنتاج |
 
-## حساب الاختبارات الآلية بأقل صلاحيات (`e2e_staging`)
+## الاختبارات الآلية على Staging: دون أي اتصال بقاعدة البيانات (`tests/staging`)
 
-**ما ليس له:**
-- لا صلاحيات على أي جدول.
-- لا SUPERUSER ولا CREATEROLE ولا CREATEDB ولا REPLICATION ولا BYPASSRLS.
-- لا يرث صلاحيات أدوار أخرى (NOINHERIT)، وحدّه 3 اتصالات.
+**قرارك (2/11/2026):** لا حساب قاعدة بيانات للاختبارات. السبب في `SECURITY-NET-PERMISSIONS.md`.
 
-**ما يستطيعه:** فقط استدعاء دوال `e2e.*` (ملف `supabase/staging/e2e_role.sql`). كل دالة:
-- ترفض العمل خارج قاعدة معلَّمة كـ staging؛
-- تعمل فقط على **حسابات الاختبار نفسها**، أي رقم من **قائمة سماح صريحة** (`e2e.test_phones`)، ولا يستطيع الحساب الإضافة إليها:
-  - 1,998 رقماً: `0521000001` إلى `0521000999`، و`0522000001` إلى `0522000999`؛
-  - وفوق ذلك: مسجَّل بالهاتف دون بريد، خلال آخر 24 ساعة؛
-  - كل تشغيل يأخذ رقماً جديداً غير مستعمل (`e2e.next_phone`)؛
-- ترفض الحسابات اليدوية الخمسة، وأي حساب أقدم، وأي حساب له بريد، وأي معلم أو عرض لا يخص حساب اختبار؛
-- تعيد فقط ما يفحصه الاختبار: رقم تعريف، أو رمز دخول لرقم اختبار، أو عدد، أو حالة.
+**كيف تعمل:**
+- **عبر التطبيق وSupabase Auth فقط.** لا رابط PostgreSQL ولا مفتاح service_role.
+- **الحسابات الخمسة الثابتة وحدها،** برموزها الثابتة: `0500000001` إلى `0500000005`. لا تُنشأ حسابات جديدة.
 
-منح دور المدير وتوثيق المعلم واعتماد العرض محصورة في حسابات الاختبار. تعديل النبذة محصور في القوائم التجريبية التي لا حساب لها.
+**ما تختبره (على الهاتف وسطح المكتب):**
+- النسخة معلَّمة وغير مفهرسة، ولا يظهر زر واتساب الدعم؛
+- صفحة عرض تطلب الدخول قبل الحجز؛
+- الصلاحيات: أربعة أدوار تُرفض في `/admin`، والمدير يدخل، وفحص الصحة يُظهر أن SMS غير مُعدّ؛
+- لوحة المعلم ولوحة المعهد؛
+- عزل البيانات: الطالب لا يرى ابن ولي الأمر ولا محادثاته؛
+- حجز ثم إلغاؤه في التشغيل نفسه؛
+- رسالة من ولي الأمر تصل المعلم، مع إشعار.
 
-**مُختبَر (`supabase/tests/e2e_role_test.sql`، 47 فحصاً، ضمن CI):**
-- المسموح على حساب الاختبار؛
-- المرفوض:
-  - رقم 0521 حديث خارج القائمة؛
-  - الحسابات الأخرى؛
-  - تعديل القائمة؛
-  - القراءة المباشرة للجداول والأسرار و`auth.users`؛
-  - دوال المدير؛
-  - إنشاء جداول أو أدوار؛
-  - التحول إلى postgres؛
-- خصائص الحساب، وملكية الدوال، و`search_path` الفارغ، وصلاحيات التنفيذ؛
-- وأن إعادة تشغيل الملف تغلق الحساب.
+**قابلة للإعادة:** الحجز يُلغى في الاختبار نفسه. الرسائل تحمل علامة التشغيل، فتتراكم رسائل تجريبية فقط.
 
-**الخطوات (بعد موافقتك على النسخة النهائية):**
-1. أنفّذ الملف على classi-staging. يُنشأ الحساب **مغلقاً**، بلا كلمة مرور.
-2. أنت: Supabase ← classi-staging ← SQL Editor:
-   `alter role e2e_staging with login password '<كلمة مرور من حروف وأرقام>' valid until '<غداً، مثل 2026-11-03>';`
-   (كلمة المرور تنتهي وحدها.)
-3. GitHub ← Environments ← staging ← سرّ `STAGING_E2E_DB_URL`:
-   `postgresql://e2e_staging.nfipmylyahhogykikuqo:<كلمة المرور>@aws-1-eu-central-1.pooler.supabase.com:5432/postgres`
+**تتوقف فوراً إذا:**
+- كان العنوان غير `https://classi-staging.vercel.app`؛
+- أو وُجد في البيئة رابط PostgreSQL، أو مفتاح `sb_secret_`، أو مفتاح service_role، أو قيمة تشير إلى الإنتاج؛
+- أو حاول المتصفح الوصول إلى classi.click أو مشروع Supabase الإنتاجي. كل طلب يُفحص ويُمنع.
 
-لإغلاقه بعد الاختبارات: `alter role e2e_staging nologin;`
+**لا يُحفظ شيء قد يحمل رمزاً أو جلسة:** لا traces، ولا لقطات شاشة، ولا فيديو، ولا تقرير HTML.
+
+**تشغيل تجريبي في CI** (`STAGING_DRY_RUN`):
+- الاختبارات نفسها على Supabase المحلي، بالحسابات والرموز نفسها (`supabase/config.toml`).
+- يُزال `E2E_DB_URL` من بيئتها لإثبات أنها لا تحتاج قاعدة البيانات.
+- كشف هذا التشغيل خللين في الحسابات التجريبية كانا سيمنعان الدخول على Staging، وأُصلحا في `supabase/staging/staging_auth_fix.sql`.
+
+**قبل أول تشغيل على Staging الحقيقي: بموافقتك فقط.** يجب تطبيق `supabase/staging/staging_auth_fix.sql` على classi-staging:
+- يكرر نفسه دون ضرر، ويخص الحسابات الخمسة فقط؛
+- بدونه لن يستطيع أي حساب تجريبي الدخول.
 
 **سرّ تجاوز حماية Vercel:**
 - اختبارات المتصفح ترسله في رؤوس الطلب، ولخادم Staging فقط، لا في الرابط.
