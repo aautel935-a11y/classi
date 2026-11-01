@@ -156,7 +156,7 @@ test("S6. messages and notifications: parent writes, the teacher sees it and get
   const text = `رسالة اختبار تلقائي ${RUN}`;
   const p = await as(browser, "parent"); const pp = await p.newPage();
   await pp.goto("/messages");
-  await pp.locator("a[href^='/messages/']").first().click();
+  await pp.locator("a[href^='/messages/']").filter({ hasText: "سامر" }).first().click();
   await pp.getByLabel("اكتب رسالة").fill(text);
   await pp.getByRole("button", { name: "إرسال" }).click();
   await expect(pp.getByText(text)).toBeVisible();
@@ -166,7 +166,8 @@ test("S6. messages and notifications: parent writes, the teacher sees it and get
   await tp.goto("/");
   await expect(tp.locator("a.hdr-bell")).toHaveAttribute("aria-label", /جديدة/);
   await tp.goto("/messages");
-  await tp.locator("a[href^='/messages/']").first().click();
+  // the conversation list shows the last message: the parent's new one opens the right conversation
+  await tp.locator("a[href^='/messages/']").filter({ hasText: RUN }).first().click();
   await expect(tp.getByText(text)).toBeVisible();
   await tp.goto("/notifications");
   await expect(tp.locator("a.notice").first()).toBeVisible();
