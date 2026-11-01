@@ -24,7 +24,8 @@ export default defineConfig({
   retries: process.env.CI ? 1 : 0,
   failOnFlakyTests: !!process.env.CI, // a retry may collect evidence, but a test that needed one fails the run
   reporter: [["list"], ["html", { outputFolder: "report", open: "never" }]],
-  use: { baseURL: base, ...(bypass ? { storageState: BYPASS_STATE } : {}), locale: "ar", timezoneId: "Asia/Jerusalem", trace: "retain-on-failure", screenshot: "only-on-failure" },
+  use: { baseURL: base, ...(bypass ? { storageState: BYPASS_STATE } : {}), locale: "ar", timezoneId: "Asia/Jerusalem", // staging: no traces (they would hold the bypass cookie and session tokens)
+    trace: process.env.E2E_TARGET === "staging" ? "off" : "retain-on-failure", screenshot: "only-on-failure" },
   projects: [
     { name: "mobile", use: { ...devices["Pixel 7"] } },
     { name: "desktop", use: { ...devices["Desktop Chrome"], viewport: { width: 1280, height: 800 } } },

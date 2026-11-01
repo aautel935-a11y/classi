@@ -8,6 +8,8 @@ if (url.includes("rfxhqcagdsuhkjzwbawx")) throw new Error("E2E_DB_URL is the pro
 const STAGING = process.env.E2E_TARGET === "staging";
 if (/supabase\.(co|com)/.test(url) && !STAGING) throw new Error("E2E_DB_URL must be the local test database (or set E2E_TARGET=staging)");
 if (STAGING && !url.includes("nfipmylyahhogykikuqo")) throw new Error("E2E_TARGET=staging needs the classi-staging database (nfipmylyahhogykikuqo)");
+// Staging runs as the least-privilege role e2e_staging, never as postgres.
+if (STAGING && !/^postgres(ql)?:\/\/e2e_staging\./.test(url)) throw new Error("staging tests must connect as e2e_staging (STAGING_E2E_DB_URL), not postgres");
 // Staging TLS: verified against Supabase's CA when its certificate is provided (PGSSLROOTCERT, set by the workflow
 // from the SUPABASE_CA_CERT variable); otherwise encrypted without verification, and the workflow warns.
 const ssl = !STAGING ? {} : process.env.PGSSLROOTCERT
@@ -72,7 +74,10 @@ export async function signUp(page, { phone, name, role }) {
   await page.locator("#code").fill(await readCode(phone));
   await page.waitForURL((u) => !u.pathname.startsWith("/login"), { timeout: 20_000 });
   await page.waitForLoadState("networkidle"); // the sign-in page may still be redirecting
-  const rows = await sql("select id from auth.users where phone in ($1, $2)", ["972" + phone.slice(1), "+972" + phone.slice(1)]);
+  // staging: the least-privilege test role reads accounts only through one narrow lookup (supabase/staging/e2e_role.sql)
+  const rows = STAGING
+    ? await sql("select public.e2e_user_id_by_phone($1) as id", ["972" + phone.slice(1)])
+    : await sql("select id from auth.users where phone in ($1, $2)", ["972" + phone.slice(1), "+972" + phone.slice(1)]);
   return rows[0]?.id;
 }
 

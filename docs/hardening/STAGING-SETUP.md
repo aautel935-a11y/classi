@@ -108,3 +108,43 @@
 | قاعدة Staging لا تستدعي تطبيق الإنتاج | `dispatch_url` يشير إلى Staging، ويُفحص بعد التجهيز |
 | لا رسائل حقيقية | `NEXT_PUBLIC_DEPLOY_ENV=staging` يفرض وضع الاختبار (مختبَر)، ولا يوجد رمز 019 في Staging |
 | لا بيانات حقيقية | البيانات مولّدة (`supabase/staging/staging_data.sql`). لا نسخ من الإنتاج |
+
+## حساب الاختبارات الآلية بأقل صلاحيات (`e2e_staging`)
+
+**الهدف:** اختبارات المتصفح على Staging لا تتصل بقاعدة البيانات كمدير كامل (`postgres`)، بل بحساب لا يستطيع إلا:
+- قراءة رموز الدخول والحجوزات والإشعارات والعروض والمعلمين؛
+- البحث عن حساب برقم الهاتف، عبر دالة واحدة ضيقة؛
+- ثلاثة تعديلات يقوم بها المدير عادةً: توثيق معلم، اعتماد عرض، منح دور المدير لحساب اختبار.
+
+**ممنوع عليه:** الأسرار، والرسائل، والأطفال، والدفعات، وأي حذف، وأي جدول في `auth`. جُرّب هذا داخل معاملة أُلغيت ولم تُحفظ.
+
+**الخطوات (بعد موافقتك):**
+1. أنفّذ `supabase/staging/e2e_role.sql` على classi-staging. يُنشأ الحساب **مغلقاً**، بلا كلمة مرور.
+2. أنت: Supabase ← classi-staging ← SQL Editor:
+   `alter role e2e_staging with login password '<كلمة مرور من حروف وأرقام>';`
+3. GitHub ← Environments ← staging ← سرّ `STAGING_E2E_DB_URL`:
+   `postgresql://e2e_staging.nfipmylyahhogykikuqo:<كلمة المرور>@aws-1-eu-central-1.pooler.supabase.com:5432/postgres`
+
+سير العمل يرفض أي رابط لا يبدأ بـ `e2e_staging.nfipmylyahhogykikuqo`.
+
+**سرّ تجاوز حماية Vercel:**
+- اختبارات المتصفح ترسله في رؤوس الطلب، ولخادم Staging فقط، لا في الرابط.
+- Lighthouse يأخذ بدلاً منه ملف تعريف (cookie) قصير العمر خاصاً بالنشر، فلا يصل السر إلى Supabase أو غيره.
+- تسجيل التتبع (traces) مُعطّل على Staging.
+- لا تُرفع أي ملفات من التشغيل.
+
+## الإيقاف الطارئ (Rollback) لنشر Staging ناجح
+
+إعادة `exit 1` **لا تكفي**: فشل البناء الجديد لا يوقف النشر الناجح السابق. بالترتيب، الأسرع أولاً:
+
+| # | الإجراء | الأثر |
+|---|---|---|
+| 1 | Vercel ← classi-staging ← Settings ← General ← **Pause Project** | كل عناوين المشروع تتوقف فوراً (`503`). الأسرع، ويُلغى بـ Resume |
+| 2 | Deployments ← كل نشر ناجح ← **Delete** | يحذف النشر نفسه، فلا يمكن إعادته بأي رابط |
+| 3 | Deployment Protection ← Protection Bypass for Automation ← **Revoke**، واحذف `VERCEL_AUTOMATION_BYPASS_SECRET` من GitHub | يبطل أي سر تجاوز مسرّب |
+| 4 | Build Command ← `exit 1` | يمنع أي نشر جديد من فرع `staging` |
+| 5 | (عند الحاجة) Supabase ← classi-staging ← API Keys ← تدوير مفتاح anon، و`alter role e2e_staging nologin;` | يقطع وصول أي نسخة قديمة للقاعدة |
+
+**الحماية (Vercel Authentication على كل النشرات) تبقى مفعّلة في كل الأحوال**، فلا يصل للموقع إلا أعضاء فريق classi.
+
+**إن وافقت مسبقاً**، يمكنني تنفيذ الخطوة 1 فوراً عبر ربط Vercel عند أي مشكلة، ثم أبلغك.
