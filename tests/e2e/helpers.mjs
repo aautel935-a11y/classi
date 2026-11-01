@@ -1,14 +1,22 @@
 import pg from "pg";
+import { readFileSync } from "node:fs";
 import { expect } from "@playwright/test";
 
 const url = process.env.E2E_DB_URL || "postgresql://postgres:postgres@127.0.0.1:54322/postgres";
 // The local stack, or the STAGING project when E2E_TARGET=staging. Never the production project.
 if (url.includes("rfxhqcagdsuhkjzwbawx")) throw new Error("E2E_DB_URL is the production project");
-if (/supabase\.(co|com)/.test(url) && process.env.E2E_TARGET !== "staging") throw new Error("E2E_DB_URL must be the local test database (or set E2E_TARGET=staging)");
+const STAGING = process.env.E2E_TARGET === "staging";
+if (/supabase\.(co|com)/.test(url) && !STAGING) throw new Error("E2E_DB_URL must be the local test database (or set E2E_TARGET=staging)");
+if (STAGING && !url.includes("nfipmylyahhogykikuqo")) throw new Error("E2E_TARGET=staging needs the classi-staging database (nfipmylyahhogykikuqo)");
+// Staging TLS: verified against Supabase's CA when its certificate is provided (PGSSLROOTCERT, set by the workflow
+// from the SUPABASE_CA_CERT variable); otherwise encrypted without verification, and the workflow warns.
+const ssl = !STAGING ? {} : process.env.PGSSLROOTCERT
+  ? { ssl: { ca: readFileSync(process.env.PGSSLROOTCERT, "utf8"), rejectUnauthorized: true } }
+  : { ssl: { rejectUnauthorized: false } };
 
 /** One query against the local test database (superuser: plays the admin / reads codes). */
 export async function sql(text, params = []) {
-  const c = new pg.Client({ connectionString: url, ...(process.env.E2E_TARGET === "staging" ? { ssl: { rejectUnauthorized: false } } : {}) });
+  const c = new pg.Client({ connectionString: url, ...ssl });
   await c.connect();
   try { return (await c.query(text, params)).rows; } finally { await c.end(); }
 }

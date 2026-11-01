@@ -114,8 +114,8 @@ jobs:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with: { node-version: 22, cache: npm }
-      - uses: supabase/setup-cli@v1
-        with: { version: latest }
+      - uses: supabase/setup-cli@1dedf2c611547ede7232d26866dd3c56ab903bbb   # v1.7.3
+        with: { version: 2.120.0 }   # the same CLI as the staging database workflow
       - name: Start local Supabase (migrations + seed)
         run: supabase start -x studio,imgproxy,edge-runtime,logflare,vector,supavisor,realtime 2>&1 | sed -E 's/(sb_(publishable|secret)_)[A-Za-z0-9_-]+/\1[redacted]/g; s/[0-9a-f]{64}/[redacted]/g; s/eyJ[A-Za-z0-9._-]+/[redacted]/g' > /tmp/supabase.log; tail -3 /tmp/supabase.log
       - name: Local keys

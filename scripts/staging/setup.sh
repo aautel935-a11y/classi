@@ -45,9 +45,11 @@ P -f "$REPO/scripts/db/storage-setup.sql" 2>&1 | grep -v NOTICE || true
 [ "$(Q -c "select count(*) from storage.buckets where id = 'avatars'")" = 1 ] || { echo "FAIL: photo bucket missing"; exit 1; }
 
 # 4. Server-to-server settings: the database calls the STAGING app; a fresh random secret (never printed).
+#    deploy_env=staging marks this database as staging: supabase/staging/staging_data.sql refuses any database without it.
 P -c "insert into public.app_secrets (key, value) values
          ('dispatch_url', '$STAGING_APP_URL/api/push/dispatch'),
-         ('dispatch_secret', replace(gen_random_uuid()::text || gen_random_uuid()::text, '-', ''))
+         ('dispatch_secret', replace(gen_random_uuid()::text || gen_random_uuid()::text, '-', '')),
+         ('deploy_env', 'staging')
        on conflict (key) do update set value = excluded.value"
 
 # 5. Checks

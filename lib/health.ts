@@ -1,4 +1,4 @@
-import { sendSms, smsConfigured } from "@/lib/sms";
+import { realSmsAllowed, sendSms, smsConfigured } from "@/lib/sms";
 import { publicClient } from "./supabase/public";
 
 export type Check = { name: string; label: string; status: "ok" | "fail" | "skipped"; detail: string; ms: number };
@@ -71,7 +71,12 @@ export async function runHealthChecks({ external = true }: { external?: boolean 
       // 019's test endpoint checks the token and request without sending anything.
       const r = await sendSms("0500000000", "Classi health check", true);
       if (!r.ok) throw new Error(`019 رفض الطلب: ${r.detail}`);
-      return "الحساب والمفتاح سليمان";
+      // A production deployment in test mode would accept every request and deliver nothing (no sign-in codes).
+      if (process.env.VERCEL_ENV === "production" && !realSmsAllowed() && process.env.NEXT_PUBLIC_DEPLOY_ENV !== "staging")
+        throw new Error("الرسائل في وضع الاختبار على الإنتاج: لن تصل رموز الدخول. تحقق من SMS_019_TEST ومن نطاق المشروع classi.click");
+      if (process.env.NEXT_PUBLIC_DEPLOY_ENV === "staging" && realSmsAllowed() === false && /classi\.click/.test(process.env.VERCEL_PROJECT_PRODUCTION_URL ?? ""))
+        throw new Error("مشروع classi.click مضبوط كـ Staging (NEXT_PUBLIC_DEPLOY_ENV=staging): لن تصل رموز الدخول والموقع غير مفهرس");
+      return realSmsAllowed() ? "الحساب والمفتاح سليمان (إرسال حقيقي)" : "الحساب والمفتاح سليمان (وضع الاختبار: لا يُرسل شيء)";
     })]),
   ]);
   return { ok: checks.every((c) => c.status !== "fail"), checked_at: new Date().toISOString(), checks };

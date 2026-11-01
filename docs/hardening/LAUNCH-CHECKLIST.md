@@ -91,7 +91,8 @@
 | حساب | حساب 019 فعّال برصيد كافٍ. السقف اليومي في القاعدة: 400 رسالة، و6 لكل مستخدم (قابلة للتعديل من لوحة الأدمن) |
 | API token | 019 ← Settings ← API Token Management ← رمز جديد للإنتاج 🔒، ورمز آخر لـ Staging إن أمكن |
 | اسم المرسل | `Classi` معتمد لدى 019 (بعض المشغّلين يطلبون تسجيله) |
-| Staging | `SMS_019_TEST=1`: يتحقق من الطلب دون إرسال. للتجربة الحقيقية: رقمك فقط، ثم أعد `SMS_019_TEST=1` |
+| **شرط الإرسال الحقيقي (المرحلة 5)** | الكود لا يرسل SMS حقيقياً إلا إذا: `VERCEL_ENV=production`، و`VERCEL_PROJECT_PRODUCTION_URL` هو `classi.click` أو `www.classi.click`، و`NEXT_PUBLIC_DEPLOY_ENV` ليس `staging`، و`SMS_019_TEST` ليس `1`. **قبل النشر:** Vercel ← مشروع الإنتاج ← Settings ← Environment Variables ← خيار **Automatically expose System Environment Variables** مفعّل (الافتراضي)، والنطاق الأساسي classi.click. **بعد النشر:** لوحة الأدمن ← فحص الصحة ← SMS يقول «إرسال حقيقي». إن قال «وضع الاختبار على الإنتاج» فرموز الدخول لن تصل: أوقف المرحلة |
+| Staging | لا يرسل أبداً (المشروع ليس classi.click). `SMS_019_TEST=1` طبقة إضافية. لا يوجد إرسال حقيقي من Staging حتى لرقمك |
 | مراقبة | لوحة الأدمن ← تبويب العمليات: إحصاءات SMS (`admin_sms_stats`) |
 
 ## 6. ترتيب الـ migrations (تحقق آلي)

@@ -4,9 +4,17 @@
 -- Sign-in: Supabase -> Authentication -> Sign In / Providers -> Phone -> "Test phone numbers and OTPs":
 --   972500000001 (teacher), 972500000002 (institute), 972500000003 (parent), 972500000004 (student), 972500000005 (admin)
 -- with codes chosen by the owner there. These numbers are reserved for testing and never receive real messages.
--- Refuses to run twice or on a database that already holds more than the seed. One transaction: all or nothing.
+-- Refuses: a database not marked staging by scripts/staging/setup.sh (app_secrets deploy_env = 'staging', so never
+-- production, however few accounts it has), a database whose dispatcher points at classi.click, a second run, or a
+-- database that already holds more than the seed. One transaction: all or nothing.
 begin;
 do $$ begin
+  if not exists (select 1 from public.app_secrets where key = 'deploy_env' and value = 'staging') then
+    raise exception 'refusing: this database is not marked staging (run scripts/staging/setup.sh on the staging project first)';
+  end if;
+  if exists (select 1 from public.app_secrets where key = 'dispatch_url' and value ilike '%classi.click%') then
+    raise exception 'refusing: dispatch_url points at the production site';
+  end if;
   if exists (select 1 from auth.users where id = '00000000-0000-4000-8000-000000000001') then
     raise exception 'staging data already loaded';
   end if;

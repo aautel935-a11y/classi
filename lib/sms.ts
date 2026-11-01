@@ -3,16 +3,24 @@
 //   SMS_019_USER   – the 019 account username
 //   SMS_SENDER     – sender name shown on the phone, up to 11 English letters/digits (default "Classi")
 //   SMS_019_TEST=1 – optional: validate requests without sending (019 test endpoint)
+// Real sending also needs the production deployment of the classi.click project (realSmsAllowed below).
 
 export const smsConfigured = () => !!(process.env.SMS_019_TOKEN && process.env.SMS_019_USER);
 
 const localPhone = (p: string) => p.replace(/[^0-9+]/g, "").replace(/^\+?972/, "0");
 
-// A staging build always uses 019's test endpoint (nothing is sent, nothing is charged), whatever else is set.
-const testMode = () => process.env.SMS_019_TEST === "1" || process.env.NEXT_PUBLIC_DEPLOY_ENV === "staging";
+/** Real messages go out only from the production deployment of the production project: Vercel's own
+ * VERCEL_ENV=production, the project's production domain is classi.click, and the build is not marked staging.
+ * Anything else (staging, previews, local, a staging variable copied into production) uses 019's test endpoint,
+ * where nothing is sent or charged. lib/health.ts reports a production deployment that ended up in test mode. */
+export function realSmsAllowed(env: Record<string, string | undefined> = process.env): boolean {
+  const host = (env.VERCEL_PROJECT_PRODUCTION_URL ?? "").toLowerCase().replace(/^https?:\/\//, "").replace(/\/.*$/, "");
+  return env.VERCEL_ENV === "production" && /^(www\.)?classi\.click$/.test(host)
+    && env.NEXT_PUBLIC_DEPLOY_ENV !== "staging" && env.SMS_019_TEST !== "1";
+}
 
-export async function sendSms(phone: string, message: string, testArg = testMode()): Promise<{ ok: boolean; detail: string }> {
-  const test = testArg || process.env.NEXT_PUBLIC_DEPLOY_ENV === "staging";   // staging: never a real message, even for sign-in codes
+export async function sendSms(phone: string, message: string, testArg = false): Promise<{ ok: boolean; detail: string }> {
+  const test = testArg || !realSmsAllowed();   // even sign-in codes (testArg=false) never really go out outside production
   const token = process.env.SMS_019_TOKEN;
   const user = process.env.SMS_019_USER;
   if (!token || !user) return { ok: false, detail: "not configured" };
