@@ -134,6 +134,15 @@ jobs:
           npx next build 2>&1 | tee /tmp/e2e-build.log
           (npx next start -p 3000 > /tmp/next.log 2>&1 &)
           npx --yes wait-on@8 -t 60000 http://localhost:3000/
+      - name: Staging suite dry run (local stack, the five staging accounts, no database access from the tests)
+        run: |
+          # same accounts and data as classi-staging (supabase/staging/staging_data.sql), fixed codes from config.toml
+          psql "$E2E_DB_URL" -v ON_ERROR_STOP=1 -q -c "insert into public.app_secrets (key, value) values ('deploy_env', 'staging') on conflict (key) do update set value = excluded.value"
+          psql "$E2E_DB_URL" -v ON_ERROR_STOP=1 -q -f supabase/staging/staging_data.sql > /tmp/staging-dry-data.log 2>&1
+          # the suite must work with no database connection in reach: E2E_DB_URL is removed from its environment
+          env -u E2E_DB_URL STAGING_DRY_RUN=1 BASE_URL=http://localhost:3000 \
+            STAGING_OTP_TEACHER=111111 STAGING_OTP_INSTITUTE=222222 STAGING_OTP_PARENT=333333 STAGING_OTP_STUDENT=444444 STAGING_OTP_ADMIN=555555 \
+            npx playwright test -c tests/staging/playwright.config.mjs 2>&1 | tee /tmp/staging-dry.log
       - name: Playwright
         env: { BASE_URL: "http://localhost:3000" }
         run: npx playwright test -c tests/e2e/playwright.config.mjs --reporter=list 2>&1 | tee /tmp/e2e.log
@@ -161,7 +170,7 @@ jobs:
           grep -a '\[page\]' /tmp/e2e.log > /tmp/e2e-pages.log || true
           grep -a '\[axe\]' /tmp/e2e.log | sort -u > /tmp/axe.log || true
           sed 's/\x1b\[[0-9;]*m//g' /tmp/e2e.log | grep -aE '^ +[0-9]+ (passed|failed|flaky|skipped|did not run)|✘|^ +\[(mobile|desktop)\] ›' > /tmp/e2e-summary.log || true
-          sh .github/report.sh "e2e" /tmp/supabase.log /tmp/e2e-build.log /tmp/e2e-summary.log /tmp/e2e.log /tmp/axe.log /tmp/lighthouse.log /tmp/restore.log /tmp/e2e-pages.log /tmp/next.log /tmp/auth.log /tmp/db.log
+          sh .github/report.sh "e2e" /tmp/staging-dry.log /tmp/staging-dry-data.log /tmp/supabase.log /tmp/e2e-build.log /tmp/e2e-summary.log /tmp/e2e.log /tmp/axe.log /tmp/lighthouse.log /tmp/restore.log /tmp/e2e-pages.log /tmp/next.log /tmp/auth.log /tmp/db.log
       - uses: actions/upload-artifact@v4
         if: always()
         with: { name: playwright-report, path: "tests/e2e/report\ntests/e2e/results", retention-days: 7 }

@@ -52,6 +52,15 @@ max_frequency = "1s"
 
 # The local stack only turns phone sign-in on when a provider is listed. These values are placeholders (no account,
 # nothing is ever sent through Twilio): the send_sms hook below takes over delivery.
+# The five staging test accounts (supabase/staging/staging_data.sql) sign in with fixed codes, as on classi-staging
+# (local stack only; used by the CI dry run of tests/staging).
+[auth.sms.test_otp]
+972500000001 = "111111"
+972500000002 = "222222"
+972500000003 = "333333"
+972500000004 = "444444"
+972500000005 = "555555"
+
 [auth.sms.twilio]
 enabled = true
 account_sid = "AC00000000000000000000000000000000"

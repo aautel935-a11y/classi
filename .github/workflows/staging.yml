@@ -1,11 +1,12 @@
-# Tests against the hosted STAGING deployment (classi-staging on Vercel + the classi-staging Supabase project).
-# Runs when the branch "staging-test" is pushed (a pointer to the commit deployed on staging).
-# Needs, in the GitHub Environment "staging" (deployment branches limited to staging-test and staging-migrate;
-# never in code or chat). Secrets are given only to the steps that use them, never to npm install scripts:
-#   variable STAGING_URL                       https://classi-staging-....vercel.app (the staging deployment)
-#   secret   STAGING_E2E_DB_URL                the least-privilege test role e2e_staging on classi-staging (supabase/staging/e2e_role.sql),
-#                                              never the postgres connection
+# Tests against the hosted STAGING deployment (classi-staging on Vercel + the classi-staging Supabase project),
+# through the app and Supabase Auth only: NO database connection and NO service keys (tests/staging).
+# Runs when the branch "staging-test" is pushed, or by hand. Needs, in the GitHub Environment "staging"
+# (deployment branch limited to staging-test; never in code or chat):
+#   variable STAGING_URL                       https://classi-staging.vercel.app
 #   secret   VERCEL_AUTOMATION_BYPASS_SECRET   classi-staging -> Settings -> Deployment Protection -> Protection Bypass
+#   secrets  STAGING_OTP_TEACHER / _INSTITUTE / _PARENT / _STUDENT / _ADMIN
+#            the fixed codes of the five Supabase test numbers 972500000001..05 (Authentication -> Phone)
+# The Environment must NOT contain a database connection (STAGING_DB_URL lives in the separate "staging-db").
 name: Staging
 
 on:
@@ -30,64 +31,60 @@ jobs:
     timeout-minutes: 40
     environment: staging
     env:
-      E2E_TARGET: staging
       BASE_URL: ${{ vars.STAGING_URL }}
     steps:
       - uses: actions/checkout@v4
-      - name: Check the target is staging (never production)
+      - name: Check the target is staging and no database credential is in reach
         env:
-          E2E_DB_URL: ${{ secrets.STAGING_E2E_DB_URL }}
           VERCEL_AUTOMATION_BYPASS_SECRET: ${{ secrets.VERCEL_AUTOMATION_BYPASS_SECRET }}
+          # referenced only to prove they are absent from this Environment
+          LEFTOVER_DB_URL: ${{ secrets.STAGING_DB_URL }}
+          LEFTOVER_E2E_DB_URL: ${{ secrets.STAGING_E2E_DB_URL }}
         run: |
-          [ -n "$BASE_URL" ] && [ -n "$E2E_DB_URL" ] && [ -n "$VERCEL_AUTOMATION_BYPASS_SECRET" ] || { echo "::error::staging variables or secrets are not set"; exit 1; }
-          echo "$BASE_URL" | grep -qE '^https://classi-staging[a-z0-9-]*\.vercel\.app/?$' || { echo "::error::STAGING_URL is not a classi-staging deployment (https://classi-staging-....vercel.app)"; exit 1; }
-          case "$E2E_DB_URL" in *rfxhqcagdsuhkjzwbawx*) echo "::error::the test database link is the production project"; exit 1;; esac
-          case "$E2E_DB_URL" in postgresql://e2e_staging.nfipmylyahhogykikuqo:*|postgres://e2e_staging.nfipmylyahhogykikuqo:*) ;; *) echo "::error::STAGING_E2E_DB_URL must connect as e2e_staging to classi-staging (not postgres, not another project)"; exit 1;; esac
+          [ "${BASE_URL%/}" = "https://classi-staging.vercel.app" ] || { echo "::error::STAGING_URL must be exactly https://classi-staging.vercel.app"; exit 1; }
+          [ -n "$VERCEL_AUTOMATION_BYPASS_SECRET" ] || { echo "::error::VERCEL_AUTOMATION_BYPASS_SECRET is not set in Environment staging"; exit 1; }
+          [ -z "$LEFTOVER_DB_URL$LEFTOVER_E2E_DB_URL" ] || { echo "::error::a database connection is visible to this job: remove STAGING_DB_URL / STAGING_E2E_DB_URL from Environment staging (and from repository secrets)"; exit 1; }
           echo "target: $BASE_URL"
-      - name: TLS to the staging database
-        env: { CA: "${{ vars.SUPABASE_CA_CERT }}" }
-        run: |
-          # Supabase's CA certificate (public; Supabase -> classi-staging -> Database settings -> SSL -> Download) as the
-          # repository variable SUPABASE_CA_CERT turns on full verification; without it the connection is encrypted only.
-          if [ -n "$CA" ]; then printf '%s\n' "$CA" > "$RUNNER_TEMP/supabase-ca.crt"
-            { echo "PGSSLMODE=verify-full"; echo "PGSSLROOTCERT=$RUNNER_TEMP/supabase-ca.crt"; } >> "$GITHUB_ENV"; echo "TLS: verify-full"
-          else echo "PGSSLMODE=require" >> "$GITHUB_ENV"; echo "::warning::TLS encrypted but not verified: add the SUPABASE_CA_CERT variable"; fi
       - uses: actions/setup-node@v4
         with: { node-version: 22, cache: npm }
-      - name: npm ci + browsers
+      - name: npm ci + browser
         run: |
           npm ci --no-audit --no-fund && npx playwright install --with-deps chromium
-          npm install --no-save --no-audit --no-fund axe-core@4.10.2 lighthouse@12.6.1
-      - name: Playwright against staging (phone + desktop)
+          npm install --no-save --no-audit --no-fund lighthouse@12.6.1
+      - name: Staging journeys (phone + desktop), UI only
         env:
-          E2E_DB_URL: ${{ secrets.STAGING_E2E_DB_URL }}
           VERCEL_AUTOMATION_BYPASS_SECRET: ${{ secrets.VERCEL_AUTOMATION_BYPASS_SECRET }}
-        run: npx playwright test -c tests/e2e/playwright.config.mjs --reporter=list 2>&1 | tee /tmp/e2e.log
+          STAGING_OTP_TEACHER: ${{ secrets.STAGING_OTP_TEACHER }}
+          STAGING_OTP_INSTITUTE: ${{ secrets.STAGING_OTP_INSTITUTE }}
+          STAGING_OTP_PARENT: ${{ secrets.STAGING_OTP_PARENT }}
+          STAGING_OTP_STUDENT: ${{ secrets.STAGING_OTP_STUDENT }}
+          STAGING_OTP_ADMIN: ${{ secrets.STAGING_OTP_ADMIN }}
+        run: npx playwright test -c tests/staging/playwright.config.mjs 2>&1 | tee /tmp/e2e.log
       - name: Lighthouse against staging
         if: always()
         env:
-          E2E_DB_URL: ${{ secrets.STAGING_E2E_DB_URL }}
           VERCEL_AUTOMATION_BYPASS_SECRET: ${{ secrets.VERCEL_AUTOMATION_BYPASS_SECRET }}
         run: |
-          OFFER="$(psql "$E2E_DB_URL" -Atc "select e2e.public_offer(true)")"
           CHROME="$(node -e "console.log(require('@playwright/test').chromium.executablePath())")"
           # The bypass secret goes only to the staging host (headers, not the URL); Lighthouse gets the resulting
           # deployment-scoped cookie instead of the secret, so the secret never reaches Supabase or any other host.
           JWT="$(curl -s -o /dev/null -D - -H "x-vercel-protection-bypass: $VERCEL_AUTOMATION_BYPASS_SECRET" -H "x-vercel-set-bypass-cookie: true" "$BASE_URL/" | tr -d '\r' | sed -n 's/^[Ss]et-[Cc]ookie: _vercel_jwt=\([^;]*\).*/\1/p' | head -1)"
           [ -n "$JWT" ] || { echo "::error::no bypass cookie from the staging host"; exit 1; }
           echo "::add-mask::$JWT"
+          # an offer id from the public search page (no database access)
+          OFFER="$(curl -s -H "Cookie: _vercel_jwt=$JWT" "$BASE_URL/search" | grep -o '/offer/[0-9a-f-]\{36\}' | head -1)"
           echo "page | form factor | performance | accessibility | best practices | SEO | LCP ms"
-          for p in "/" "/search" "/offer/$OFFER"; do for ff in mobile desktop; do
+          for p in "/" "/search" "$OFFER"; do [ -n "$p" ] || continue; for ff in mobile desktop; do
             [ "$ff" = desktop ] && preset="--preset=desktop" || preset=""
             CHROME_PATH="$CHROME" npx --no-install lighthouse "$BASE_URL$p" $preset --quiet --chrome-flags="--headless=new --no-sandbox" \
               --extra-headers="{\"Cookie\":\"_vercel_jwt=$JWT\"}" \
               --only-categories=performance,accessibility,best-practices,seo --output=json --output-path=/tmp/lh.json >/dev/null 2>&1 || { echo "$p | $ff | failed"; continue; }
             node -e 'const r=require("/tmp/lh.json"),c=r.categories,a=r.audits,s=k=>Math.round((c[k]?.score??0)*100);console.log([process.argv[1],process.argv[2],s("performance"),s("accessibility"),s("best-practices"),s("seo"),Math.round(a["largest-contentful-paint"].numericValue)].join(" | "))' "$p" "$ff"
           done; done 2>&1 | tee /tmp/lighthouse.log
+          rm -f /tmp/lh.json
       - name: Report (annotations)
         if: always()
         run: |
           sed 's/\x1b\[[0-9;]*m//g' /tmp/e2e.log | grep -aE '^ +[0-9]+ (passed|failed|flaky|skipped|did not run)|✘|^ +\[(mobile|desktop)\] ›' > /tmp/e2e-summary.log || true
-          grep -a '\[axe\]' /tmp/e2e.log | sort -u > /tmp/axe.log || true
-          grep -a '\[page\]' /tmp/e2e.log > /tmp/e2e-pages.log || true
-          sh .github/report.sh "staging" /tmp/e2e-summary.log /tmp/e2e.log /tmp/axe.log /tmp/lighthouse.log /tmp/e2e-pages.log
+          sh .github/report.sh "staging" /tmp/e2e-summary.log /tmp/e2e.log /tmp/lighthouse.log
+          rm -f "$RUNNER_TEMP"/classi-staging-bypass.json

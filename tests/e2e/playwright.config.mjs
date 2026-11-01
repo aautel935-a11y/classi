@@ -1,21 +1,13 @@
-// Browser tests. They run against BASE_URL (CI: a production build on localhost with a local Supabase stack) and
-// talk to that stack's database (E2E_DB_URL) only to read sign-in codes and to play the admin's part.
-// Never point BASE_URL or E2E_DB_URL at production.
+// LOCAL browser tests. They run against BASE_URL (CI: a production build on localhost with a local Supabase stack)
+// and talk to that stack's database (E2E_DB_URL) only to read sign-in codes and to play the admin's part.
+// Hosted targets are refused: the hosted staging suite is tests/staging (no database access at all).
 import { defineConfig, devices } from "@playwright/test";
-import { BYPASS_STATE } from "./staging-state.mjs";
 
 const base = process.env.BASE_URL || "http://localhost:3000";
-if (/classi\.click/.test(base)) throw new Error("E2E must not run against production");
-// A hosted target is allowed only for the staging project (classi-staging-*.vercel.app) with E2E_TARGET=staging.
-if (/vercel\.app/.test(base) && !(process.env.E2E_TARGET === "staging" && /^https:\/\/classi-staging[a-z0-9-]*\.vercel\.app\/?$/.test(base)))
-  throw new Error("hosted E2E runs only against the classi-staging project");
-// Staging deployments are protected by Vercel Authentication: a global setup turns CI's automation bypass secret
-// into a cookie for the staging host only (a header on every request would also reach Supabase and break CORS).
-const bypass = !!process.env.VERCEL_AUTOMATION_BYPASS_SECRET;
+if (!/^http:\/\/(localhost|127\.0\.0\.1)(:\d+)?\/?$/.test(base)) throw new Error("local E2E runs only against localhost (staging: tests/staging)");
 
 export default defineConfig({
   testDir: ".",
-  ...(bypass ? { globalSetup: "./staging-bypass.mjs" } : {}),
   outputDir: "results",
   timeout: 60_000,
   expect: { timeout: 10_000 },
@@ -24,8 +16,7 @@ export default defineConfig({
   retries: process.env.CI ? 1 : 0,
   failOnFlakyTests: !!process.env.CI, // a retry may collect evidence, but a test that needed one fails the run
   reporter: [["list"], ["html", { outputFolder: "report", open: "never" }]],
-  use: { baseURL: base, ...(bypass ? { storageState: BYPASS_STATE } : {}), locale: "ar", timezoneId: "Asia/Jerusalem", // staging: no traces (they would hold the bypass cookie and session tokens)
-    trace: process.env.E2E_TARGET === "staging" ? "off" : "retain-on-failure", screenshot: "only-on-failure" },
+  use: { baseURL: base, locale: "ar", timezoneId: "Asia/Jerusalem", trace: "retain-on-failure", screenshot: "only-on-failure" },
   projects: [
     { name: "mobile", use: { ...devices["Pixel 7"] } },
     { name: "desktop", use: { ...devices["Desktop Chrome"], viewport: { width: 1280, height: 800 } } },

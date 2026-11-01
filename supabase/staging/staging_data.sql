@@ -40,6 +40,7 @@ do $$ begin
     execute $q$update auth.users set phone_confirmed_at = now() where id::text like '00000000-0000-4000-8000-00000000000_'$q$;
   end if;
 end $$;
+\ir staging_auth_fix.sql
 update profiles set full_name = 'معلم تجريبي',      roles = '{teacher}',         active_role = 'teacher'   where id = '00000000-0000-4000-8000-000000000001';
 update profiles set full_name = 'صاحب معهد تجريبي', roles = '{institute}',       active_role = 'institute' where id = '00000000-0000-4000-8000-000000000002';
 update profiles set full_name = 'ولي أمر تجريبي',   roles = '{guardian}',        active_role = 'guardian'  where id = '00000000-0000-4000-8000-000000000003';

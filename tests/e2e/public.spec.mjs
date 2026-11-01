@@ -72,12 +72,3 @@ test("8. Arabic page with Hebrew and English text stays right-to-left and fits t
   await expectNoSideScroll(page);
 });
 
-test("S. a staging build is marked and never indexed", async ({ page, request }) => {
-  test.skip(process.env.E2E_TARGET !== "staging", "staging only");
-  const robots = await (await request.get("/robots.txt")).text();
-  expect(robots).toMatch(/Disallow: \/\s*$/m);
-  const res = await page.goto("/");
-  expect(res?.headers()["x-robots-tag"]).toContain("noindex");
-  await expect(page.locator(".staging-bar")).toBeVisible();
-  await expect(page.locator('meta[name="robots"]')).toHaveAttribute("content", /noindex/);
-});

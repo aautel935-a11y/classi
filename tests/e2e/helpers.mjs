@@ -1,22 +1,13 @@
 import pg from "pg";
-import { readFileSync } from "node:fs";
 import { expect } from "@playwright/test";
 
 const url = process.env.E2E_DB_URL || "postgresql://postgres:postgres@127.0.0.1:54322/postgres";
-// The local stack, or the STAGING project when E2E_TARGET=staging. Never the production project.
-if (url.includes("rfxhqcagdsuhkjzwbawx")) throw new Error("E2E_DB_URL is the production project");
-const STAGING = process.env.E2E_TARGET === "staging";
-if (/supabase\.(co|com)/.test(url) && !STAGING) throw new Error("E2E_DB_URL must be the local test database (or set E2E_TARGET=staging)");
-if (STAGING && !url.includes("nfipmylyahhogykikuqo")) throw new Error("E2E_TARGET=staging needs the classi-staging database (nfipmylyahhogykikuqo)");
-// Staging runs as the least-privilege role e2e_staging (only the e2e.* functions), never as postgres.
-if (STAGING && !/^postgres(ql)?:\/\/e2e_staging\./.test(url)) throw new Error("staging tests must connect as e2e_staging (STAGING_E2E_DB_URL), not postgres");
-// Staging TLS: verified against Supabase's CA when its certificate is provided (PGSSLROOTCERT, set by the workflow
-// from the SUPABASE_CA_CERT variable); otherwise encrypted without verification, and the workflow warns.
-const ssl = !STAGING ? {} : process.env.PGSSLROOTCERT
-  ? { ssl: { ca: readFileSync(process.env.PGSSLROOTCERT, "utf8"), rejectUnauthorized: true } }
-  : { ssl: { rejectUnauthorized: false } };
+// LOCAL tests only: the local Supabase stack in CI or on a laptop. Hosted databases are refused outright; the hosted
+// staging suite lives in tests/staging and never connects to a database.
+if (!/^postgres(ql)?:\/\/[^@]*@(127\.0\.0\.1|localhost)(:\d+)?\//.test(url)) throw new Error("E2E_DB_URL must be the local test database");
+const ssl = {};
 
-/** One query (local test database; on staging only the e2e.* helper functions are callable). */
+/** One query against the local test database. */
 async function sql(text, params = []) {
   const c = new pg.Client({ connectionString: url, ...ssl });
   await c.connect();
@@ -24,24 +15,8 @@ async function sql(text, params = []) {
 }
 const one = async (text, params) => (await sql(text, params))[0] ?? {};
 
-/** Everything the tests read or do in the database. Locally plain SQL on the test stack; on staging the
- * least-privilege role e2e_staging calls the e2e.* functions (supabase/staging/e2e_role.sql), which act only
- * on the test's own accounts. */
-export const db = STAGING ? {
-  otp: async (digits) => (await one("select e2e.otp($1) as v", [digits])).v,
-  otpCount: async (digits) => (await one("select e2e.otp_count($1) as v", [digits])).v,
-  userId: async (digits) => (await one("select e2e.user_id($1) as v", [digits])).v,
-  teacherId: async (user) => (await one("select e2e.teacher_id($1) as v", [user])).v,
-  latestOffer: async (teacher) => (await one("select e2e.latest_offer($1) as v", [teacher])).v,
-  offerBookings: (offer) => sql("select status, for_child from e2e.offer_bookings($1)", [offer]),
-  unread: async (user) => Number((await one("select e2e.unread_count($1) as v", [user])).v),
-  verifyTeacher: (teacher) => sql("select e2e.verify_teacher($1)", [teacher]),
-  approveOffer: (offer) => sql("select e2e.approve_offer($1)", [offer]),
-  makeAdmin: (user) => sql("select e2e.make_admin($1)", [user]),
-  publicOffer: async (approvedOnly) => (await one("select e2e.public_offer($1) as v", [approvedOnly])).v,
-  demoTeacher: async () => (await one("select e2e.demo_teacher() as v")).v,
-  setDemoBio: (teacher, bio) => sql("select e2e.set_demo_bio($1, $2)", [teacher, bio]),
-} : {
+/** Everything the tests read or do in the local test database (they play the admin's part and read codes). */
+export const db = {
   otp: async (digits) => (await one("select otp as v from otp_outbox where regexp_replace(phone, '\\D', '', 'g') = $1 order by created_at desc limit 1", [digits])).v,
   otpCount: async (digits) => (await one("select count(*)::int as v from otp_outbox where regexp_replace(phone, '\\D', '', 'g') = $1", [digits])).v,
   userId: async (digits) => (await one("select id as v from auth.users where phone in ($1, '+' || $1) limit 1", [digits])).v,
@@ -58,10 +33,9 @@ export const db = STAGING ? {
 };
 
 /** A unique Israeli mobile for this project and role: 0521xxxxxx (mobile project) / 0522xxxxxx (desktop).
- * Staging: a fresh number from the explicit allowlist (e2e.next_phone), the only accounts the test role can touch. */
+ */
 export async function phoneFor(testInfo, n) {
   const p = testInfo.project.name === "mobile" ? "1" : "2";
-  if (STAGING) return "0" + String((await one("select e2e.next_phone($1) as v", [Number(p)])).v).slice(3);
   const run = String(Date.now()).slice(-4);
   return `052${p}${run}${String(n).padStart(2, "0")}`.slice(0, 10);
 }
