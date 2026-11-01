@@ -20,8 +20,8 @@ const securityHeaders = [
     value: [
       "default-src 'self'",
       "script-src 'self' 'unsafe-inline' https://challenges.cloudflare.com",
-      "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com",
-      "font-src 'self' https://fonts.gstatic.com",
+      "style-src 'self' 'unsafe-inline'",
+      "font-src 'self'",
       `img-src 'self' data: blob: https://*.supabase.co https://i.ytimg.com`,
       `connect-src 'self' ${supabase}`,
       "frame-src https://www.youtube-nocookie.com https://challenges.cloudflare.com",

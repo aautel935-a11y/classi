@@ -11,13 +11,21 @@ import { signOutAction } from "@/app/actions";
 import { navFor } from "@/lib/types";
 import { IS_STAGING, SITE } from "@/lib/site";
 import { Splash, splashScript } from "@/components/Splash";
-import { Aref_Ruqaa, IBM_Plex_Sans_Arabic, Readex_Pro } from "next/font/google";
+import localFont from "next/font/local";
 
-// Fonts are downloaded at build time and served from the site itself (phase 4): no render-blocking stylesheet
-// from fonts.googleapis.com, and the text appears in the fallback font at once (display: swap).
-const chalk = Aref_Ruqaa({ weight: "700", subsets: ["arabic"], display: "swap", variable: "--f-chalk", preload: false });
-const text = IBM_Plex_Sans_Arabic({ weight: ["400", "500", "600"], subsets: ["arabic", "latin"], display: "swap", variable: "--f-text" });
-const display = Readex_Pro({ weight: ["500", "600", "700"], subsets: ["arabic", "latin"], display: "swap", variable: "--f-display" });
+// Fonts are self-hosted from app/fonts (subset to Arabic + Latin, licensed under the SIL OFL, see app/fonts/OFL-*.txt):
+// no render-blocking stylesheet from fonts.googleapis.com, and no download from Google during the build (a failed
+// fetch there used to fail builds). The text appears in the fallback font at once (display: swap).
+const chalk = localFont({ src: "./fonts/aref-ruqaa-700.woff", weight: "700", display: "swap", variable: "--f-chalk", preload: false });
+const text = localFont({
+  src: [
+    { path: "./fonts/ibm-plex-sans-arabic-400.woff", weight: "400" },
+    { path: "./fonts/ibm-plex-sans-arabic-500.woff", weight: "500" },
+    { path: "./fonts/ibm-plex-sans-arabic-600.woff", weight: "600" },
+  ],
+  display: "swap", variable: "--f-text",
+});
+const display = localFont({ src: "./fonts/readex-pro-500-700.woff", weight: "500 700", display: "swap", variable: "--f-display" });
 
 export const metadata: Metadata = {
   metadataBase: new URL(SITE),
