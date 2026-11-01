@@ -5,7 +5,8 @@
   "git": {
     "deploymentEnabled": {
       "hardening/production-readiness": false,
-      "hardening/**": false
+      "hardening/**": false,
+      "staging-test": false
     }
   }
 }

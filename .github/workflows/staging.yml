@@ -1,0 +1,69 @@
+# Tests against the hosted STAGING deployment (classi-staging on Vercel + the classi-staging Supabase project).
+# Runs when the branch "staging-test" is pushed (a pointer to the commit deployed on staging).
+# Needs, set by the owner in GitHub -> Settings -> Secrets and variables -> Actions (never in code or chat):
+#   variable STAGING_URL                       https://classi-staging-....vercel.app (the staging deployment)
+#   secret   STAGING_DB_URL                    connection string of the classi-staging database (not production)
+#   secret   VERCEL_AUTOMATION_BYPASS_SECRET   classi-staging -> Settings -> Deployment Protection -> Protection Bypass
+name: Staging
+
+on:
+  push:
+    branches: [staging-test]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+defaults:
+  run:
+    shell: bash
+
+concurrency:
+  group: staging
+  cancel-in-progress: false
+
+jobs:
+  staging-e2e:
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    env:
+      E2E_TARGET: staging
+      BASE_URL: ${{ vars.STAGING_URL }}
+      E2E_DB_URL: ${{ secrets.STAGING_DB_URL }}
+      VERCEL_AUTOMATION_BYPASS_SECRET: ${{ secrets.VERCEL_AUTOMATION_BYPASS_SECRET }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Check the target is staging (never production)
+        run: |
+          [ -n "$BASE_URL" ] && [ -n "$E2E_DB_URL" ] && [ -n "$VERCEL_AUTOMATION_BYPASS_SECRET" ] || { echo "::error::staging variables or secrets are not set"; exit 1; }
+          case "$BASE_URL" in https://classi-staging*.vercel.app*) ;; *) echo "::error::STAGING_URL is not a classi-staging deployment"; exit 1;; esac
+          case "$E2E_DB_URL" in *rfxhqcagdsuhkjzwbawx*) echo "::error::STAGING_DB_URL is the production project"; exit 1;; esac
+          echo "target: $BASE_URL"
+      - uses: actions/setup-node@v4
+        with: { node-version: 22, cache: npm }
+      - name: npm ci + browsers
+        run: |
+          npm ci --no-audit --no-fund && npx playwright install --with-deps chromium
+          npm install --no-save --no-audit --no-fund axe-core@4.10.2
+      - name: Playwright against staging (phone + desktop)
+        run: npx playwright test -c tests/e2e/playwright.config.mjs --reporter=list 2>&1 | tee /tmp/e2e.log
+      - name: Lighthouse against staging
+        if: always()
+        run: |
+          OFFER="$(psql "$E2E_DB_URL" -Atc "select id from offerings where active and review_status = 'approved' and type = 'private' limit 1")"
+          CHROME="$(node -e "console.log(require('@playwright/test').chromium.executablePath())")"
+          echo "page | form factor | performance | accessibility | best practices | SEO | LCP ms"
+          for p in "/" "/search" "/offer/$OFFER"; do for ff in mobile desktop; do
+            [ "$ff" = desktop ] && preset="--preset=desktop" || preset=""
+            CHROME_PATH="$CHROME" npx --yes lighthouse@12.6.1 "$BASE_URL$p" $preset --quiet --chrome-flags="--headless=new --no-sandbox" \
+              --extra-headers="{\"x-vercel-protection-bypass\":\"$VERCEL_AUTOMATION_BYPASS_SECRET\"}" \
+              --only-categories=performance,accessibility,best-practices,seo --output=json --output-path=/tmp/lh.json >/dev/null 2>&1 || { echo "$p | $ff | failed"; continue; }
+            node -e 'const r=require("/tmp/lh.json"),c=r.categories,a=r.audits,s=k=>Math.round((c[k]?.score??0)*100);console.log([process.argv[1],process.argv[2],s("performance"),s("accessibility"),s("best-practices"),s("seo"),Math.round(a["largest-contentful-paint"].numericValue)].join(" | "))' "$p" "$ff"
+          done; done 2>&1 | tee /tmp/lighthouse.log
+      - name: Report (annotations)
+        if: always()
+        run: |
+          sed 's/\x1b\[[0-9;]*m//g' /tmp/e2e.log | grep -aE '^ +[0-9]+ (passed|failed|flaky|skipped|did not run)|✘|^ +\[(mobile|desktop)\] ›' > /tmp/e2e-summary.log || true
+          grep -a '\[axe\]' /tmp/e2e.log | sort -u > /tmp/axe.log || true
+          grep -a '\[page\]' /tmp/e2e.log > /tmp/e2e-pages.log || true
+          sh .github/report.sh "staging" /tmp/e2e-summary.log /tmp/e2e.log /tmp/axe.log /tmp/lighthouse.log /tmp/e2e-pages.log

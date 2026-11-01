@@ -9,7 +9,7 @@ import { getSession, isBlocked } from "@/lib/session";
 import { supportWhatsapp } from "@/lib/settings";
 import { signOutAction } from "@/app/actions";
 import { navFor } from "@/lib/types";
-import { SITE } from "@/lib/site";
+import { IS_STAGING, SITE } from "@/lib/site";
 import { Splash, splashScript } from "@/components/Splash";
 import { Aref_Ruqaa, IBM_Plex_Sans_Arabic, Readex_Pro } from "next/font/google";
 
@@ -21,6 +21,7 @@ const display = Readex_Pro({ weight: ["500", "600", "700"], subsets: ["arabic", 
 
 export const metadata: Metadata = {
   metadataBase: new URL(SITE),
+  ...(IS_STAGING ? { robots: { index: false, follow: false } } : {}),
   title: { default: "Classi · كل التعليم في مكان واحد", template: "%s · Classi" },
   description: "معلمون خصوصيون، مجموعات تقوية، دورات معاهد وتعليم أونلاين في مكان واحد.",
   openGraph: {
@@ -42,6 +43,7 @@ export default async function RootLayout({ children }: { children: React.ReactNo
         <script dangerouslySetInnerHTML={{ __html: splashScript }} />
       </head>
       <body>
+        {IS_STAGING && <div className="staging-bar" role="note">نسخة تجريبية (Staging): بيانات وهمية فقط، ولا تُرسل رسائل حقيقية.</div>}
         <Splash />
         {isConfigured() ? <Shell>{children}</Shell> : <SetupNotice />}
       </body>

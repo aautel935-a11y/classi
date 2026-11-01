@@ -8,7 +8,11 @@ export const smsConfigured = () => !!(process.env.SMS_019_TOKEN && process.env.S
 
 const localPhone = (p: string) => p.replace(/[^0-9+]/g, "").replace(/^\+?972/, "0");
 
-export async function sendSms(phone: string, message: string, test = process.env.SMS_019_TEST === "1"): Promise<{ ok: boolean; detail: string }> {
+// A staging build always uses 019's test endpoint (nothing is sent, nothing is charged), whatever else is set.
+const testMode = () => process.env.SMS_019_TEST === "1" || process.env.NEXT_PUBLIC_DEPLOY_ENV === "staging";
+
+export async function sendSms(phone: string, message: string, testArg = testMode()): Promise<{ ok: boolean; detail: string }> {
+  const test = testArg || process.env.NEXT_PUBLIC_DEPLOY_ENV === "staging";   // staging: never a real message, even for sign-in codes
   const token = process.env.SMS_019_TOKEN;
   const user = process.env.SMS_019_USER;
   if (!token || !user) return { ok: false, detail: "not configured" };

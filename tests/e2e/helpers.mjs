@@ -2,11 +2,13 @@ import pg from "pg";
 import { expect } from "@playwright/test";
 
 const url = process.env.E2E_DB_URL || "postgresql://postgres:postgres@127.0.0.1:54322/postgres";
-if (/supabase\.co/.test(url)) throw new Error("E2E_DB_URL must be the local test database");
+// The local stack, or the STAGING project when E2E_TARGET=staging. Never the production project.
+if (url.includes("rfxhqcagdsuhkjzwbawx")) throw new Error("E2E_DB_URL is the production project");
+if (/supabase\.(co|com)/.test(url) && process.env.E2E_TARGET !== "staging") throw new Error("E2E_DB_URL must be the local test database (or set E2E_TARGET=staging)");
 
 /** One query against the local test database (superuser: plays the admin / reads codes). */
 export async function sql(text, params = []) {
-  const c = new pg.Client({ connectionString: url });
+  const c = new pg.Client({ connectionString: url, ...(process.env.E2E_TARGET === "staging" ? { ssl: { rejectUnauthorized: false } } : {}) });
   await c.connect();
   try { return (await c.query(text, params)).rows; } finally { await c.end(); }
 }
