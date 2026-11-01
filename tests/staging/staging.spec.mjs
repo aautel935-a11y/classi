@@ -160,6 +160,8 @@ test("S6. messages and notifications: parent writes, the teacher sees it and get
   await pp.getByLabel("اكتب رسالة").fill(text);
   await pp.getByRole("button", { name: "إرسال" }).click();
   await expect(pp.getByText(text)).toBeVisible();
+  await pp.reload();                                   // saved, not only shown on screen
+  await expect(pp.getByText(text)).toBeVisible();
   await p.close();
 
   const t = await as(browser, "teacher"); const tp = await t.newPage();
@@ -167,7 +169,10 @@ test("S6. messages and notifications: parent writes, the teacher sees it and get
   await expect(tp.locator("a.hdr-bell")).toHaveAttribute("aria-label", /جديدة/);
   await tp.goto("/messages");
   // the conversation list shows the last message: the parent's new one opens the right conversation
-  await tp.locator("a[href^='/messages/']").filter({ hasText: RUN }).first().click();
+  const threads = tp.locator("a[href^='/messages/']");
+  await expect(threads.first()).toBeVisible();
+  console.log(`[staging] teacher threads: ${(await threads.allTextContents()).map((t) => t.replace(/\s+/g, " ").trim().slice(0, 80)).join(" | ")}`);
+  await threads.filter({ hasText: RUN }).first().click();
   await expect(tp.getByText(text)).toBeVisible();
   await tp.goto("/notifications");
   await expect(tp.locator("a.notice").first()).toBeVisible();
