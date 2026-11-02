@@ -269,6 +269,10 @@ details summary::-webkit-details-marker{display:none}
 .offer-title{display:flex;align-items:center;gap:10px}
 .offer-title .glyph{flex:none;width:40px;height:36px;border-radius:10px;display:grid;place-items:center;background:var(--subj-tint);color:var(--subj-ink);font-family:var(--display);font-weight:700;font-size:11px;letter-spacing:-.3px;direction:ltr;white-space:nowrap}
 .card.offer{border-inline-start:1px solid var(--line)}
+/* Light mode keeps the original look: inside offer cards and subject tiles the text takes the subject's colour.
+   Dark mode uses the page's light text instead (the subject colours are dark and would vanish on a dark card). */
+.card.offer,.subj{--ink:var(--subj-ink)}
+@media (prefers-color-scheme:dark){.card.offer,.subj{--ink:#E8EAF2}}
 .card.join{background:var(--soft);border-color:var(--accent)}
 .card.join .btn{align-self:flex-start}
 
