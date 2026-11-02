@@ -42,7 +42,7 @@ export const metadata: Metadata = {
   appleWebApp: { capable: true, title: "Classi", statusBarStyle: "default" },
   icons: { apple: "/apple-touch-icon.png" },
 };
-export const viewport: Viewport = { width: "device-width", initialScale: 1, viewportFit: "cover", themeColor: "#FFFFFF", colorScheme: "light" };
+export const viewport: Viewport = { width: "device-width", initialScale: 1, viewportFit: "cover", themeColor: "#FFFFFF", colorScheme: "only light" };
 
 export default async function RootLayout({ children }: { children: React.ReactNode }) {
   return (

@@ -4,7 +4,7 @@
   --primary:#1E2F6E; --on-primary:#FFFFFF; --accent:#D4962A; --soft:#F5E6C6;
   --line:#E5DFD2; --line-strong:#8C8471; --accent-ink:#8A5A0F; --ok:#25684B; --ok-soft:#DDEFE5; --bad:#B3261E; --bad-soft:#F7DEDB;
   --scrim:rgba(24,32,74,.45); --board:#24433B; --board-ink:#F4F1E6; --wood:#9B6B3D; --rule:rgba(30,47,110,.055); --shadow:0 1px 0 rgba(24,32,74,.04),0 8px 20px -14px rgba(24,32,74,.35);
-  --chalk:var(--f-chalk),var(--f-display),serif; color-scheme:light;
+  --chalk:var(--f-chalk),var(--f-display),serif; color-scheme:only light; /* light design only: browsers must not auto-darken it */
   --display:var(--f-display),var(--f-text),system-ui,sans-serif;
   --text:var(--f-text),system-ui,sans-serif;
   --r-sm:8px; --r-lg:14px; --r-pill:999px;
