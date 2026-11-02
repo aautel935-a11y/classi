@@ -32,7 +32,7 @@ for (const path of ["/login", "/"]) {
     test.skip(info.project.name !== "mobile", "one run is enough (the browsers are launched here)");
     const strip = { x: 0, y: 200, width: 12, height: 400 };          // an empty margin of the page background
     const shot = async (args, colorScheme) => {
-      const browser = await chromium.launch({ args });
+      const browser = await chromium.launch({ args, channel: "chromium" });
       try {
         const ctx = await browser.newContext({ baseURL, viewport: { width: 390, height: 844 }, colorScheme, locale: "ar" });
         const page = await ctx.newPage();
@@ -44,7 +44,7 @@ for (const path of ["/login", "/"]) {
     const FORCED = ["--force-dark-mode", "--enable-features=WebContentsForceDark"];
     // control: forced darkening really is active in this browser (a plain light page without a dark palette is inverted)
     {
-      const browser = await chromium.launch({ args: FORCED });
+      const browser = await chromium.launch({ args: FORCED, channel: "chromium" });
       try {
         const page = await (await browser.newContext({ viewport: { width: 390, height: 844 }, colorScheme: "dark" })).newPage();
         await page.setContent('<html><body style="margin:0;background:#FBF8F2;height:100vh"></body></html>');
