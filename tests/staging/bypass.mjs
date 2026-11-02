@@ -29,7 +29,7 @@ export async function stagingBypassState() {
       const where = loc ? new URL(loc, `https://${STAGING_HOST}`).host : "none";
       const names = res.headersArray().filter((h) => h.name.toLowerCase() === "set-cookie").map((h) => h.value.split("=")[0]);
       throw new Error(`staging bypass refused: HTTP ${res.status()}, redirect to ${where}, cookies set: ${names.join(", ") || "none"}; `
-        + `secret seen: ${shapeOf(secret)}. A refusal (401, or a redirect to vercel.com) means the GitHub secret is not one of `
+        + `secret seen: ${shapeOf(secret, { secret: true })}. A refusal (401, or a redirect to vercel.com) means the GitHub secret is not one of `
         + `classi-staging's Protection Bypass for Automation secrets`);
     }
     state.cookies = cookies;

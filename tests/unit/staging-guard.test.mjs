@@ -5,6 +5,7 @@ import { checkStagingEnv, cleanStagingSecrets, shapeOf } from "../staging/guard.
 
 const ok = { BASE_URL: "https://classi-staging.vercel.app", VERCEL_AUTOMATION_BYPASS_SECRET: "x".repeat(32),
   STAGING_OTP_TEACHER: "111111", STAGING_OTP_INSTITUTE: "222222", STAGING_OTP_PARENT: "333333", STAGING_OTP_STUDENT: "444444", STAGING_OTP_ADMIN: "555555" };
+const OTPS = ["TEACHER", "INSTITUTE", "PARENT", "STUDENT", "ADMIN"].map((r) => `STAGING_OTP_${r}`);
 const refuses = (env, re) => assert.throws(() => checkStagingEnv(env), re);
 const jwt = (claims) => "eyJhbGciOiJIUzI1NiJ9." + Buffer.from(JSON.stringify(claims)).toString("base64url") + ".sig";
 
@@ -48,4 +49,29 @@ test("cleaning never turns a wrong code into a valid one, and messages never con
   const notes = cleanStagingSecrets({ STAGING_OTP_TEACHER: "424242\n" });
   assert.ok(!notes.join(" ").includes("424242"));
   assert.equal(shapeOf("12‏٣ "), "length 5, digits 0-9: 2, Arabic-Indic digits: 1, spaces/newlines: 1, invisible marks: 1");
+});
+test("no message ever contains any 3-character piece of a code or of the bypass secret", () => {
+  const rnd = (n, set) => Array.from({ length: n }, () => set[Math.floor(Math.random() * set.length)]).join("");
+  for (let i = 0; i < 200; i++) {
+    const secret = rnd(32, "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789");
+    const codes = OTPS.map(() => rnd(6, "0123456789"));
+    const pasted = (s) => ["", "\n", " ", "‏", "\r\n"][i % 5] + s + ["\n", "", " \n", "‎", ""][i % 5];
+    // wrong lengths too, so the refusal messages are produced
+    const env = { ...ok, VERCEL_AUTOMATION_BYPASS_SECRET: pasted(secret) };
+    OTPS.forEach((k, j) => { env[k] = pasted(i % 2 ? codes[j] : codes[j] + "7"); });
+    const out = [...cleanStagingSecrets({ ...env })];
+    try { checkStagingEnv(env); } catch (e) { out.push(e.message); }
+    const text = out.join("\n");
+    // the secret: no 6-character piece (shorter letter runs occur by chance in English words such as "marks")
+    for (let p = 0; p + 6 <= secret.length; p++) if (text.includes(secret.slice(p, p + 6))) assert.fail("message holds a piece of the secret");
+    // the codes: no 3 digits in a row, once the allowed counts ("length 7", "digits 0-9: 6", ...) are removed
+    const noCounts = text.replace(/(length|digits 0-9:|spaces\/newlines:|invisible marks:|other characters:|Arabic-Indic digits:) \d+/g, "");
+    for (const v of [...codes, ...codes.map((c) => c + "7")])
+      for (let p = 0; p + 3 <= v.length; p++) if (noCounts.includes(v.slice(p, p + 3))) assert.fail("message holds digits of a code");
+  }
+});
+test("the bypass secret's description says nothing about its own characters", () => {
+  assert.equal(shapeOf("abc123\n", { secret: true }), "length 7, spaces/newlines: 1, invisible marks: 0");
+  const [note] = cleanStagingSecrets({ VERCEL_AUTOMATION_BYPASS_SECRET: "a1b2c3d4e5f6\n" });
+  assert.ok(!/digits|other/.test(note), note);
 });

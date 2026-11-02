@@ -19,11 +19,14 @@ const INVISIBLE = /[\s ​-‏‪-‮⁠⁦-⁩﻿]/g;
 const toAsciiDigits = (s) => s.replace(/[٠-٩]/g, (d) => String(d.charCodeAt(0) - 0x0660))   // ٠-٩
   .replace(/[۰-۹]/g, (d) => String(d.charCodeAt(0) - 0x06F0));                               // ۰-۹
 
-/** The shape of a value, never the value: its length and which kinds of characters it holds. */
-export function shapeOf(v = "") {
+/** The shape of a value, never the value: its length and which kinds of characters it holds. For a long secret
+ * (secret: true) only the length and the characters a paste adds, nothing about its own characters. */
+export function shapeOf(v = "", { secret = false } = {}) {
   const n = (re) => (v.match(re) || []).length;
+  const space = n(/[\s ]/g), marks = n(/[​-‏‪-‮⁠⁦-⁩﻿]/g);
+  if (secret) return `length ${[...v].length}, spaces/newlines: ${space}, invisible marks: ${marks}`;
   const parts = [`length ${[...v].length}`, `digits 0-9: ${n(/[0-9]/g)}`];
-  const arabic = n(/[٠-٩۰-۹]/g), space = n(/[\s ]/g), marks = n(/[​-‏‪-‮⁠⁦-⁩﻿]/g);
+  const arabic = n(/[٠-٩۰-۹]/g);
   const other = [...v].length - n(/[0-9]/g) - arabic - space - marks;
   if (arabic) parts.push(`Arabic-Indic digits: ${arabic}`);
   if (space) parts.push(`spaces/newlines: ${space}`);
@@ -41,7 +44,7 @@ export function cleanStagingSecrets(env = process.env) {
     if (typeof raw !== "string" || !raw) continue;
     let v = raw.replace(INVISIBLE, "");
     if (k !== "VERCEL_AUTOMATION_BYPASS_SECRET") v = toAsciiDigits(v);
-    if (v !== raw) { notes.push(`${k}: cleaned (was ${shapeOf(raw)})`); env[k] = v; }
+    if (v !== raw) { notes.push(`${k}: cleaned (was ${shapeOf(raw, { secret: k === "VERCEL_AUTOMATION_BYPASS_SECRET" })})`); env[k] = v; }
   }
   return notes;
 }
