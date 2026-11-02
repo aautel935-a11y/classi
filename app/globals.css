@@ -4,10 +4,22 @@
   --primary:#1E2F6E; --on-primary:#FFFFFF; --accent:#D4962A; --soft:#F5E6C6;
   --line:#E5DFD2; --line-strong:#8C8471; --accent-ink:#8A5A0F; --ok:#25684B; --ok-soft:#DDEFE5; --bad:#B3261E; --bad-soft:#F7DEDB;
   --scrim:rgba(24,32,74,.45); --board:#24433B; --board-ink:#F4F1E6; --wood:#9B6B3D; --rule:rgba(30,47,110,.055); --shadow:0 1px 0 rgba(24,32,74,.04),0 8px 20px -14px rgba(24,32,74,.35);
-  --chalk:var(--f-chalk),var(--f-display),serif; color-scheme:only light; /* light design only: browsers must not auto-darken it */
+  --chalk:var(--f-chalk),var(--f-display),serif; color-scheme:light dark; /* own dark palette below: browsers then never auto-darken (invert) the pages */
   --display:var(--f-display),var(--f-text),system-ui,sans-serif;
   --text:var(--f-text),system-ui,sans-serif;
   --r-sm:8px; --r-lg:14px; --r-pill:999px;
+}
+/* Dark mode: the site's own palette (same tokens). Without it, phones that "darken websites" inverted the light design
+   (black background, faint text, the notebook lines turned into bright stripes). Contrast checked: text >= 5.6:1. */
+@media (prefers-color-scheme:dark){
+  :root{
+    --bg:#12151F; --card:#1B2030; --ink:#E8EAF2; --muted:#A3A9C2;
+    --primary:#9DB0F5; --on-primary:#0E1530; --accent:#E2A93F; --soft:#3A2F17;
+    --line:#2C3245; --line-strong:#6E7590; --accent-ink:#E8B964; --ok:#5FC08F; --ok-soft:#173327; --bad:#FF8A80; --bad-soft:#3B1C1A;
+    --scrim:rgba(0,0,0,.6); --rule:rgba(157,176,245,.03); --shadow:0 1px 0 rgba(0,0,0,.35),0 8px 20px -14px rgba(0,0,0,.85);
+  }
+  /* the opening splash keeps its brand colours */
+  .splash{--primary:#1E2F6E; --on-primary:#FFFFFF; --soft:#F5E6C6}
 }
 *{box-sizing:border-box}
 body{background-color:var(--bg);background-image:repeating-linear-gradient(to bottom,transparent 0 31px,var(--rule) 31px 32px);color:var(--ink);font-family:var(--text);font-size:15px;line-height:1.6;-webkit-font-smoothing:antialiased}
@@ -365,7 +377,7 @@ a.cal-row{color:inherit;text-decoration:none;border-inline-start:4px solid var(-
 .report-card.unread{border-color:var(--accent)}
 .homework{background:var(--soft);border-radius:var(--r-sm);padding:8px 10px}
 /* ---------- payments ---------- */
-.badge.warn{background:var(--soft);color:#8a5a0f}
+.badge.warn{background:var(--soft);color:var(--accent-ink)}
 .paybox{display:flex;flex-direction:column;gap:8px;padding:10px;border:1px dashed var(--accent);border-radius:var(--r-sm);background:var(--card)}
 .bitnum{font-size:18px;letter-spacing:.5px}
 .money{display:grid;grid-template-columns:repeat(3,1fr);gap:8px}

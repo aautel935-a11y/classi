@@ -36,6 +36,20 @@ test.describe("accessibility (axe)", () => {
     expect(serious, serious.join(", ")).toEqual([]);
   });
 
+  test("dark mode (the site's own dark palette): home, search, offer, teacher, login", async ({ page }, info) => {
+    await page.emulateMedia({ colorScheme: "dark" });
+    const offer = await db.publicOffer(true);
+    const teacher = await db.demoTeacher();
+    const pages = [["/", "home"], ["/search", "search"], [`/offer/${offer}`, "offer"], [`/teacher/${teacher}`, "teacher"], ["/login", "login"]];
+    const serious = [];
+    for (const [url, label] of pages) {
+      await page.goto(url, { waitUntil: "networkidle" });
+      await page.waitForTimeout(2600);
+      serious.push(...(await audit(page, `${info.project.name} dark ${label}`)).map((v) => `${label}: ${v.id}`));
+    }
+    expect(serious, serious.join(", ")).toEqual([]);
+  });
+
   test("signed-in pages: account, schedule, notifications, messages", async ({ page }, info) => {
     await signUp(page, { phone: await phoneFor(info, 7), name: "فحص الوصول", role: "guardian" });
     const serious = [];

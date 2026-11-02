@@ -28,18 +28,26 @@ async function brightness(page, clip) {
 }
 
 for (const path of ["/login", "/"]) {
-  test(`forced dark mode does not darken ${path}`, async ({ baseURL }, info) => {
-    test.skip(info.project.name !== "mobile", "one run is enough (the forced-dark browser is launched here)");
-    const browser = await chromium.launch({ args: ["--force-dark-mode", "--enable-features=WebContentsForceDark"] });
-    try {
-      const ctx = await browser.newContext({ baseURL, viewport: { width: 390, height: 844 }, colorScheme: "dark", locale: "ar" });
-      const page = await ctx.newPage();
-      await page.goto(path, { waitUntil: "networkidle" });
-      // an empty margin of the page background (left gutter, below the header)
-      const b = await brightness(page, { x: 0, y: 200, width: 12, height: 400 });
-      console.log(`[forced-dark] ${path} background brightness ${b.toFixed(0)}`);
-      expect(b, "page background under forced dark mode (light design ~248)").toBeGreaterThan(200);
-      await ctx.close();
-    } finally { await browser.close(); }
+  test(`the browser never repaints ${path}: own dark palette, light mode stays light`, async ({ baseURL }, info) => {
+    test.skip(info.project.name !== "mobile", "one run is enough (the browsers are launched here)");
+    const strip = { x: 0, y: 200, width: 12, height: 400 };          // an empty margin of the page background
+    const shot = async (args, colorScheme) => {
+      const browser = await chromium.launch({ args });
+      try {
+        const ctx = await browser.newContext({ baseURL, viewport: { width: 390, height: 844 }, colorScheme, locale: "ar" });
+        const page = await ctx.newPage();
+        await page.goto(path, { waitUntil: "networkidle" });
+        return await brightness(page, strip);
+      } finally { await browser.close(); }
+    };
+    const FORCED = ["--force-dark-mode", "--enable-features=WebContentsForceDark"];
+    const light = await shot([], "light");
+    const ownDark = await shot([], "dark");
+    const forced = await shot(FORCED, "dark");
+    console.log(`[forced-dark] ${path} light ${light.toFixed(0)} | own dark ${ownDark.toFixed(0)} | forced dark ${forced.toFixed(0)}`);
+    expect(light, "light mode background").toBeGreaterThan(200);
+    expect(ownDark, "the site's own dark background (#12151F)").toBeLessThan(40);
+    // forced darkening must not change anything: same pixels as the site's own dark mode
+    expect(Math.abs(forced - ownDark), "forced dark mode repainted the page").toBeLessThan(4);
   });
 }
