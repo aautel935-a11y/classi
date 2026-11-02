@@ -37,10 +37,21 @@ for (const path of ["/login", "/"]) {
         const ctx = await browser.newContext({ baseURL, viewport: { width: 390, height: 844 }, colorScheme, locale: "ar" });
         const page = await ctx.newPage();
         await page.goto(path, { waitUntil: "networkidle" });
+        await page.waitForTimeout(2600);                              // the opening splash (dark blue) fades out first
         return await brightness(page, strip);
       } finally { await browser.close(); }
     };
     const FORCED = ["--force-dark-mode", "--enable-features=WebContentsForceDark"];
+    // control: forced darkening really is active in this browser (a plain light page without a dark palette is inverted)
+    {
+      const browser = await chromium.launch({ args: FORCED });
+      try {
+        const page = await (await browser.newContext({ viewport: { width: 390, height: 844 }, colorScheme: "dark" })).newPage();
+        await page.setContent('<html><body style="margin:0;background:#FBF8F2;height:100vh"></body></html>');
+        const control = await brightness(page, strip);
+        expect(control, `control: a light page without its own dark palette is inverted (${control.toFixed(0)})`).toBeLessThan(100);
+      } finally { await browser.close(); }
+    }
     const light = await shot([], "light");
     const ownDark = await shot([], "dark");
     const forced = await shot(FORCED, "dark");
