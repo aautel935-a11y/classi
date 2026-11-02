@@ -43,14 +43,22 @@ jobs:
         run: |
           [ "${BASE_URL%/}" = "https://classi-staging.vercel.app" ] || { echo "::error::STAGING_URL must be exactly https://classi-staging.vercel.app"; exit 1; }
           [ -n "$VERCEL_AUTOMATION_BYPASS_SECRET" ] || { echo "::error::VERCEL_AUTOMATION_BYPASS_SECRET is not set in Environment staging"; exit 1; }
-          [ -z "$LEFTOVER_DB_URL$LEFTOVER_E2E_DB_URL" ] || { echo "::error::a database connection is visible to this job: remove STAGING_DB_URL / STAGING_E2E_DB_URL from Environment staging (and from repository secrets)"; exit 1; }
+          # A secret is visible here if it is in Environment "staging" OR a REPOSITORY secret (repository secrets reach
+          # every workflow on every branch). Database links belong only in Environment "staging-db".
+          [ -z "$LEFTOVER_DB_URL" ] || { echo "::error::STAGING_DB_URL is visible to this job: it is a repository secret or in Environment staging. Keep it only in Environment staging-db (Settings -> Environments -> staging-db), then delete the repository secret"; exit 1; }
+          [ -z "$LEFTOVER_E2E_DB_URL" ] || { echo "::error::STAGING_E2E_DB_URL is visible to this job: delete it (repository secrets and Environment staging); the staging suite has no database access"; exit 1; }
           echo "target: $BASE_URL"
       - uses: actions/setup-node@v4
         with: { node-version: 22, cache: npm }
-      - name: npm ci + browser
+      - name: npm ci + browser + Lighthouse
+        id: deps
         run: |
-          npm ci --no-audit --no-fund && npx playwright install --with-deps chromium
+          npm ci --no-audit --no-fund
+          npx playwright install --with-deps chromium
           npm install --no-save --no-audit --no-fund lighthouse@12.6.1
+          # everything the next steps need, checked before any test starts
+          node -e "require.resolve('@playwright/test'); require('fs').accessSync(require('@playwright/test').chromium.executablePath())"
+          npx --no-install lighthouse --version
       - name: Staging journeys (phone + desktop), UI only
         env:
           VERCEL_AUTOMATION_BYPASS_SECRET: ${{ secrets.VERCEL_AUTOMATION_BYPASS_SECRET }}
@@ -61,7 +69,8 @@ jobs:
           STAGING_OTP_ADMIN: ${{ secrets.STAGING_OTP_ADMIN }}
         run: npx playwright test -c tests/staging/playwright.config.mjs 2>&1 | tee /tmp/e2e.log
       - name: Lighthouse against staging
-        if: always()
+        # also after failed journeys (useful numbers), but never when the safety check or the install did not pass
+        if: always() && steps.deps.outcome == 'success'
         env:
           VERCEL_AUTOMATION_BYPASS_SECRET: ${{ secrets.VERCEL_AUTOMATION_BYPASS_SECRET }}
         run: |
