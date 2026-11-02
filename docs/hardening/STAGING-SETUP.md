@@ -107,7 +107,32 @@
 **بيئة `staging-db` (جديدة):**
 - Deployment branches: `staging-migrate` فقط؛
 - Required reviewers: أنت؛
-- Secret `STAGING_DB_URL`: انقله إليها من `staging`.
+- **بلا أسرار في الأوقات العادية.**
+
+## تطبيق migrations جديدة على Staging (عند الحاجة فقط)
+
+سير العمل «Staging database migrations» (`scripts/staging/migrate.sh`) يطبق **الـ migrations الجديدة فقط**:
+- لا seed، ولا بيانات تجريبية، ولا إعادة تهيئة؛
+- إعادة تشغيله بلا جديد لا تغيّر شيئاً، وهو يقارن عدد الصفوف قبل وبعد.
+
+**يُشغَّل يدوياً فقط**، من فرع `staging-migrate`، ويُكتب تأكيد `migrate classi-staging`، وينتظر موافقتك في بيئة `staging-db`.
+
+**أربعة فحوص قبل أي تغيير:**
+1. الرابط يحمل معرّف classi-staging، ولا يحمل معرّف الإنتاج أبداً؛
+2. معرّف قاعدة البيانات (cluster id) هو معرّف classi-staging؛
+3. علامة `deploy_env = staging` موجودة؛
+4. القاعدة مُجهّزة مسبقاً: سجل الـ migrations موجود، وعدد الحسابات معقول، و`dispatch_url` ليس الإنتاج.
+
+**الخطوات:**
+1. Supabase ← classi-staging ← Database ← Reset database password، وانسخ الرابط من Connect ← Session pooler.
+2. GitHub ← Environments ← staging-db ← Secret `STAGING_DB_URL`.
+3. Actions ← Staging database migrations ← Run workflow:
+   - Branch: `staging-migrate`؛
+   - التأكيد: `migrate classi-staging`؛
+   - ثم وافق على التشغيل.
+4. بعد النجاح: احذف السر، ثم Reset database password مرة أخرى.
+
+`scripts/staging/setup.sh` يبقى لإعادة بناء Staging من الصفر فقط، ولا يستدعيه أي سير عمل.
 
 **تنبيه:** رموز الاختبار في Supabase لها تاريخ انتهاء. حدّثها هناك وفي GitHub معاً عند انتهائها.
 
