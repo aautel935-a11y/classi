@@ -75,18 +75,20 @@ jobs:
           VERCEL_AUTOMATION_BYPASS_SECRET: ${{ secrets.VERCEL_AUTOMATION_BYPASS_SECRET }}
         run: |
           CHROME="$(node -e "console.log(require('@playwright/test').chromium.executablePath())")"
-          # The bypass secret goes only to the staging host (headers, not the URL); Lighthouse gets the resulting
-          # deployment-scoped cookie instead of the secret, so the secret never reaches Supabase or any other host.
-          JWT="$(curl -s -o /dev/null -D - -H "x-vercel-protection-bypass: $VERCEL_AUTOMATION_BYPASS_SECRET" -H "x-vercel-set-bypass-cookie: true" "$BASE_URL/" | tr -d '\r' | sed -n 's/^[Ss]et-[Cc]ookie: _vercel_jwt=\([^;]*\).*/\1/p' | head -1)"
-          [ -n "$JWT" ] || { echo "::error::no bypass cookie from the staging host"; exit 1; }
-          echo "::add-mask::$JWT"
+          BASE="${BASE_URL%/}"
+          # The bypass secret goes only to the staging host (headers, not the URL), through the same code as the
+          # journeys (tests/staging/bypass.mjs); Lighthouse gets the resulting cookie instead of the secret.
+          CF="$RUNNER_TEMP/classi-staging-cookie"
+          node tests/staging/bypass.mjs --cookie-file "$CF"
+          COOKIE="$(cat "$CF")"; rm -f "$CF"
+          echo "::add-mask::$COOKIE"
           # an offer id from the public search page (no database access)
-          OFFER="$(curl -s -H "Cookie: _vercel_jwt=$JWT" "$BASE_URL/search" | grep -o '/offer/[0-9a-f-]\{36\}' | head -1)"
+          OFFER="$(curl -s -H "Cookie: $COOKIE" "$BASE/search" | grep -o '/offer/[0-9a-f-]\{36\}' | head -1)"
           echo "page | form factor | performance | accessibility | best practices | SEO | LCP ms"
           for p in "/" "/search" "$OFFER"; do [ -n "$p" ] || continue; for ff in mobile desktop; do
             [ "$ff" = desktop ] && preset="--preset=desktop" || preset=""
-            CHROME_PATH="$CHROME" npx --no-install lighthouse "$BASE_URL$p" $preset --quiet --chrome-flags="--headless=new --no-sandbox" \
-              --extra-headers="{\"Cookie\":\"_vercel_jwt=$JWT\"}" \
+            CHROME_PATH="$CHROME" npx --no-install lighthouse "$BASE$p" $preset --quiet --chrome-flags="--headless=new --no-sandbox" \
+              --extra-headers="$(node -e 'console.log(JSON.stringify({Cookie: process.argv[1]}))' "$COOKIE")" \
               --only-categories=performance,accessibility,best-practices,seo --output=json --output-path=/tmp/lh.json >/dev/null 2>&1 || { echo "$p | $ff | failed"; continue; }
             node -e 'const r=require("/tmp/lh.json"),c=r.categories,a=r.audits,s=k=>Math.round((c[k]?.score??0)*100);console.log([process.argv[1],process.argv[2],s("performance"),s("accessibility"),s("best-practices"),s("seo"),Math.round(a["largest-contentful-paint"].numericValue)].join(" | "))' "$p" "$ff"
           done; done 2>&1 | tee /tmp/lighthouse.log
