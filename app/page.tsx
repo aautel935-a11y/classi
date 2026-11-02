@@ -47,7 +47,7 @@ export default async function Home({ searchParams }: { searchParams: Promise<Rec
           {subjects.map((s) => {
             const look = subjectLook(s.name);
             return (
-              <Link key={s.id} className="subj" href={`/search?subject=${s.id}`} style={{ ["--ink" as string]: look.ink, ["--tint" as string]: look.tint }}>
+              <Link key={s.id} className="subj" href={`/search?subject=${s.id}`} style={{ ["--subj-ink" as string]: look.ink, ["--subj-tint" as string]: look.tint }}>
                 <span className="g" aria-hidden="true">{look.glyph}</span>
                 {s.name}
               </Link>

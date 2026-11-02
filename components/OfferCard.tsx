@@ -18,7 +18,7 @@ export function OfferCard({ o, taken, showOwner = true }: { o: Offering; taken?:
   const full = o.seats != null && taken != null && taken >= o.seats;
   const look = subjectLook(o.subject?.name);
   return (
-    <Link className="card offer" href={`/offer/${o.id}`} style={{ ["--ink" as string]: look.ink, ["--tint" as string]: look.tint }}>
+    <Link className="card offer" href={`/offer/${o.id}`} style={{ ["--subj-ink" as string]: look.ink, ["--subj-tint" as string]: look.tint }}>
       <div className="top">
         <div className="row" style={{ flexWrap: "wrap" }}>
           <TypeBadge type={o.type} />

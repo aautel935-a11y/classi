@@ -45,9 +45,10 @@ for (const path of ["/login", "/"]) {
     const ownDark = await shot([], "dark");
     const forced = await shot(FORCED, "dark");
     console.log(`[forced-dark] ${path} light ${light.toFixed(0)} | own dark ${ownDark.toFixed(0)} | forced dark ${forced.toFixed(0)}`);
-    expect(light, "light mode background").toBeGreaterThan(200);
-    expect(ownDark, "the site's own dark background (#12151F)").toBeLessThan(40);
+    const v = `light ${light.toFixed(0)}, own dark ${ownDark.toFixed(0)}, forced ${forced.toFixed(0)}`;
+    expect(light, `light mode background (${v})`).toBeGreaterThan(200);
+    expect(ownDark, `the site's own dark background #12151F (${v})`).toBeLessThan(40);
     // forced darkening must not change anything: same pixels as the site's own dark mode
-    expect(Math.abs(forced - ownDark), "forced dark mode repainted the page").toBeLessThan(4);
+    expect(Math.abs(forced - ownDark), `forced dark mode repainted the page (${v})`).toBeLessThan(4);
   });
 }
