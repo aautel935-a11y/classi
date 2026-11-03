@@ -3,7 +3,7 @@
 // A file the viewer may not read simply gets no link. Never cached, never stored.
 import { PRIVATE_BUCKET } from "@/lib/photos";
 
-type Signer = { storage: { from: (b: string) => { createSignedUrls: (paths: string[], seconds: number) => Promise<{ data: { path: string | null; signedUrl: string; error: string | null }[] | null; error: unknown }> } } };
+type Signer = { storage: { from: (b: string) => { createSignedUrls: (paths: string[], seconds: number) => Promise<{ data: { path: string | null; signedUrl: string | null; error: string | null }[] | null; error: unknown }> } } };
 
 /** path -> signed link, for the paths the viewer may read. */
 export async function signedPhotoUrls(supabase: Signer, paths: (string | null | undefined)[], seconds: number): Promise<Record<string, string>> {
