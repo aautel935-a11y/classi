@@ -50,8 +50,10 @@ export function PhotoUpload({ kind, name, current }: { kind: Kind; name: string;
       const url = `${supabase.storage.from("avatars").getPublicUrl(path).data.publicUrl}?v=${Date.now()}`;
       const r = await savePhotoAction(kind, url);
       if (r.error) {
-        // not saved: remove the file again, so no unused picture stays in storage
-        await supabase.storage.from("avatars").remove([path]).catch(() => undefined);
+        // Not saved: remove the uploaded file so no unused picture stays in storage, but only for a profile photo
+        // that did not exist before. The path is fixed per account, so with an existing photo the same file is the
+        // one the saved link points to; and a teacher's or institute's file may be the approved or pending photo.
+        if (kind === "profile" && !current) await supabase.storage.from("avatars").remove([path]).catch(() => undefined);
         throw new Error(r.error);
       }
       setPreview(url);
