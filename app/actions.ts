@@ -412,12 +412,18 @@ async function photosInUse(supabase: PhotoDb, uid: string, kind: PhotoKind): Pro
     return error ? null : [photoPath(data?.avatar_url)];
   }
   const col = kind === "teacher" ? "photo_url" : "logo_url";
-  const { data, error } = kind === "teacher"
-    ? await supabase.from("teachers").select("photo_url, pending_changes").eq("user_id", uid)
-    : await supabase.from("institutes").select("logo_url, pending_changes").eq("owner_id", uid);
-  if (error) return null;
+  // the approved photo is a public column; the one waiting for review comes from my_review_state() (owner only)
+  const [{ data, error }, { data: review, error: rErr }] = await Promise.all([
+    kind === "teacher"
+      ? supabase.from("teachers").select("id, photo_url").eq("user_id", uid)
+      : supabase.from("institutes").select("id, logo_url").eq("owner_id", uid),
+    supabase.rpc("my_review_state"),
+  ]);
+  if (error || rErr) return null;
+  const pendingOf = (id: string) => ((review ?? []) as { kind: string; id: string; pending_changes: Record<string, unknown> | null }[])
+    .find((r) => r.kind === kind && r.id === id)?.pending_changes ?? null;
   return ((data ?? []) as Record<string, unknown>[]).flatMap((r) => {
-    const pending = r.pending_changes as Record<string, unknown> | null;
+    const pending = pendingOf(r.id as string);
     return [photoPath(r[col] as string | null), photoPath(typeof pending?.[col] === "string" ? (pending[col] as string) : null)];
   });
 }

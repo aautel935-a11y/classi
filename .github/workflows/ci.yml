@@ -100,6 +100,15 @@ jobs:
       - name: Rollback drill (phases 4 then 3)
         if: always()
         run: sh supabase/tests/rollback_drill.sh supabase/rollback/20261101000000_phase4_performance.down.sql,supabase/rollback/20261031020000_phase3_performance_settings.down.sql flow_test roles_test security_test functional_test 2>&1 | tee /tmp/drill3.log
+      - name: Rollback drill (phase 6 photo owner guard)
+        if: always()
+        run: sh supabase/tests/rollback_drill.sh supabase/rollback/20261103000000_photo_owner_guard.down.sql rollback_photo_owner_checks flow_test roles_test security_test review_test 2>&1 | tee /tmp/drill6a.log
+      - name: Rollback drill (phase 6 review columns owner-only)
+        if: always()
+        run: sh supabase/tests/rollback_drill.sh supabase/rollback/20261103010000_review_columns_owner_only.down.sql rollback_review_columns_checks flow_test roles_test security_test review_test photos_test 2>&1 | tee /tmp/drill6b.log
+      - name: Rollback drill (both phase 6 migrations, newest first)
+        if: always()
+        run: sh supabase/tests/rollback_drill.sh supabase/rollback/20261103010000_review_columns_owner_only.down.sql,supabase/rollback/20261103000000_photo_owner_guard.down.sql rollback_review_columns_checks rollback_photo_owner_checks flow_test security_test 2>&1 | tee /tmp/drill6.log
       - name: Search equivalence at growth size (3,000 offers, 409 filter combinations)
         if: always()
         run: |

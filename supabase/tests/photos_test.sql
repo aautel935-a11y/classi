@@ -128,3 +128,43 @@ select t_err('a profile photo on another site is refused',
 select t_ok('a profile photo in Classi storage is saved directly (no review for profile photos)',
   $$update profiles set avatar_url = (select base || mom || '/profile-m1-aaaaaaaa.jpg' from p) where id = auth.uid()$$);
 reset role;
+
+\echo '===== 8. a photo link must be in its owner''s own folder (migration 20261103000000)'
+set role authenticated; set request.jwt.claim.sub = '70000000-0000-0000-0000-000000000003';
+select t_err('a profile photo pointing at another user''s file is refused',
+  $$update profiles set avatar_url = (select base || samer || '/teacher-n2-bbbbbbbb.jpg' from p) where id = auth.uid()$$);
+select t_err('a profile photo outside any user folder is refused',
+  $$update profiles set avatar_url = (select base || 'shared.jpg' from p) where id = auth.uid()$$);
+reset role;
+set role authenticated; set request.jwt.claim.sub = '70000000-0000-0000-0000-000000000002';
+select t_err('a teacher photo pointing at another user''s file is refused (before it reaches review)',
+  $$update teachers set photo_url = (select base || mom || '/profile-m1-aaaaaaaa.jpg' from p) where user_id = auth.uid()$$);
+select t_err('the trick of a deeper path is refused',
+  $$update teachers set photo_url = (select base || samer || '/../' || mom || '/profile-m1-aaaaaaaa.jpg' from p) where user_id = auth.uid()$$);
+select t_ok('a teacher photo in his own folder is accepted (and waits for review)',
+  $$update teachers set photo_url = (select base || samer || '/teacher-n3-cccccccc.jpg' from p) where user_id = auth.uid()$$);
+select t_ok('an unrelated edit (bio) still works while a photo waits',
+  $$update teachers set bio = 'نبذة للاختبار' where user_id = auth.uid()$$);
+reset role;
+set role authenticated; set request.jwt.claim.sub = '70000000-0000-0000-0000-000000000004';
+select t_err('an institute logo pointing at another user''s file is refused',
+  $$update institutes set logo_url = (select base || samer || '/teacher.jpg' from p) where owner_id = auth.uid()$$);
+reset role;
+set role authenticated; set request.jwt.claim.sub = '70000000-0000-0000-0000-000000000001';
+select t_ok('the admin approves the waiting photo (a link in the owner''s folder passes the check)',
+  $$select admin_review('teacher', (select tid from p), true)$$);
+reset role;
+select t_is('approved photo is the one from his folder',
+  $$select replace(photo_url, (select base || samer || '/' from p), '') from teachers where id = (select tid from p)$$, 'teacher-n3-cccccccc.jpg');
+-- existing rows are never blocked: a legacy value (set by a server job) does not stop unrelated updates by the owner
+reset request.jwt.claim.sub;
+update profiles set avatar_url = (select base || samer || '/legacy.jpg' from p) where id = '70000000-0000-0000-0000-000000000003';
+set role authenticated; set request.jwt.claim.sub = '70000000-0000-0000-0000-000000000003';
+select t_ok('an owner with an old value elsewhere can still update other fields', $$update profiles set town = 'باقة الغربية' where id = auth.uid()$$);
+select t_ok('and can remove the photo', $$update profiles set avatar_url = null where id = auth.uid()$$);
+reset role; reset request.jwt.claim.sub;
+select t_ok('server jobs (no signed-in user) are not affected',
+  $$update profiles set avatar_url = (select base || samer || '/x.jpg' from p) where id = '70000000-0000-0000-0000-000000000003'$$);
+set role authenticated; set request.jwt.claim.sub = '70000000-0000-0000-0000-000000000003';
+select t_err('app users cannot call the internal check functions', $$select photo_in_folder('x', auth.uid())$$);
+reset role;

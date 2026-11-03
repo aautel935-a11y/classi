@@ -27,7 +27,14 @@ const modeLabel = (m: string | null) => (m === "online" ? "أونلاين" : m =
 export default async function Teach({ searchParams }: { searchParams: Promise<Record<string, string | undefined>> }) {
   const sp = await searchParams;
   const { supabase, user, profile } = await requireUser("/teach");
-  const { data: t } = await supabase.from("teachers").select("id,name,verify,town,bio,years,is_school_teacher,subject_id,photo_url,buffer_minutes,intro_video_url,pending_changes,review_note,whatsapp,hours_confirmed_at").eq("user_id", user.id).maybeSingle();
+  // Unapproved edits and moderation notes are readable only by their owner, through my_review_state() (phase 6).
+  const [{ data: t0 }, { data: reviewRows }] = await Promise.all([
+    supabase.from("teachers").select("id,name,verify,town,bio,years,is_school_teacher,subject_id,photo_url,buffer_minutes,intro_video_url,whatsapp,hours_confirmed_at").eq("user_id", user.id).maybeSingle(),
+    supabase.rpc("my_review_state"),
+  ]);
+  const review = (reviewRows ?? []) as { kind: string; id: string; pending_changes: Record<string, unknown> | null; review_note: string | null }[];
+  const reviewFor = (kind: string, id: string) => review.find((r) => r.kind === kind && r.id === id);
+  const t = t0 ? { ...t0, pending_changes: reviewFor("teacher", t0.id)?.pending_changes ?? null, review_note: reviewFor("teacher", t0.id)?.review_note ?? null } : null;
 
   if (!t) {
     const { subjects } = await loadReference();
@@ -56,7 +63,7 @@ export default async function Teach({ searchParams }: { searchParams: Promise<Re
     // Lessons from yesterday on and every open request (the dashboard shows nothing older); phase 4: an active
     // teacher's full history would pass the API's 1,000-row limit and cut off the newest lessons.
     supabase.rpc("owner_bookings", { p_from: new Date(Date.now() - 36 * 3600 * 1000).toISOString() }),
-    supabase.from("offerings").select(OFFERING_SELECT + ",review_status,review_note,pending_changes").eq("teacher_id", t.id).order("created_at"),
+    supabase.from("offerings").select(OFFERING_SELECT + ",review_status").eq("teacher_id", t.id).order("created_at"),
     supabase
       .from("sessions")
       .select("id,seq,starts_at,changed,offering_id,room:rooms(name),offering:offerings!inner(title,course_teacher_id,institute:institutes(name))")
@@ -83,7 +90,10 @@ export default async function Teach({ searchParams }: { searchParams: Promise<Re
   const setting = (k: string) => ((settings ?? []) as { key: string; value: string }[]).find((x) => x.key === k)?.value ?? "";
   const subsRequired = setting("subscriptions_required") === "true";
   const subActive = !!paid && new Date(String(paid)) > new Date();
-  const reviewOf = (id: string) => ((offers ?? []) as unknown as { id: string; review_status: string; review_note: string | null; pending_changes: unknown }[]).find((r) => r.id === id);
+  const reviewOf = (id: string) => {
+    const o = ((offers ?? []) as unknown as { id: string; review_status: string }[]).find((r) => r.id === id);
+    return o ? { ...o, review_note: reviewFor("offering", id)?.review_note ?? null, pending_changes: reviewFor("offering", id)?.pending_changes ?? null } : undefined;
+  };
   const bitLocal = bitRow?.bit_phone ? String(bitRow.bit_phone).replace(/^\+972/, "0") : "";
   const hasLink = new Set((links ?? []).map((l) => l.offering_id));
   const dayRanges = (d: number) => ((hours ?? []) as { weekday: number; start_time: string; end_time: string }[])

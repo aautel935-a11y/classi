@@ -24,10 +24,14 @@ export default async function ManageOffer({ params, searchParams }: { params: Pr
   const { supabase } = await requireUser(path);
   const { data: o } = await supabase
     .from("offerings")
-    .select("id,type,title,price,seats,places,lessons_count,subject_id,level_id,course_teacher_id,institute_id,teacher_id,auto_confirm,allow_weekly,minutes,trial_price,package_enabled,package_size,package_price,review_status,review_note,pending_changes,course_teacher:teachers!offerings_course_teacher_id_fkey(name)")
+    .select("id,type,title,price,seats,places,lessons_count,subject_id,level_id,course_teacher_id,institute_id,teacher_id,auto_confirm,allow_weekly,minutes,trial_price,package_enabled,package_size,package_price,review_status,course_teacher:teachers!offerings_course_teacher_id_fkey(name)")
     .eq("id", id)
     .maybeSingle();
   if (!o) notFound();
+  // the moderation note and waiting changes come only from my_review_state() (own offers; phase 6)
+  const { data: reviewRows } = await supabase.rpc("my_review_state");
+  const mine = ((reviewRows ?? []) as { kind: string; id: string; pending_changes: unknown; review_note: string | null }[]).find((r) => r.kind === "offering" && r.id === id);
+  Object.assign(o as Record<string, unknown>, { review_note: mine?.review_note ?? null, pending_changes: mine?.pending_changes ?? null });
   const [{ data: staff }, { data: owner }] = await Promise.all([
     supabase.rpc("is_offering_staff", { p_offering: id }),
     supabase.rpc("is_offering_owner", { p_offering: id }),

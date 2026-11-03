@@ -28,27 +28,27 @@ select 'admin told' t, body from notifications where user_id = '40000000-0000-00
 \echo '===== 2. Samer edits a published offer: live version unchanged, change waits; price applies now'
 set role authenticated; set request.jwt.claim.sub='40000000-0000-0000-0000-000000000002';
 update offerings set title = 'رياضيات بجروت 5 وحدات - مكثف', price = 170 where title = 'رياضيات بجروت 5 وحدات';
-select 'live' t, title, price, pending_changes from offerings where teacher_id = (select id from teachers where user_id = auth.uid()) and type = 'private' and review_status = 'approved';
+select 'live' t, title, price, (select r.pending_changes from my_review_state() r where r.kind = 'offering' and r.id = o.id) pending_changes from offerings o where teacher_id = (select id from teachers where user_id = auth.uid()) and type = 'private' and review_status = 'approved';
 reset role;
 
 \echo '===== 3. Samer changes bio and photo on his verified profile -> held'
 set role authenticated; set request.jwt.claim.sub='40000000-0000-0000-0000-000000000002';
-update teachers set bio = 'نبذة جديدة', photo_url = 'https://demo.supabase.co/storage/v1/object/public/avatars/x/p.jpg' where user_id = auth.uid();
-select 'profile live' t, left(bio, 20) bio, photo_url, pending_changes from teachers where user_id = auth.uid();
+update teachers set bio = 'نبذة جديدة', photo_url = 'https://demo.supabase.co/storage/v1/object/public/avatars/40000000-0000-0000-0000-000000000002/p.jpg' where user_id = auth.uid();
+select 'profile live' t, left(bio, 20) bio, photo_url, (select r.pending_changes from my_review_state() r where r.kind = 'teacher' and r.id = t.id) pending_changes from teachers t where user_id = auth.uid();
 reset role;
 
 \echo '===== 4. A new unverified teacher edits freely (whole profile reviewed at verification)'
 set role authenticated; set request.jwt.claim.sub='40000000-0000-0000-0000-000000000009';
 insert into teachers (user_id, name, town) values (auth.uid(), 'معلم جديد', 'باقة الغربية');
 update teachers set bio = 'أنا معلم' where user_id = auth.uid();
-select 'new teacher' t, bio, verify, pending_changes from teachers where user_id = auth.uid();
+select 'new teacher' t, bio, verify, (select r.pending_changes from my_review_state() r where r.kind = 'teacher' and r.id = t.id) pending_changes from teachers t where user_id = auth.uid();
 reset role;
 
 \echo '===== 5. Admin queue and decisions'
 set role authenticated; set request.jwt.claim.sub='40000000-0000-0000-0000-000000000001';
 select 'queue' t, kind, owner_name, title, what, changes from admin_review_queue();
 select admin_review('offering', (select id from offerings where title = 'فيزياء تجريبية للمراجعة'), true);
-select admin_review('offering', (select id from offerings where pending_changes is not null), false, 'العنوان مضلل');
+select admin_review('offering', (select q.id from admin_review_queue() q where q.kind = 'offering' and q.what <> 'new' limit 1), false, 'العنوان مضلل');
 select admin_review('teacher', (select id from teachers where user_id = '40000000-0000-0000-0000-000000000002'), true);
 select 'queue after' t, count(*) from admin_review_queue();
 reset role;

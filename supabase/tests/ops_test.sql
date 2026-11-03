@@ -49,7 +49,7 @@ reset role;
 \echo '===== 3. Duration: Rana sets 60 min without approval; future meetings follow'
 set role authenticated; set request.jwt.claim.sub='40000000-0000-0000-0000-000000000003';
 update offerings set minutes = 60 where id = (select grp from ids);
-select 'offer' t, minutes, review_status, pending_changes from offerings where id = (select grp from ids);
+select 'offer' t, minutes, review_status, (select r.pending_changes from my_review_state() r where r.kind = 'offering' and r.id = o.id) pending_changes from offerings o where id = (select grp from ids);
 reset role;
 select 'future meetings minutes' t, minutes, count(*) from sessions where offering_id = (select grp from ids) and starts_at > now() and not cancelled group by minutes;
 
