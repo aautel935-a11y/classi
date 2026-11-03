@@ -114,19 +114,36 @@ test("S3. permissions: only the admin opens the admin page; each role sees its o
   await i.close();
 });
 
-test("S4. data isolation: the parent sees the child's lessons, the student does not", async ({ browser }) => {
+/** "My schedule" folds past lessons into "الحصص السابقة"; open it so upcoming and past lessons are both shown. */
+async function openPastLessons(page) {
+  const folded = page.locator("details").filter({ has: page.locator("summary", { hasText: "الحصص السابقة" }) });
+  const n = await folded.count();
+  for (let i = 0; i < n; i++) await folded.nth(i).evaluate((d) => { d.open = true; });
+  return n > 0;
+}
+
+test("S4. data isolation: the parent sees the child's lessons, the student does not (upcoming or past)", async ({ browser }) => {
+  // The staging data's lessons are fixed dates: they move from "upcoming" to the folded "past" section with time,
+  // so both sections are searched (no dependence on today's date).
   const p = await as(browser, "parent"); const pp = await p.newPage();
   await pp.goto("/schedule");
   await expect(pp.getByRole("heading", { name: "جدولي" })).toBeVisible();
+  console.log(`[S4] parent: past lessons section ${(await openPastLessons(pp)) ? "opened" : "absent"}`);
   await expect(pp.locator(".card.lesson").filter({ hasText: OFFER }).filter({ hasText: CHILD }).first()).toBeVisible();
   await p.close();
 
   const s = await as(browser, "student"); const sp = await s.newPage();
   await sp.goto("/schedule");
+  await expect(sp.getByRole("heading", { name: "جدولي" })).toBeVisible();
+  console.log(`[S4] student: past lessons section ${(await openPastLessons(sp)) ? "opened" : "absent"}`);
   await expect(sp.locator(".card.lesson").filter({ hasText: "مجموعة تقوية رياضيات" }).first()).toBeVisible();
-  await expect(sp.getByText(CHILD)).toHaveCount(0);
+  // Strict: nothing of the child anywhere in the student's page, folded or not: the whole HTML is searched (hidden
+  // and folded content included), and no lesson card of the parent's private lesson exists, visible or hidden.
+  expect(await sp.content(), "the child's name must not be in the student's schedule (even folded)").not.toContain(CHILD);
+  await expect(sp.locator(".card.lesson").filter({ hasText: OFFER })).toHaveCount(0);
   await sp.goto("/messages");
   await expect(sp.locator("a[href^='/messages/']")).toHaveCount(0);
+  expect(await sp.content(), "the parent's conversation must not be in the student's messages").not.toContain(CHILD);
   await s.close();
 });
 
@@ -469,7 +486,7 @@ test("S10. photo: the student uploads a profile photo (stored on staging only) a
   await s.close();
 });
 
-test("S10b. teacher photo and admin review: rejected, approved, replaced, removed; the approved photo stays until a new one is approved", async ({ browser }) => {
+test("S10b. admin review: a rejection reason is shown to the owner only; teacher photo rejected, approved, replaced, removed, the approved photo stays until a new one is approved", async ({ browser }) => {
   test.setTimeout(420_000);
   const png = Buffer.from("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==", "base64");
   const t = await as(browser, "teacher"); const tp = await t.newPage();
@@ -478,17 +495,7 @@ test("S10b. teacher photo and admin review: rejected, approved, replaced, remove
   // Before any change: the deployed build stores every upload as its own file (Phase 6), and nothing is waiting.
   await expect(box, "deployed build lacks unique photo files: deploy it to staging before running S10b (nothing was changed)").toHaveAttribute("data-unique-files", "1");
 
-  if (DRY_RUN) {
-    // local stack: photo links are http://127.0.0.1, which the database refuses (https://<project>.supabase.co only);
-    // the refusal is shown and the new file is removed again (the CI state check counts the photo files)
-    await box.locator('input[type="file"]').setInputFiles({ name: "t.png", mimeType: "image/png", buffer: png });
-    await expect(box.getByRole("alert")).toBeVisible({ timeout: 20_000 });
-    console.log("[S10b] local stack: teacher photo link refused by design; full review cycle runs on hosted staging");
-    await t.close();
-    return;
-  }
-
-  // the public teacher page (what families see) and the admin review card
+  // the public teacher page (what families see), the admin review card, and another signed-in user (the parent)
   const v = await newContext(browser); const vp = await v.newPage();
   await vp.goto(`/search?q=${encodeURIComponent(OFFER)}`);
   await vp.locator("a[href^='/offer/']").filter({ hasText: OFFER }).first().click();
@@ -496,14 +503,81 @@ test("S10b. teacher photo and admin review: rejected, approved, replaced, remove
   const publicPhoto = async () => { await vp.goto(teacherUrl); const img = vp.locator(".profile-head img.photo").first(); return (await img.count()) ? await img.getAttribute("src") : null; };
   const a = await as(browser, "admin"); const ap = await a.newPage();
   const reviewCard = () => ap.locator(".card").filter({ hasText: "سامر مصاروة" }).filter({ has: ap.locator('input[name="kind"][value="teacher"]') });
-  const decide = async (approve) => {
+  const decide = async (approve, note = `اختبار آلي ${RUN}`) => {
     await ap.goto("/admin?tab=review");
     const card = reviewCard().first();
     await expect(card).toBeVisible();
     if (approve) await card.getByRole("button", { name: "موافقة ونشر" }).click();
-    else { await card.locator("summary", { hasText: "رفض" }).click(); await card.locator('input[name="note"]').fill(`اختبار آلي ${RUN}`); await card.getByRole("button", { name: "رفض" }).click(); }
+    else { await card.locator("summary", { hasText: "رفض" }).click(); await card.locator('input[name="note"]').fill(note); await card.getByRole("button", { name: "رفض" }).click(); }
     await expect(reviewCard()).toHaveCount(0, { timeout: 20_000 });
   };
+  await ap.goto("/admin?tab=review");
+  expect(await reviewCard().count(), "no change of Samer's profile is waiting before the test").toBe(0);
+
+  // ---- The reason for a rejected profile edit: shown to the owner only (runs on the local stack too) ----
+  {
+    const bio = tp.locator("#kf-updateTeacher #e-bio");
+    const saveBio = async (text) => {
+      await tp.goto("/teach#profile");
+      await bio.fill(text);
+      await tp.locator("#kf-updateTeacher").getByRole("button", { name: "حفظ", exact: true }).click();
+      await tp.waitForURL(/ok=profile/);
+    };
+    await tp.goto("/teach#profile");
+    const originalBio = await bio.inputValue();
+    const reason = `سبب رفض تجريبي ${RUN}`;
+    const rejectedNotice = "لم تتم الموافقة على آخر تعديل لملفك";
+    const p = await as(browser, "parent"); const pp = await p.newPage();
+    let changed = false;
+    try {
+      await saveBio(`${originalBio} [S10b ${RUN}]`); changed = true;
+      await expect(tp.getByText("تعديلات ملفك بانتظار موافقة الإدارة")).toBeVisible();
+      // the admin sees exactly one changed field (the bio): saving the profile form must not send other fields
+      await ap.goto("/admin?tab=review");
+      const fields = (await reviewCard().first().locator(".summary > div > span:first-child").allTextContents()).map((x) => x.trim());
+      expect(fields, "only the bio waits for review").toEqual(["النبذة"]);
+      await decide(false, reason);
+
+      // the owner sees the reason on the dashboard (the same detector, page HTML, is used for the leak checks below)
+      await tp.goto("/teach");
+      await expect(tp.getByText(`${rejectedNotice}: ${reason}`)).toBeVisible();
+      expect(await tp.content(), "owner: the reason is in the page").toContain(reason);
+      // nobody else sees it: the public teacher page for a visitor and for another signed-in user, and that
+      // user's own pages; any appearance of the reason text in the HTML fails the test
+      await vp.goto(teacherUrl);
+      expect(await vp.content(), "visitor: the rejection reason must not appear on the public teacher page").not.toContain(reason);
+      for (const path of [teacherUrl, "/", "/schedule", "/messages", "/notifications"]) {
+        await pp.goto(path);
+        expect(await pp.content(), `another signed-in user (parent) on ${path}: the rejection reason must not appear`).not.toContain(reason);
+      }
+      expect(await tp.content()).toContain(reason);                     // still the owner's (detector sanity)
+      console.log(`[S10b] rejection reason: shown to the owner; not on the public page (visitor), not on 5 pages of another user`);
+    } finally {
+      if (changed) {
+        // back to the original bio and no reason left: two approved edits (an approval clears the reason)
+        await ap.goto("/admin?tab=review");
+        if (await reviewCard().count()) await decide(false, reason);
+        await saveBio(`${originalBio} [S10b-2 ${RUN}]`); await decide(true);
+        await saveBio(originalBio); await decide(true);
+      }
+      await p.close();
+    }
+    await tp.goto("/teach#profile");
+    expect(await bio.inputValue(), "bio is back to the original").toBe(originalBio);
+    await expect(tp.getByText(rejectedNotice)).toHaveCount(0);
+  }
+
+  if (DRY_RUN) {
+    // local stack: photo links are http://127.0.0.1, which the database refuses (https://<project>.supabase.co only);
+    // the refusal is shown and the new file is removed again (the CI state check counts the photo files)
+    await tp.goto("/teach#profile");
+    await box.locator('input[type="file"]').setInputFiles({ name: "t.png", mimeType: "image/png", buffer: png });
+    await expect(box.getByRole("alert")).toBeVisible({ timeout: 20_000 });
+    console.log("[S10b] local stack: teacher photo link refused by design; full photo review cycle runs on hosted staging");
+    await v.close(); await a.close(); await t.close();
+    return;
+  }
+
   const upload = async () => {
     await tp.goto("/teach#profile");
     await box.locator('input[type="file"]').setInputFiles({ name: "t.png", mimeType: "image/png", buffer: png });
@@ -516,9 +590,6 @@ test("S10b. teacher photo and admin review: rejected, approved, replaced, remove
 
   const original = await publicPhoto();
   expect(original, "Samer has no photo before the test (the state to come back to)").toBeNull();
-  await ap.goto("/admin?tab=review");
-  expect(await reviewCard().count(), "no change of Samer's profile is waiting before the test").toBe(0);
-
   const files = [];
   let approvedByTest = false;
   try {
