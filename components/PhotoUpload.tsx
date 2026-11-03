@@ -1,13 +1,12 @@
 "use client";
 
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
-import { removePhotoAction, savePhotoAction } from "@/app/actions";
+import { removePhotoAction, savePhotoAction, tidyPhotosAction } from "@/app/actions";
 import { Avatar } from "./Avatar";
 import { friendlyError } from "@/lib/errors";
-
-type Kind = "teacher" | "institute" | "profile";
+import { newPhotoName, type PhotoKind as Kind } from "@/lib/photos";
 
 /** Shrinks the picture in the browser (max 512px, JPEG) before uploading it. */
 async function shrink(file: File): Promise<Blob> {
@@ -32,11 +31,17 @@ export function PhotoUpload({ kind, name, current }: { kind: Kind; name: string;
   const [preview, setPreview] = useState<string | null>(current);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [note, setNote] = useState<string | null>(null);
+  const reviewed = kind !== "profile";                     // teacher/institute photos wait for admin review
+
+  // Quietly clear this account's unused photo files (a rejected photo, or the previous one after an approval).
+  useEffect(() => { tidyPhotosAction(kind).catch(() => undefined); }, [kind]);
 
   async function onPick(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0];
     if (!file) return;
     setError(null);
+    setNote(null);
     if (!file.type.startsWith("image/") && !/\.(heic|heif)$/i.test(file.name)) return setError("اختر صورة (JPG أو PNG).");
     setBusy(true);
     try {
@@ -44,19 +49,19 @@ export function PhotoUpload({ kind, name, current }: { kind: Kind; name: string;
       const supabase = createClient();
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) throw new Error("سجّل الدخول أولاً.");
-      const path = `${user.id}/${kind}.jpg`;
-      const { error: upErr } = await supabase.storage.from("avatars").upload(path, blob, { upsert: true, contentType: "image/jpeg" });
+      // A new file every time (never overwrite): the approved photo stays untouched while a new one waits for review.
+      const path = `${user.id}/${newPhotoName(kind)}`;
+      const { error: upErr } = await supabase.storage.from("avatars").upload(path, blob, { upsert: false, contentType: "image/jpeg" });
       if (upErr) throw new Error(`تعذّر رفع الصورة: ${upErr.message}`);
-      const url = `${supabase.storage.from("avatars").getPublicUrl(path).data.publicUrl}?v=${Date.now()}`;
+      const url = supabase.storage.from("avatars").getPublicUrl(path).data.publicUrl;
       const r = await savePhotoAction(kind, url);
       if (r.error) {
-        // Not saved: remove the uploaded file so no unused picture stays in storage, but only for a profile photo
-        // that did not exist before. The path is fixed per account, so with an existing photo the same file is the
-        // one the saved link points to; and a teacher's or institute's file may be the approved or pending photo.
-        if (kind === "profile" && !current) await supabase.storage.from("avatars").remove([path]).catch(() => undefined);
+        // not saved: this new file is used by nothing, so it is removed again
+        await supabase.storage.from("avatars").remove([path]).catch(() => undefined);
         throw new Error(r.error);
       }
       setPreview(url);
+      setNote(reviewed ? "وصلت الصورة الجديدة للإدارة للمراجعة. تبقى صورتك الحالية ظاهرة للأهل حتى الموافقة." : null);
       router.refresh();
     } catch (err) {
       setError(err instanceof Error && err.message ? friendlyError({ message: err.message }) : "تعذّر رفع الصورة، حاول مرة أخرى.");
@@ -68,11 +73,13 @@ export function PhotoUpload({ kind, name, current }: { kind: Kind; name: string;
 
   async function onRemove() {
     setError(null);
+    setNote(null);
     setBusy(true);
     try {
       const r = await removePhotoAction(kind);
       if (r.error) throw new Error(r.error);
       setPreview(null);
+      setNote(reviewed ? "طلب إزالة الصورة وصل للإدارة للمراجعة. تبقى الصورة الحالية ظاهرة حتى الموافقة." : null);
       router.refresh();
     } catch (err) {
       setError(err instanceof Error && err.message ? friendlyError({ message: err.message }) : "تعذّرت إزالة الصورة، حاول مرة أخرى.");
@@ -82,7 +89,7 @@ export function PhotoUpload({ kind, name, current }: { kind: Kind; name: string;
   }
 
   return (
-    <div className="photo-up" data-can-remove="1">
+    <div className="photo-up" data-can-remove="1" data-unique-files="1">
       <Avatar name={name} url={preview} size="lg" inst={kind === "institute"} />
       <div className="stack" style={{ gap: 4 }}>
         <button type="button" className="btn sm ghost" onClick={() => input.current?.click()} disabled={busy}>
@@ -94,6 +101,7 @@ export function PhotoUpload({ kind, name, current }: { kind: Kind; name: string;
           </button>
         )}
         <span className="small muted">صورة واضحة للوجه {kind === "institute" ? "أو شعار المعهد" : ""} تزيد ثقة الأهل.</span>
+        {note && <span className="small okmsg" role="status">{note}</span>}
         {error && <span className="small" role="alert" style={{ color: "var(--bad)" }}>{error}</span>}
       </div>
       <input ref={input} type="file" accept="image/jpeg,image/png,image/webp" hidden onChange={onPick} />

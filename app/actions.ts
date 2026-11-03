@@ -9,6 +9,7 @@ import { cleanMobile } from "@/lib/contact";
 import type { OfferingType, Place, Role } from "@/lib/types";
 import { safePath } from "@/lib/safe";
 import { friendlyError } from "@/lib/errors";
+import { PHOTO_KINDS, noLongerUsed, photoPath, photosToDelete, validPhotoUrl, type PhotoKind } from "@/lib/photos";
 
 type Result = { error?: string; ok?: boolean; count?: number; created?: number; skipped?: string[] };
 
@@ -400,19 +401,56 @@ export async function saveAttendanceAction(form: FormData) {
 }
 
 // ---------- photos ----------
-export async function savePhotoAction(kind: "teacher" | "institute" | "profile", url: string): Promise<Result> {
+// ---------- photos (unique file per upload; see lib/photos.ts) ----------
+type PhotoDb = Awaited<ReturnType<typeof client>>["supabase"];
+
+/** The owner's photos of this kind that are in use: the approved one and the one waiting for admin review
+ * (teacher/institute changes wait in pending_changes). null when it cannot be read: then nothing is deleted. */
+async function photosInUse(supabase: PhotoDb, uid: string, kind: PhotoKind): Promise<(string | null)[] | null> {
+  if (kind === "profile") {
+    const { data, error } = await supabase.from("profiles").select("avatar_url").eq("id", uid).maybeSingle();
+    return error ? null : [photoPath(data?.avatar_url)];
+  }
+  const col = kind === "teacher" ? "photo_url" : "logo_url";
+  const { data, error } = kind === "teacher"
+    ? await supabase.from("teachers").select("photo_url, pending_changes").eq("user_id", uid)
+    : await supabase.from("institutes").select("logo_url, pending_changes").eq("owner_id", uid);
+  if (error) return null;
+  return ((data ?? []) as Record<string, unknown>[]).flatMap((r) => {
+    const pending = r.pending_changes as Record<string, unknown> | null;
+    return [photoPath(r[col] as string | null), photoPath(typeof pending?.[col] === "string" ? (pending[col] as string) : null)];
+  });
+}
+
+/** Deletes the owner's own unused photo files of this kind: `extra` (files that were in use until this change) at
+ * once, other unused files once they are older than PHOTO_MIN_AGE_MS. Never a file in use, never another user's file
+ * (the paths are built from the signed-in user, and the storage policy "avatars: delete own" enforces it again). */
+async function tidyPhotos(supabase: PhotoDb, uid: string, kind: PhotoKind, extra: string[] = []): Promise<number> {
+  const inUse = await photosInUse(supabase, uid, kind);
+  if (!inUse) return 0;
+  const { data: files, error } = await supabase.storage.from("avatars").list(uid, { limit: 100 });
+  if (error) return 0;
+  const keep = new Set(inUse.filter(Boolean));
+  const doomed = [...new Set([...extra, ...photosToDelete({ owner: uid, kind, files: files ?? [], keep: [...keep] })])]
+    .filter((p) => p.startsWith(`${uid}/`) && !keep.has(p));
+  if (!doomed.length) return 0;
+  const { error: rmErr } = await supabase.storage.from("avatars").remove(doomed);
+  return rmErr ? 0 : doomed.length;
+}
+
+const isKind = (k: unknown): k is PhotoKind => PHOTO_KINDS.includes(k as PhotoKind);
+
+/** Saves a newly uploaded photo (its own unique file). A teacher's or institute's photo waits for admin review: the
+ * approved photo keeps showing until then, and stays if the new one is rejected. */
+export async function savePhotoAction(kind: PhotoKind, url: string): Promise<Result> {
   revalidateTag("catalog");
   const { supabase, user } = await client();
   if (!user) return { error: "سجّل الدخول أولاً." };
-  let ok = false;
-  try {
-    const u = new URL(url);
-    const host = new URL((process.env.NEXT_PUBLIC_SUPABASE_URL ?? "").trim()).hostname;
-    ok = u.protocol === "https:" && u.hostname === host && u.pathname.startsWith(`/storage/v1/object/public/avatars/${user.id}/`);
-  } catch {
-    ok = false;
-  }
-  if (!ok) return { error: "تعذّر حفظ الصورة: الرابط لا يطابق حسابك." };
+  if (!isKind(kind)) return { error: "طلب غير صالح." };
+  let host = "";
+  try { host = new URL((process.env.NEXT_PUBLIC_SUPABASE_URL ?? "").trim()).hostname; } catch { host = ""; }
+  if (!host || !validPhotoUrl(url, { host, owner: user.id, kind })) return { error: "تعذّر حفظ الصورة: الرابط لا يطابق حسابك." };
+  const before = (await photosInUse(supabase, user.id, kind)) ?? [];
   const { error } =
     kind === "teacher"
       ? await supabase.from("teachers").update({ photo_url: url }).eq("user_id", user.id)
@@ -420,17 +458,21 @@ export async function savePhotoAction(kind: "teacher" | "institute" | "profile",
         ? await supabase.from("institutes").update({ logo_url: url }).eq("owner_id", user.id)
         : await supabase.from("profiles").update({ avatar_url: url }).eq("id", user.id);
   if (error) return { error: friendlyError(error) };
+  const after = await photosInUse(supabase, user.id, kind);
+  // the replaced photo (a profile photo, or an earlier photo still waiting for review) is not used any more
+  if (after) await tidyPhotos(supabase, user.id, kind, noLongerUsed({ owner: user.id, kind, before, after }));
   revalidatePath("/", "layout");
   return { ok: true };
 }
 
-/** Removes the account's own photo: the file in storage (policy "avatars: delete own") and the link to it. A teacher's
- * or institute's change goes through the usual content review, like any other profile change. */
-export async function removePhotoAction(kind: "teacher" | "institute" | "profile"): Promise<Result> {
+/** Removes the account's own photo. A profile photo goes at once (link and file). For a teacher or institute the
+ * removal waits for admin review like any profile change, so the approved photo (and its file) stays meanwhile. */
+export async function removePhotoAction(kind: PhotoKind): Promise<Result> {
   revalidateTag("catalog");
   const { supabase, user } = await client();
   if (!user) return { error: "سجّل الدخول أولاً." };
-  if (!["teacher", "institute", "profile"].includes(kind)) return { error: "طلب غير صالح." };
+  if (!isKind(kind)) return { error: "طلب غير صالح." };
+  const before = (await photosInUse(supabase, user.id, kind)) ?? [];
   const { error } =
     kind === "teacher"
       ? await supabase.from("teachers").update({ photo_url: null }).eq("user_id", user.id)
@@ -438,14 +480,18 @@ export async function removePhotoAction(kind: "teacher" | "institute" | "profile
         ? await supabase.from("institutes").update({ logo_url: null }).eq("owner_id", user.id)
         : await supabase.from("profiles").update({ avatar_url: null }).eq("id", user.id);
   if (error) return { error: friendlyError(error) };
-  // Only the account's own file can be removed (the path starts with its id). A teacher's or institute's file stays
-  // until the change is approved, so the approved photo keeps showing meanwhile.
-  if (kind === "profile") {
-    const { error: rmErr } = await supabase.storage.from("avatars").remove([`${user.id}/profile.jpg`]);
-    if (rmErr) return { error: friendlyError(rmErr) };
-  }
+  const after = await photosInUse(supabase, user.id, kind);
+  if (after) await tidyPhotos(supabase, user.id, kind, noLongerUsed({ owner: user.id, kind, before, after }));
   revalidatePath("/", "layout");
   return { ok: true };
+}
+
+/** Clears the owner's unused photo files of this kind (for example a photo the admin rejected, or the previous photo
+ * after a new one was approved). Called when the owner opens a page with their photo box; changes nothing visible. */
+export async function tidyPhotosAction(kind: PhotoKind): Promise<Result> {
+  const { supabase, user } = await client();
+  if (!user || !isKind(kind)) return { ok: true, count: 0 };
+  return { ok: true, count: await tidyPhotos(supabase, user.id, kind) };
 }
 
 export async function updateTeacherAction(form: FormData) {

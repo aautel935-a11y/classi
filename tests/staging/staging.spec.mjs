@@ -447,7 +447,7 @@ test("S10. photo: the student uploads a profile photo (stored on staging only) a
     const src = await photo.getAttribute("src");
     const u = new URL(src);
     expect(u.hostname, "stored in the classi-staging project").toBe(TARGET.supabaseHost);
-    expect(u.pathname).toMatch(/^\/storage\/v1\/object\/public\/avatars\/[0-9a-f-]{36}\/profile\.jpg$/);
+    expect(u.pathname, "a new file of its own (unique name)").toMatch(/^\/storage\/v1\/object\/public\/avatars\/[0-9a-f-]{36}\/profile-[0-9a-z]+-[0-9a-z]{8}\.jpg$/);
     const got = await s.request.get(src);
     expect(got.status()).toBe(200);
     expect(got.headers()["content-type"]).toContain("image/jpeg");
@@ -467,6 +467,110 @@ test("S10. photo: the student uploads a profile photo (stored on staging only) a
     if (uploaded) { await page.goto("/account"); if (await photo.count()) await box.getByRole("button", { name: "إزالة الصورة" }).click(); }
   }
   await s.close();
+});
+
+test("S10b. teacher photo and admin review: rejected, approved, replaced, removed; the approved photo stays until a new one is approved", async ({ browser }) => {
+  test.setTimeout(420_000);
+  const png = Buffer.from("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==", "base64");
+  const t = await as(browser, "teacher"); const tp = await t.newPage();
+  const box = tp.locator("#profile .photo-up");
+  await tp.goto("/teach#profile");
+  // Before any change: the deployed build stores every upload as its own file (Phase 6), and nothing is waiting.
+  await expect(box, "deployed build lacks unique photo files: deploy it to staging before running S10b (nothing was changed)").toHaveAttribute("data-unique-files", "1");
+
+  if (DRY_RUN) {
+    // local stack: photo links are http://127.0.0.1, which the database refuses (https://<project>.supabase.co only);
+    // the refusal is shown and the new file is removed again (the CI state check counts the photo files)
+    await box.locator('input[type="file"]').setInputFiles({ name: "t.png", mimeType: "image/png", buffer: png });
+    await expect(box.getByRole("alert")).toBeVisible({ timeout: 20_000 });
+    console.log("[S10b] local stack: teacher photo link refused by design; full review cycle runs on hosted staging");
+    await t.close();
+    return;
+  }
+
+  // the public teacher page (what families see) and the admin review card
+  const v = await newContext(browser); const vp = await v.newPage();
+  await vp.goto(`/search?q=${encodeURIComponent(OFFER)}`);
+  await vp.locator("a[href^='/offer/']").filter({ hasText: OFFER }).first().click();
+  const teacherUrl = await vp.locator("a[href^='/teacher/']").first().getAttribute("href");
+  const publicPhoto = async () => { await vp.goto(teacherUrl); const img = vp.locator(".profile-head img.photo").first(); return (await img.count()) ? await img.getAttribute("src") : null; };
+  const a = await as(browser, "admin"); const ap = await a.newPage();
+  const reviewCard = () => ap.locator(".card").filter({ hasText: "سامر مصاروة" }).filter({ has: ap.locator('input[name="kind"][value="teacher"]') });
+  const decide = async (approve) => {
+    await ap.goto("/admin?tab=review");
+    const card = reviewCard().first();
+    await expect(card).toBeVisible();
+    if (approve) await card.getByRole("button", { name: "موافقة ونشر" }).click();
+    else { await card.locator("summary", { hasText: "رفض" }).click(); await card.locator('input[name="note"]').fill(`اختبار آلي ${RUN}`); await card.getByRole("button", { name: "رفض" }).click(); }
+    await expect(reviewCard()).toHaveCount(0, { timeout: 20_000 });
+  };
+  const upload = async () => {
+    await tp.goto("/teach#profile");
+    await box.locator('input[type="file"]').setInputFiles({ name: "t.png", mimeType: "image/png", buffer: png });
+    await expect(box.getByRole("status")).toContainText("للمراجعة", { timeout: 20_000 });
+    const src = await box.locator("img.photo").getAttribute("src");
+    expect(new URL(src).pathname, "each upload is a new file").toMatch(/\/avatars\/[0-9a-f-]{36}\/teacher-[0-9a-z]+-[0-9a-z]{8}\.jpg$/);
+    return src;
+  };
+  const status = async (src) => (await t.request.get(src)).status();
+
+  const original = await publicPhoto();
+  expect(original, "Samer has no photo before the test (the state to come back to)").toBeNull();
+  await ap.goto("/admin?tab=review");
+  expect(await reviewCard().count(), "no change of Samer's profile is waiting before the test").toBe(0);
+
+  const files = [];
+  let approvedByTest = false;
+  try {
+    // 1. new photo -> waits; families still see no photo; the admin rejects it; still no photo
+    files.push(await upload());
+    expect(await publicPhoto(), "waiting photo is not shown to families").toBeNull();
+    await decide(false);
+    expect(await publicPhoto(), "rejected: unchanged").toBeNull();
+
+    // 2. new photo -> approved -> families see it
+    const approved = await upload(); files.push(approved);
+    await decide(true); approvedByTest = true;
+    expect(await publicPhoto(), "approved photo is shown").toBe(approved);
+    expect(await status(approved)).toBe(200);
+
+    // 3. a replacement waits: families keep seeing the approved photo; rejected: still the approved photo
+    files.push(await upload());
+    expect(await publicPhoto(), "approved photo stays while the new one waits").toBe(approved);
+    expect(await status(approved), "the approved file was not overwritten or deleted").toBe(200);
+    await decide(false);
+    expect(await publicPhoto(), "rejected replacement: the approved photo is unchanged").toBe(approved);
+
+    // 4. removal waits for review too, then the photo is gone (back to the original state)
+    await tp.goto("/teach#profile");
+    await box.getByRole("button", { name: "إزالة الصورة" }).click();
+    await expect(box.getByRole("status")).toContainText("للمراجعة", { timeout: 20_000 });
+    expect(await publicPhoto(), "approved photo stays while the removal waits").toBe(approved);
+    await decide(true); approvedByTest = false;
+    expect(await publicPhoto(), "removed after approval").toBeNull();
+
+    // 5. unused files are cleared once they are old enough (never sooner: an upload may still be being saved)
+    const wait = Math.max(0, 125_000 - (Date.now() - files.at(-1).match(/teacher-([0-9a-z]+)-/).slice(1).map((x) => parseInt(x, 36))[0]));
+    console.log(`[S10b] waiting ${Math.round(wait / 1000)}s before the owner's next visit clears unused files`);
+    await tp.waitForTimeout(wait);
+    await tp.goto("/teach#profile"); await tp.waitForTimeout(4000);       // the photo box tidies on opening
+    const left = [];
+    for (const f of files) { const st = await status(f); if (st < 400) left.push(f); console.log(`[S10b] ${new URL(f).pathname.replace(/[0-9a-f-]{36}/, "<teacher>")} -> HTTP ${st}`); }
+    expect(left, "rejected and replaced files are deleted").toEqual([]);
+  } finally {
+    // put things back if a step failed: nothing waiting for Samer, no approved test photo
+    await ap.goto("/admin?tab=review").catch(() => undefined);
+    if (await reviewCard().count().catch(() => 0)) await decide(false).catch((e) => console.log(`[S10b] cleanup reject: ${e.message.split("\n")[0]}`));
+    if (approvedByTest) {
+      await tp.goto("/teach#profile").catch(() => undefined);
+      if (await box.getByRole("button", { name: "إزالة الصورة" }).count().catch(() => 0)) {
+        await box.getByRole("button", { name: "إزالة الصورة" }).click().catch(() => undefined);
+        await decide(true).catch((e) => console.log(`[S10b] cleanup approve removal: ${e.message.split("\n")[0]}`));
+      }
+    }
+    await v.close(); await a.close();
+  }
+  await t.close();
 });
 
 test("S11. /account opens for each of the five roles (profile, photo box, details)", async ({ browser }) => {

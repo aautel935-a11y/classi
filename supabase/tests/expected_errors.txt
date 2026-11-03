@@ -23,3 +23,4 @@ sms_test            1
 today_test          0
 trial_packages_test 3
 waitlist_test       3
+photos_test         0
