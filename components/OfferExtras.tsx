@@ -26,7 +26,7 @@ export function OfferExtras({ type, trialPrice, packageOn, packageSize, packageP
           <span><b>رزمة حصص</b><span className="small muted">مثلاً 10 حصص بسعر أقل. كل حجز يُخصم من الرزمة تلقائياً، والحصة الملغاة ترجع إليها.</span></span>
         </label>
         <div className="typeform sub">
-          <label className="field">عدد الحصص<input name="package_size" type="number" min={2} max={50} defaultValue={packageSize ?? 10} /></label>
+          <label className="field">عدد الحصص<input name="package_size" type="number" min={2} max={50} defaultValue={packageSize ?? ""} placeholder="مثلاً 10" /></label>
           <label className="field">سعر الرزمة كاملة (₪)<input name="package_price" type="number" min={0} defaultValue={packagePrice ?? ""} placeholder="مثلاً 1350" /></label>
         </div>
       </div>

@@ -197,8 +197,11 @@ function offerExtras(form: FormData, type: string): Record<string, unknown> {
     const price = Math.round(num(form, "package_price"));
     const on = form.get("package_on") === "on";
     out.package_enabled = on && size >= 2 && size <= 50 && price > 0;
-    if (size >= 2 && size <= 50) out.package_size = size;
-    if (price > 0) out.package_price = price;
+    // Size and price are sent only when the package is switched on. The form shows a default size (10) even for an
+    // offer without a package; sending it on every save turned unrelated edits (instant confirmation, price, weekly
+    // booking) into a content change that waited for admin review (package_size is a reviewed field). Found by S9.
+    if (on && size >= 2 && size <= 50) out.package_size = size;
+    if (on && price > 0) out.package_price = price;
   }
   return out;
 }

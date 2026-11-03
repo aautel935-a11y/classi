@@ -76,7 +76,7 @@ export function PhotoUpload({ kind, name, current }: { kind: Kind; name: string;
   }
 
   return (
-    <div className="photo-up">
+    <div className="photo-up" data-can-remove="1">
       <Avatar name={name} url={preview} size="lg" inst={kind === "institute"} />
       <div className="stack" style={{ gap: 4 }}>
         <button type="button" className="btn sm ghost" onClick={() => input.current?.click()} disabled={busy}>

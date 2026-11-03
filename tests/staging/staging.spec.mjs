@@ -355,6 +355,14 @@ test("S9. booking that needs the teacher: accept (then the parent cancels) and d
   };
   const requestCard = (b) => tp.locator("section").filter({ has: tp.getByRole("heading", { name: "طلبات حجز" }) }).locator(".card").filter({ hasText: OFFER }).filter({ hasText: b.time });
 
+  // Before any change: the deployed build must have the Phase 6 fix (no default package size sent with every save),
+  // otherwise saving this form would send Samer's offer to admin review. The fixed form leaves the size empty.
+  await tp.goto(`/manage/course/${id}?edit=1`);
+  const editForm = tp.locator("form").filter({ has: tp.locator('input[name="auto_confirm"]') });
+  if (!(await editForm.locator('input[name="package_on"]').isChecked())) {
+    expect(await editForm.locator('input[name="package_size"]').inputValue(),
+      "deployed build lacks the Phase 6 package fix: deploy it to staging before running S9 (nothing was changed)").toBe("");
+  }
   const p = await as(browser, "parent"); const pp = await p.newPage();
   let instantOff = false;
   try {
@@ -393,6 +401,8 @@ test("S10. photo: the student uploads a profile photo (stored on staging only) a
   const box = page.locator(".photo-up");
   const photo = box.locator("img.photo");
   await expect(box).toBeVisible();
+  // Before any change: the deployed build must be able to remove a photo again (Phase 6), or the test photo would stay.
+  await expect(box, "deployed build cannot remove a photo yet: deploy Phase 6 to staging before running S10 (nothing was changed)").toHaveAttribute("data-can-remove", "1");
   expect(await photo.count(), "the student account has no photo before the test (so 'no photo' is the state to come back to)").toBe(0);
   // a tiny synthetic picture (1x1 PNG), no real image
   const png = Buffer.from("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==", "base64");
