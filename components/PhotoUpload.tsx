@@ -49,7 +49,11 @@ export function PhotoUpload({ kind, name, current }: { kind: Kind; name: string;
       if (upErr) throw new Error(`تعذّر رفع الصورة: ${upErr.message}`);
       const url = `${supabase.storage.from("avatars").getPublicUrl(path).data.publicUrl}?v=${Date.now()}`;
       const r = await savePhotoAction(kind, url);
-      if (r.error) throw new Error(r.error);
+      if (r.error) {
+        // not saved: remove the file again, so no unused picture stays in storage
+        await supabase.storage.from("avatars").remove([path]).catch(() => undefined);
+        throw new Error(r.error);
+      }
       setPreview(url);
       router.refresh();
     } catch (err) {
@@ -88,7 +92,7 @@ export function PhotoUpload({ kind, name, current }: { kind: Kind; name: string;
           </button>
         )}
         <span className="small muted">صورة واضحة للوجه {kind === "institute" ? "أو شعار المعهد" : ""} تزيد ثقة الأهل.</span>
-        {error && <span className="small" style={{ color: "var(--bad)" }}>{error}</span>}
+        {error && <span className="small" role="alert" style={{ color: "var(--bad)" }}>{error}</span>}
       </div>
       <input ref={input} type="file" accept="image/jpeg,image/png,image/webp" hidden onChange={onPick} />
     </div>

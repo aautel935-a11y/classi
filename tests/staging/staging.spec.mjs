@@ -429,7 +429,9 @@ test("S10. photo: the student uploads a profile photo (stored on staging only) a
   let uploaded = false;
   try {
     await box.locator('input[type="file"]').setInputFiles({ name: "classi-test.png", mimeType: "image/png", buffer: png });
-    await expect(photo).toHaveCount(1, { timeout: 20_000 }); uploaded = true;
+    await expect(photo.or(box.getByRole("alert")).first()).toBeVisible({ timeout: 20_000 });
+    if (await box.getByRole("alert").count()) throw new Error(`upload refused on screen: ${await box.getByRole("alert").textContent()}`);
+    await expect(photo).toHaveCount(1); uploaded = true;
     const src = await photo.getAttribute("src");
     const u = new URL(src);
     expect(u.hostname, "stored in the classi-staging project").toBe(TARGET.supabaseHost);
