@@ -24,6 +24,16 @@ async function guard(context) {
   });
 }
 test.afterEach(() => { expect(violations, "requests to production or a non-staging Supabase project").toEqual([]); });
+// On failure, print what each open page shows (address, heading, messages), so the log explains the cause. No codes,
+// cookies or form values are printed.
+test.afterEach(async ({ browser }, info) => {
+  if (info.status === info.expectedStatus) return;
+  for (const ctx of browser.contexts()) for (const p of ctx.pages()) {
+    const u = new URL(p.url()); const h = await p.locator("h1, h2").first().textContent({ timeout: 2000 }).catch(() => "");
+    const msg = await p.locator(".err, .okmsg, [role=alert], [role=dialog] .err").allTextContents().catch(() => []);
+    console.log(`[page] ${u.pathname}${u.search} | h: ${(h ?? "").trim().slice(0, 80)} | messages: ${msg.map((m) => m.trim()).filter(Boolean).join(" / ").slice(0, 300)}`);
+  }
+});
 
 async function newContext(browser, state, extra = {}) {
   // a fresh context starts from the bypass cookie (config storageState) unless a signed-in state is given
@@ -221,7 +231,7 @@ async function bookAsParent(page, dayIndex) {
     await primary.click();
     if (label !== "التالي") break;
   }
-  await page.waitForURL(/\/schedule/);
+  await page.waitForURL(/\/schedule/, { timeout: 20_000 });
   return { time, dayNum };
 }
 const lessonCard = (page, { time, dayNum }) => page.locator(".card.lesson").filter({ hasText: OFFER }).filter({ hasText: time })
@@ -340,16 +350,17 @@ test("S8. teacher: change the hours and put them back; create a test offer and d
 });
 
 test("S9. booking that needs the teacher: accept (then the parent cancels) and decline; instant confirmation put back", async ({ browser }) => {
+  test.setTimeout(240_000);
   const t = await as(browser, "teacher"); const tp = await t.newPage();
   const id = await offerId(tp);
-  const setInstant = async (on) => {
-    await tp.goto(`/manage/course/${id}?edit=1`);
-    const f = tp.locator("form").filter({ has: tp.locator('input[name="auto_confirm"]') });
+  const setInstant = async (page, on) => {
+    await page.goto(`/manage/course/${id}?edit=1`);
+    const f = page.locator("form").filter({ has: page.locator('input[name="auto_confirm"]') });
     await f.locator('input[name="auto_confirm"]').setChecked(on);
     await f.getByRole("button", { name: "حفظ التعديلات" }).click();
-    await tp.waitForURL(/saved=offer/);
-    await tp.goto("/teach");
-    const card = tp.locator(".stack").filter({ has: tp.locator(`a[href="/offer/${id}"]`) }).first();
+    await page.waitForURL(/saved=offer/);
+    await page.goto("/teach");
+    const card = page.locator(".stack").filter({ has: page.locator(`a[href="/offer/${id}"]`) }).first();
     await expect(card.getByText("تأكيد فوري")).toHaveCount(on ? 1 : 0);
     await expect(card.getByText(/بانتظار/), "changing only instant confirmation must not send the offer to review").toHaveCount(0);
   };
@@ -364,33 +375,41 @@ test("S9. booking that needs the teacher: accept (then the parent cancels) and d
       "deployed build lacks the Phase 6 package fix: deploy it to staging before running S9 (nothing was changed)").toBe("");
   }
   const p = await as(browser, "parent"); const pp = await p.newPage();
+  const made = [];                                             // bookings this test created (undone in finally)
   let instantOff = false;
   try {
-    await setInstant(false); instantOff = true;
+    await setInstant(tp, false); instantOff = true;
 
     // 1. a request the teacher accepts; the parent then cancels it
-    const b1 = await bookAsParent(pp, 5);
+    const b1 = await bookAsParent(pp, 5); made.push(b1);
     await expect(lessonCard(pp, b1).getByText("بانتظار موافقة المعلم")).toBeVisible();
     await tp.goto("/teach");
-    await requestCard(b1).getByRole("button", { name: "قبول" }).click();
+    console.log(`[S9] teacher requests: ${(await tp.locator("section").filter({ has: tp.getByRole("heading", { name: "طلبات حجز" }) }).locator(".card").allTextContents()).map((x) => x.replace(/\s+/g, " ").trim().slice(0, 90)).join(" | ") || "none"} (looking for ${b1.time})`);
+    await requestCard(b1).getByRole("button", { name: "قبول", exact: true }).click();
     await expect(requestCard(b1)).toHaveCount(0, { timeout: 20_000 });
     await pp.goto("/schedule");
     await expect(lessonCard(pp, b1).getByText("مؤكد")).toBeVisible();
-    await cancelFromSchedule(pp, b1);
+    await cancelFromSchedule(pp, b1); made.pop();
 
     // 2. a request the teacher declines; the parent is told and the time is free again
-    const b2 = await bookAsParent(pp, 6);
+    const b2 = await bookAsParent(pp, 6); made.push(b2);
     await expect(lessonCard(pp, b2).getByText("بانتظار موافقة المعلم")).toBeVisible();
     await tp.goto("/teach");
     await requestCard(b2).getByRole("button", { name: "رفض" }).click();
     await tp.getByRole("button", { name: "تأكيد الرفض" }).click();
-    await expect(requestCard(b2)).toHaveCount(0, { timeout: 20_000 });
+    await expect(requestCard(b2)).toHaveCount(0, { timeout: 20_000 }); made.pop();
     await pp.goto("/schedule");
     await expect(lessonCard(pp, b2)).toHaveCount(0);
     await pp.goto("/notifications");
     await expect(pp.locator("a.notice").filter({ hasText: "اعتذر المعلم عن الموعد" }).filter({ hasText: OFFER }).first()).toBeVisible();
   } finally {
-    if (instantOff) await setInstant(true);
+    // undo with fresh pages, so a failure above (or a closed page) cannot stop the cleanup
+    if (made.length) {
+      const c = await as(browser, "parent"); const cp = await c.newPage();
+      for (const b of made) await cancelFromSchedule(cp, b).catch((e) => console.log(`[S9] cleanup: could not cancel ${b.dayNum} ${b.time}: ${e.message.split("\n")[0]}`));
+      await c.close();
+    }
+    if (instantOff) { const c = await as(browser, "teacher"); await setInstant(await c.newPage(), true); await c.close(); }
   }
   await p.close(); await t.close();
 });

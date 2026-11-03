@@ -21,6 +21,8 @@ export default defineConfig({
     ...(DRY_RUN ? {} : { storageState: (process.env.RUNNER_TEMP || "/tmp") + "/classi-staging-bypass.json" }),
     locale: "ar", timezoneId: "Asia/Jerusalem",
     trace: "off", screenshot: "off", video: "off",
+    // a stuck step fails fast with its own error, leaving the test time to undo its changes in finally blocks
+    actionTimeout: 20_000, navigationTimeout: 30_000,
   },
   projects: [
     { name: "mobile", use: { ...devices["Pixel 7"] } },
