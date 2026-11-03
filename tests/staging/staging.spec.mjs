@@ -130,6 +130,10 @@ test("S4. data isolation: the parent sees the child's lessons, the student does 
   await expect(pp.getByRole("heading", { name: "جدولي" })).toBeVisible();
   console.log(`[S4] parent: past lessons section ${(await openPastLessons(pp)) ? "opened" : "absent"}`);
   await expect(pp.locator(".card.lesson").filter({ hasText: OFFER }).filter({ hasText: CHILD }).first()).toBeVisible();
+  // proof that the isolation check below really fails on a leak: on the parent's page (which does show the child)
+  // the same assertion must throw
+  const parentHtml = await pp.content();
+  expect(() => expect(parentHtml).not.toContain(CHILD), "the isolation check must fail on a page that shows the child").toThrow();
   await p.close();
 
   const s = await as(browser, "student"); const sp = await s.newPage();
@@ -557,7 +561,10 @@ test("S10b. admin review: a rejection reason is shown to the owner only; teacher
         await pp.goto(path);
         expect(await pp.content(), `another signed-in user (parent) on ${path}: the rejection reason must not appear`).not.toContain(reason);
       }
-      expect(await tp.content()).toContain(reason);                     // still the owner's (detector sanity)
+      // proof that the leak check really fails on a leak: applied to the owner's page, which does hold the reason,
+      // the same assertion must throw
+      const ownerHtml = await tp.content();
+      expect(() => expect(ownerHtml).not.toContain(reason), "the leak check must fail on a page that holds the reason").toThrow();
       console.log(`[S10b] rejection reason: shown to the owner; not on the public page (visitor), not on 5 pages of another user`);
     } finally {
       if (changed) {
