@@ -517,8 +517,15 @@ test("S10b. admin review: a rejection reason is shown to the owner only; teacher
   // ---- The reason for a rejected profile edit: shown to the owner only (runs on the local stack too) ----
   {
     const bio = tp.locator("#kf-updateTeacher #e-bio");
+    // the profile form sits in a folded section ("تعديل البيانات والنبذة"), opened like a user would
+    const openProfileForm = async () => {
+      const det = tp.locator("#profile details").filter({ has: tp.locator("summary", { hasText: "تعديل البيانات والنبذة" }) }).first();
+      if (!(await det.evaluate((d) => d.open))) await det.locator("summary").click();
+      await expect(bio).toBeVisible();
+    };
     const saveBio = async (text) => {
       await tp.goto("/teach#profile");
+      await openProfileForm();
       await bio.fill(text);
       await tp.locator("#kf-updateTeacher").getByRole("button", { name: "حفظ", exact: true }).click();
       await tp.waitForURL(/ok=profile/);
