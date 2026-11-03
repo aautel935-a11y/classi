@@ -3,7 +3,7 @@
 import { useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
-import { savePhotoAction } from "@/app/actions";
+import { removePhotoAction, savePhotoAction } from "@/app/actions";
 import { Avatar } from "./Avatar";
 import { friendlyError } from "@/lib/errors";
 
@@ -60,6 +60,21 @@ export function PhotoUpload({ kind, name, current }: { kind: Kind; name: string;
     }
   }
 
+  async function onRemove() {
+    setError(null);
+    setBusy(true);
+    try {
+      const r = await removePhotoAction(kind);
+      if (r.error) throw new Error(r.error);
+      setPreview(null);
+      router.refresh();
+    } catch (err) {
+      setError(err instanceof Error && err.message ? friendlyError({ message: err.message }) : "تعذّرت إزالة الصورة، حاول مرة أخرى.");
+    } finally {
+      setBusy(false);
+    }
+  }
+
   return (
     <div className="photo-up">
       <Avatar name={name} url={preview} size="lg" inst={kind === "institute"} />
@@ -67,6 +82,11 @@ export function PhotoUpload({ kind, name, current }: { kind: Kind; name: string;
         <button type="button" className="btn sm ghost" onClick={() => input.current?.click()} disabled={busy}>
           {busy ? "جارٍ الرفع…" : preview ? "تغيير الصورة" : kind === "institute" ? "رفع شعار المعهد" : "رفع صورة شخصية"}
         </button>
+        {preview && (
+          <button type="button" className="link small" onClick={onRemove} disabled={busy} style={{ alignSelf: "flex-start" }}>
+            إزالة الصورة
+          </button>
+        )}
         <span className="small muted">صورة واضحة للوجه {kind === "institute" ? "أو شعار المعهد" : ""} تزيد ثقة الأهل.</span>
         {error && <span className="small" style={{ color: "var(--bad)" }}>{error}</span>}
       </div>

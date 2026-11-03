@@ -55,10 +55,11 @@ jobs:
         run: |
           npm ci --no-audit --no-fund
           npx playwright install --with-deps chromium
-          npm install --no-save --no-audit --no-fund lighthouse@12.6.1
+          npm install --no-save --no-audit --no-fund lighthouse@12.6.1 axe-core@4.10.2   # Lighthouse and the S7 accessibility check, not part of the app
           # everything the next steps need, checked before any test starts
           node -e "require.resolve('@playwright/test'); require('fs').accessSync(require('@playwright/test').chromium.executablePath())"
           npx --no-install lighthouse --version
+          node -e "require.resolve('axe-core/axe.min.js')"
       - name: Staging journeys (phone + desktop), UI only
         env:
           VERCEL_AUTOMATION_BYPASS_SECRET: ${{ secrets.VERCEL_AUTOMATION_BYPASS_SECRET }}

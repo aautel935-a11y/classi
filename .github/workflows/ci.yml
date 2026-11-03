@@ -142,10 +142,16 @@ jobs:
           # same accounts and data as classi-staging (supabase/staging/staging_data.sql), fixed codes from config.toml
           psql "$E2E_DB_URL" -v ON_ERROR_STOP=1 -q -c "insert into public.app_secrets (key, value) values ('deploy_env', 'staging') on conflict (key) do update set value = excluded.value"
           psql "$E2E_DB_URL" -v ON_ERROR_STOP=1 -q -f supabase/staging/staging_data.sql > /tmp/staging-dry-data.log 2>&1
+          # what the suite may touch, before it runs (it must be exactly the same afterwards)
+          psql "$E2E_DB_URL" -v ON_ERROR_STOP=1 -Atq -f supabase/tests/staging_state.sql > /tmp/staging-state-before.txt
           # the suite must work with no database connection in reach: E2E_DB_URL is removed from its environment
           env -u E2E_DB_URL STAGING_DRY_RUN=1 BASE_URL=http://localhost:3000 \
             STAGING_OTP_TEACHER=111111 STAGING_OTP_INSTITUTE=222222 STAGING_OTP_PARENT=333333 STAGING_OTP_STUDENT=444444 STAGING_OTP_ADMIN=555555 \
             npx playwright test -c tests/staging/playwright.config.mjs 2>&1 | tee /tmp/staging-dry.log
+          psql "$E2E_DB_URL" -v ON_ERROR_STOP=1 -Atq -f supabase/tests/staging_state.sql > /tmp/staging-state-after.txt
+          echo "state the suite may touch ($(wc -l < /tmp/staging-state-before.txt) lines):"; cat /tmp/staging-state-before.txt
+          if diff /tmp/staging-state-before.txt /tmp/staging-state-after.txt; then echo "PASS: the staging suite left this state exactly as it found it"
+          else echo "::error::the staging suite did not put everything back (diff above)"; exit 1; fi
       - name: Staging migrations script on the local stack (test mode; nothing new must change nothing)
         run: STAGING_DB_URL="$E2E_DB_URL" MIGRATE_TEST=1 sh scripts/staging/migrate.sh 2>&1 | tee /tmp/stgmig-e2e.log
       - name: Playwright

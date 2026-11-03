@@ -46,9 +46,21 @@ test("BUG-02: today's slots less than 2 hours away are shown as busy, later ones
   for (const x of all) assert.equal(x.busy, new Date(x.at).getTime() < Date.now() + 2 * 3600000, x.time);
 });
 
-// Slots in the past or less than 2 hours away are busy (BUG-02), so these tests use a Tuesday far in the future
-// (winter time, UTC+2) instead of a date that eventually becomes today.
-const slotDay = "2030-11-05";
+// Slots in the past or less than 2 hours away are busy (BUG-02), so these tests use dates computed from today:
+// the first Tuesday at least 8 days ahead (never today, never in the past), and the Wednesday after it.
+const futureDay = (weekday, minAhead = 8) => {
+  const d = new Date(Date.now() + minAhead * 86400000);
+  d.setUTCDate(d.getUTCDate() + ((weekday - d.getUTCDay() + 7) % 7));
+  return d.toISOString().slice(0, 10);
+};
+const slotDay = futureDay(2);
+const slotDayNext = new Date(Date.parse(slotDay + "T12:00:00Z") + 86400000).toISOString().slice(0, 10);
+test("slot test dates are a Tuesday and a Wednesday, 8 to 14 days ahead", () => {
+  assert.equal(new Date(slotDay + "T12:00:00Z").getUTCDay(), 2);
+  assert.equal(new Date(slotDayNext + "T12:00:00Z").getUTCDay(), 3);
+  const ahead = (Date.parse(slotDay + "T12:00:00Z") - Date.now()) / 86400000;
+  assert.ok(ahead > 7 && ahead < 15.5, String(ahead));
+});
 const av = [{ weekday: 2, start_time: "16:00", end_time: "20:00" }];
 const busyAt = (hhmm, m) => ({ starts_at: iso(fromLocal(slotDay, hhmm)), minutes: m });
 test("slots: 90-minute lessons do not overlap", () => assert.equal(show(privateSlots(av, [], 90, [slotDay])), "16:00 17:30"));
@@ -61,7 +73,7 @@ test("slots: whole-day vacation block closes the day", () =>
   assert.equal(show(privateSlots(av, [busyAt("00:00", 1440)], 60, [slotDay])), "16:00x"));
 test("slots: two ranges in one day", () =>
   assert.equal(show(privateSlots([{ weekday: 2, start_time: "09:00", end_time: "11:00" }, ...av], [], 60, [slotDay])), "09:00 10:00 16:00 17:00 18:00 19:00"));
-test("slots: no availability on other weekdays", () => assert.equal(privateSlots(av, [], 60, ["2030-11-06"]).length, 0));
+test("slots: no availability on other weekdays", () => assert.equal(privateSlots(av, [], 60, [slotDayNext]).length, 0));
 test("slots: a lesson never runs past the end of the range", () => {
   const s = privateSlots([{ weekday: 2, start_time: "16:00", end_time: "17:30" }], [], 60, [slotDay]);
   assert.equal(show(s), "16:00");

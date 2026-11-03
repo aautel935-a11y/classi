@@ -405,7 +405,9 @@ export async function savePhotoAction(kind: "teacher" | "institute" | "profile",
   try {
     const u = new URL(url);
     const host = new URL((process.env.NEXT_PUBLIC_SUPABASE_URL ?? "").trim()).hostname;
-    ok = u.protocol === "https:" && u.hostname === host && u.pathname.startsWith(`/storage/v1/object/public/avatars/${user.id}/`);
+    // https always; plain http only for the local Supabase stack (CI and laptops), never for a hosted project
+    const local = u.protocol === "http:" && (host === "127.0.0.1" || host === "localhost");
+    ok = (u.protocol === "https:" || local) && u.hostname === host && u.pathname.startsWith(`/storage/v1/object/public/avatars/${user.id}/`);
   } catch {
     ok = false;
   }
@@ -417,6 +419,30 @@ export async function savePhotoAction(kind: "teacher" | "institute" | "profile",
         ? await supabase.from("institutes").update({ logo_url: url }).eq("owner_id", user.id)
         : await supabase.from("profiles").update({ avatar_url: url }).eq("id", user.id);
   if (error) return { error: friendlyError(error) };
+  revalidatePath("/", "layout");
+  return { ok: true };
+}
+
+/** Removes the account's own photo: the file in storage (policy "avatars: delete own") and the link to it. A teacher's
+ * or institute's change goes through the usual content review, like any other profile change. */
+export async function removePhotoAction(kind: "teacher" | "institute" | "profile"): Promise<Result> {
+  revalidateTag("catalog");
+  const { supabase, user } = await client();
+  if (!user) return { error: "سجّل الدخول أولاً." };
+  if (!["teacher", "institute", "profile"].includes(kind)) return { error: "طلب غير صالح." };
+  const { error } =
+    kind === "teacher"
+      ? await supabase.from("teachers").update({ photo_url: null }).eq("user_id", user.id)
+      : kind === "institute"
+        ? await supabase.from("institutes").update({ logo_url: null }).eq("owner_id", user.id)
+        : await supabase.from("profiles").update({ avatar_url: null }).eq("id", user.id);
+  if (error) return { error: friendlyError(error) };
+  // Only the account's own file can be removed (the path starts with its id). A teacher's or institute's file stays
+  // until the change is approved, so the approved photo keeps showing meanwhile.
+  if (kind === "profile") {
+    const { error: rmErr } = await supabase.storage.from("avatars").remove([`${user.id}/profile.jpg`]);
+    if (rmErr) return { error: friendlyError(rmErr) };
+  }
   revalidatePath("/", "layout");
   return { ok: true };
 }
