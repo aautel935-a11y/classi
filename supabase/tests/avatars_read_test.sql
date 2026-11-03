@@ -39,9 +39,10 @@ update storage.objects set name = '72000000-0000-0000-0000-000000000003/stolen.j
 reset role;
 select t_is('Samer''s three files are untouched', $$select count(*)::text from storage.objects where name like '72000000-0000-0000-0000-000000000002/%'$$, '3');
 
-\echo '===== 3. the admin is a signed-in user like any other here (review works through public links)'
+\echo '===== 3. the admin: teacher and institute photos only (to publish and replace them), never profile photos'
 set role authenticated; set request.jwt.claim.sub = '72000000-0000-0000-0000-000000000001';
-select t_is('admin: nothing listed (no photo of her own)', $$select count(*)::text from storage.objects where bucket_id = 'avatars'$$, '0');
+select t_is('admin: Samer''s teacher photos are listed (20261105000000_private_photos)', $$select count(*)::text from storage.objects where bucket_id = 'avatars' and name like '%/teacher-%'$$, '3');
+select t_is('admin: no profile photo is listed', $$select count(*)::text from storage.objects where bucket_id = 'avatars' and name like '%/profile-%'$$, '0');
 -- the health check lists the root of the bucket: an empty list, not an error
 select t_ok('health check (list the root) runs without an error', $$select count(*) from storage.objects where bucket_id = 'avatars' and name not like '%/%/%'$$);
 reset role;
@@ -68,9 +69,9 @@ select t_is('nothing of the mother''s was touched', $$select count(*)::text from
 
 \echo '===== 5. the bucket stays public, and the policies say what this suite checks'
 select t_is('photos bucket is public (public links keep working without any read policy)', $$select public::text from storage.buckets where id = 'avatars'$$, 'true');
-select t_is('exactly one read policy on storage.objects: the owner-only one, for signed-in users',
-  $$select string_agg(policyname || ' ' || array_to_string(roles, ','), '; ') from pg_policies where schemaname = 'storage' and tablename = 'objects' and cmd = 'SELECT'$$,
-  'avatars: read own authenticated');
+select t_is('read policies on the photos bucket: the owner''s folder, and the admin for teacher/institute photos; signed-in users only',
+  $$select string_agg(policyname || ' ' || array_to_string(roles, ','), '; ' order by policyname) from pg_policies where schemaname = 'storage' and tablename = 'objects' and cmd = 'SELECT' and qual like '%''avatars''%'$$,
+  'avatars: admin reads teacher and institute photos authenticated; avatars: read own authenticated');
 select t_is('no read policy open to visitors or to everyone (guard for later migrations)',
   $$select count(*)::text from pg_policies where schemaname = 'storage' and tablename = 'objects' and cmd in ('SELECT', 'ALL') and (roles && array['public', 'anon']::name[])$$, '0');
 select t_is('the read policy is limited to the owner''s folder',

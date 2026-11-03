@@ -127,6 +127,16 @@ jobs:
           echo "$out" | grep -q "refusing: not the classi-staging database" || { echo "::error::apply file did not refuse: $out"; exit 1; }
           awk '/^-- ===== BEGIN MIGRATION/{f=1;next}/^-- ===== END MIGRATION/{f=0}f' supabase/staging/apply_20261104000000_avatars_read_own.sql | cmp - supabase/migrations/20261104000000_avatars_read_own.sql
           echo "refused outside staging; embedded migration identical to the committed file"
+      - name: Rollback drill (private photos, step A)
+        if: always()
+        run: sh supabase/tests/rollback_drill.sh supabase/rollback/20261105000000_private_photos.down.sql rollback_private_photos_checks photos_test flow_test security_test review_test review_access_test 2>&1 | tee /tmp/drill8.log
+      - name: Private photos step B (prepared, not yet a migration) on top of every migration
+        if: always()
+        run: |
+          sh supabase/tests/forward_drill.sh supabase/pending/20261105010000_private_photos_enforce.sql private_photos_enforce_checks security_test review_access_test functional_test 2>&1 | tee /tmp/fwd8.log
+          # and its rollback brings the current photo flow back exactly
+          DOWN=supabase/rollback/20261105010000_private_photos_enforce.down.sql sh supabase/tests/forward_drill.sh supabase/pending/20261105010000_private_photos_enforce.sql photos_test flow_test review_test private_photos_test 2>&1 | tee -a /tmp/fwd8.log
+          DOWN=supabase/rollback/20261105010000_private_photos_enforce.down.sql,supabase/rollback/20261105000000_private_photos.down.sql sh supabase/tests/forward_drill.sh supabase/pending/20261105010000_private_photos_enforce.sql rollback_private_photos_checks photos_test 2>&1 | tee -a /tmp/fwd8.log
       - name: Search equivalence at growth size (3,000 offers, 409 filter combinations)
         if: always()
         run: |
