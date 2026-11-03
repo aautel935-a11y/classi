@@ -572,7 +572,14 @@ test("S10b. admin review: a rejection reason is shown to the owner only; teacher
   const t = await as(browser, "teacher"); const tp = await t.newPage();
   const store = storageWatcher(tp);              // Samer's photo files, seen in storage with his own session
   const box = tp.locator("#profile .photo-up");
-  await tp.goto("/teach#profile");
+  // Always a real page load of the dashboard. goto() to the address the page is already on, with a "#", only moves
+  // within the page (no load, the photo box is not mounted again, so its tidy-up does not run): hosted run
+  // 41721336243. So when the dashboard is already open it is reloaded.
+  const openTeach = async () => {
+    if (new URL(tp.url()).pathname === "/teach") await tp.reload();
+    else await tp.goto("/teach#profile");
+  };
+  await openTeach();
   // Before any change: the deployed build stores every upload as its own file (Phase 6), and nothing is waiting.
   await expect(box, "deployed build lacks unique photo files: deploy it to staging before running S10b (nothing was changed)").toHaveAttribute("data-unique-files", "1");
 
@@ -605,13 +612,13 @@ test("S10b. admin review: a rejection reason is shown to the owner only; teacher
       await expect(bio).toBeVisible();
     };
     const saveBio = async (text) => {
-      await tp.goto("/teach#profile");
+      await openTeach();
       await openProfileForm();
       await bio.fill(text);
       await tp.locator("#kf-updateTeacher").getByRole("button", { name: "حفظ", exact: true }).click();
       await tp.waitForURL(/ok=profile/);
     };
-    await tp.goto("/teach#profile");
+    await openTeach();
     const originalBio = await bio.inputValue();
     const reason = `سبب رفض تجريبي ${RUN}`;
     const rejectedNotice = "لم تتم الموافقة على آخر تعديل لملفك";
@@ -653,7 +660,7 @@ test("S10b. admin review: a rejection reason is shown to the owner only; teacher
       }
       await p.close();
     }
-    await tp.goto("/teach#profile");
+    await openTeach();
     expect(await bio.inputValue(), "bio is back to the original").toBe(originalBio);
     await expect(tp.getByText(rejectedNotice)).toHaveCount(0);
   }
@@ -661,7 +668,7 @@ test("S10b. admin review: a rejection reason is shown to the owner only; teacher
   if (DRY_RUN) {
     // local stack: photo links are http://127.0.0.1, which the database refuses (https://<project>.supabase.co only);
     // the refusal is shown and the new file is removed again (the CI state check counts the photo files)
-    await tp.goto("/teach#profile");
+    await openTeach();
     await box.locator('input[type="file"]').setInputFiles({ name: "t.png", mimeType: "image/png", buffer: png });
     await expect(box.getByRole("alert")).toBeVisible({ timeout: 20_000 });
     expect(store.uploads, "one upload request to storage").toHaveLength(1);
@@ -672,7 +679,7 @@ test("S10b. admin review: a rejection reason is shown to the owner only; teacher
   }
 
   const upload = async () => {
-    await tp.goto("/teach#profile");
+    await openTeach();
     await box.locator('input[type="file"]').setInputFiles({ name: "t.png", mimeType: "image/png", buffer: png });
     await expect(box.getByRole("status")).toContainText("للمراجعة", { timeout: 20_000 });
     const src = await box.locator("img.photo").getAttribute("src");
@@ -708,7 +715,7 @@ test("S10b. admin review: a rejection reason is shown to the owner only; teacher
     expect(await publicPhoto(), "rejected replacement: the approved photo is unchanged").toBe(approved);
 
     // 4. removal waits for review too, then the photo is gone (back to the original state)
-    await tp.goto("/teach#profile");
+    await openTeach();
     await box.getByRole("button", { name: "إزالة الصورة" }).click();
     await expect(box.getByRole("status")).toContainText("للمراجعة", { timeout: 20_000 });
     expect(await publicPhoto(), "approved photo stays while the removal waits").toBe(approved);
@@ -716,17 +723,26 @@ test("S10b. admin review: a rejection reason is shown to the owner only; teacher
     expect(await publicPhoto(), "removed after approval").toBeNull();
     // the app no longer shows or links the removed photo: the public teacher page and the teacher's own dashboard
     expect(await vp.content(), "public teacher page: no link to the removed photo").not.toContain(keyOf(approved));
-    await tp.goto("/teach#profile");
+    await openTeach();
     expect(await tp.content(), "teacher dashboard: no link to the removed photo").not.toContain(keyOf(approved));
 
     // 5. unused files are cleared once they are old enough (never sooner: an upload may still be being saved)
     const wait = Math.max(0, 125_000 - (Date.now() - files.at(-1).match(/teacher-([0-9a-z]+)-/).slice(1).map((x) => parseInt(x, 36))[0]));
     console.log(`[S10b] waiting ${Math.round(wait / 1000)}s before the owner's next visit clears unused files`);
     await tp.waitForTimeout(wait);
-    await tp.goto("/teach#profile"); await tp.waitForTimeout(4000);       // the photo box tidies on opening
+    // the owner's next visit (a real page load): the photo box runs its tidy-up (a server action) when it opens;
+    // the test waits for that request to be answered, then for storage to show the result (no fixed wait)
+    const tidied = tp.waitForResponse((r) => r.request().method() === "POST" && !!r.request().headers()["next-action"]
+      && new URL(r.url()).pathname === "/teach", { timeout: 30_000 });
+    await openTeach();
+    const tidyRes = await tidied;
+    expect(tidyRes.status(), "the tidy-up request was answered").toBe(200);
+    console.log(`[S10b] owner's visit: page reloaded, tidy-up request answered (HTTP ${tidyRes.status()})`);
     // in storage (Samer's session): none of the test's files is left, and no other teacher photo file either
     const folder = keyOf(files[0]).split("/")[0];
-    const stored = (await storedFiles(t.request, store, folder)).filter((k) => /\/teacher-[^/]+$/.test(k));
+    const teacherFiles = async () => (await storedFiles(t.request, store, folder)).filter((k) => /\/teacher-[^/]+$/.test(k));
+    let stored = await teacherFiles();
+    for (let i = 0; i < 15 && stored.length; i++) { await tp.waitForTimeout(1000); stored = await teacherFiles(); }
     const left = files.map(keyOf).filter((k) => stored.includes(k));
     console.log(`[S10b] in storage after the tidy-up: ${files.length - left.length} of ${files.length} test files deleted, teacher photo files left in the folder: ${stored.length}`);
     for (const f of files) await logPublicLink(t.request, f, "S10b");
@@ -737,7 +753,7 @@ test("S10b. admin review: a rejection reason is shown to the owner only; teacher
     await ap.goto("/admin?tab=review").catch(() => undefined);
     if (await reviewCard().count().catch(() => 0)) await decide(false).catch((e) => console.log(`[S10b] cleanup reject: ${e.message.split("\n")[0]}`));
     if (approvedByTest) {
-      await tp.goto("/teach#profile").catch(() => undefined);
+      await openTeach().catch(() => undefined);
       if (await box.getByRole("button", { name: "إزالة الصورة" }).count().catch(() => 0)) {
         await box.getByRole("button", { name: "إزالة الصورة" }).click().catch(() => undefined);
         await decide(true).catch((e) => console.log(`[S10b] cleanup approve removal: ${e.message.split("\n")[0]}`));
