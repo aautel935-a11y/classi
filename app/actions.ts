@@ -408,9 +408,7 @@ export async function savePhotoAction(kind: "teacher" | "institute" | "profile",
   try {
     const u = new URL(url);
     const host = new URL((process.env.NEXT_PUBLIC_SUPABASE_URL ?? "").trim()).hostname;
-    // https always; plain http only for the local Supabase stack (CI and laptops), never for a hosted project
-    const local = u.protocol === "http:" && (host === "127.0.0.1" || host === "localhost");
-    ok = (u.protocol === "https:" || local) && u.hostname === host && u.pathname.startsWith(`/storage/v1/object/public/avatars/${user.id}/`);
+    ok = u.protocol === "https:" && u.hostname === host && u.pathname.startsWith(`/storage/v1/object/public/avatars/${user.id}/`);
   } catch {
     ok = false;
   }

@@ -430,6 +430,18 @@ test("S10. photo: the student uploads a profile photo (stored on staging only) a
   try {
     await box.locator('input[type="file"]').setInputFiles({ name: "classi-test.png", mimeType: "image/png", buffer: png });
     await expect(photo.or(box.getByRole("alert")).first()).toBeVisible({ timeout: 20_000 });
+    if (DRY_RUN) {
+      // The local stack serves files over http://127.0.0.1, and the database only accepts photo links on
+      // https://<project>.supabase.co (profiles_avatar_url_chk), so the link is refused by design. What can be checked
+      // here: the refusal is shown, no photo is set, and the uploaded file is deleted again (the CI state check
+      // compares the number of photo files before and after). The full path runs on hosted staging.
+      await expect(box.getByRole("alert")).toBeVisible();
+      await page.reload();
+      await expect(photo).toHaveCount(0);
+      console.log(`[S10] local stack: photo link refused by design (${(await page.locator(".photo-up").textContent()).includes("رفع") ? "upload button shown again" : "?"}); file removal verified by the CI state check`);
+      await s.close();
+      return;
+    }
     if (await box.getByRole("alert").count()) throw new Error(`upload refused on screen: ${await box.getByRole("alert").textContent()}`);
     await expect(photo).toHaveCount(1); uploaded = true;
     const src = await photo.getAttribute("src");
