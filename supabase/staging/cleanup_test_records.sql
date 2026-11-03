@@ -54,6 +54,18 @@ do $check$ declare b int; m int; n int; begin
   end if;
 end $check$;
 
+-- backup first (same transaction): exact copies of every row deleted below, in a schema the API does not expose,
+-- so supabase/staging/cleanup_test_records_rollback.sql can put them back
+create schema if not exists cleanup_backup;
+revoke all on schema cleanup_backup from public, anon, authenticated;
+do $bk$ begin
+  if to_regclass('cleanup_backup.bookings_20261104') is not null then raise exception 'refusing: a backup of this cleanup already exists (already run?)'; end if;
+end $bk$;
+create table cleanup_backup.bookings_20261104 as select b.* from public.bookings b where b.id in (select id from doomed_bookings);
+create table cleanup_backup.messages_20261104 as select m.* from public.messages m where m.id in (select id from doomed_messages);
+create table cleanup_backup.notifications_20261104 as select n.* from public.notifications n where n.id in (select id from doomed_notifications);
+revoke all on all tables in schema cleanup_backup from public, anon, authenticated;
+
 delete from public.notifications where id in (select id from doomed_notifications);
 delete from public.messages where id in (select id from doomed_messages);
 delete from public.bookings where id in (select id from doomed_bookings);
@@ -62,6 +74,9 @@ delete from public.bookings where id in (select id from doomed_bookings);
 do $after$ begin
   if (select count(*) from public.bookings where status in ('pending', 'confirmed')) <> 3 then raise exception 'refusing: active bookings changed'; end if;
   if (select count(*) from public.bookings where created_at <= '2026-11-01 03:27:17.053478+00') <> 4 then raise exception 'refusing: seed bookings changed'; end if;
+  if (select count(*) from cleanup_backup.bookings_20261104) <> 20 or (select count(*) from cleanup_backup.messages_20261104) <> 8
+     or (select count(*) from cleanup_backup.notifications_20261104) <> 121 then raise exception 'refusing: backup incomplete'; end if;
 end $after$;
 commit;
--- expected result: "Success. No rows returned". Afterwards: bookings 4, messages 2, notifications 15.
+-- expected result: "Success. No rows returned". Afterwards: bookings 4, messages 2, notifications 15; backups in
+-- cleanup_backup.*_20261104 (20 / 8 / 121 rows). Rollback: supabase/staging/cleanup_test_records_rollback.sql
