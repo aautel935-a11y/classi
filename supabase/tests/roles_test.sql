@@ -33,7 +33,7 @@ reset role;
 set role authenticated; set request.jwt.claim.sub='10000000-0000-0000-0000-000000000004';
 insert into children (guardian_id,name,grade) values (auth.uid(),'آدم','صف 11');
 select create_booking((select id from offerings where title='إنجليزي محادثة عبر زوم'), (select id from children where name='آدم'),
-  ((current_date + 2) + time '17:00') at time zone 'Asia/Jerusalem');
+  (test_day(2) + time '17:00') at time zone 'Asia/Jerusalem');
 reset role;
 
 \echo '===== 4. ADMIN approves'
@@ -74,7 +74,7 @@ reset role;
 \echo '===== 7. PARENT books: private Zoom lesson, group seat, course, recorded'
 set role authenticated; set request.jwt.claim.sub='10000000-0000-0000-0000-000000000004';
 select 'private' t, create_booking((select id from offerings where title='إنجليزي محادثة عبر زوم'), (select id from children where name='آدم'),
-  ((current_date + 2) + time '17:00') at time zone 'Asia/Jerusalem') is not null ok;
+  (test_day(2) + time '17:00') at time zone 'Asia/Jerusalem') is not null ok;
 select 'group' t, create_booking((select id from offerings where title='مجموعة زوم للبجروت'), null, null,
   (select s.id from sessions s join offerings o on o.id=s.offering_id where o.title='مجموعة زوم للبجروت')) is not null ok;
 select 'course' t, create_booking((select id from offerings where title='دورة إنجليزي مكثفة'), (select id from children where name='آدم'), null, null, 'installments') is not null ok;
