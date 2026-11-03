@@ -1,4 +1,6 @@
 import { createClient } from "@/lib/supabase/server";
+import { signedPhotoUrls } from "@/lib/private-photos";
+import { SIGNED_SECONDS } from "@/lib/photos";
 import Link from "next/link";
 import { Avatar } from "@/components/Avatar";
 import { Icon } from "@/components/Icon";
@@ -34,6 +36,10 @@ export default async function Admin({ searchParams }: { searchParams: Promise<Re
     supabase.rpc("admin_review_queue"),
   ]);
   const openCount = (reports ?? []).length + (chatReports ?? []).length;
+  // new teacher/institute photos wait in the private bucket: short signed links, made with the admin's own session
+  const waitingPhotos = tab === "review"
+    ? await signedPhotoUrls(supabase, ((queue ?? []) as QItem[]).map((q) => (typeof q.changes?.photo_path === "string" ? q.changes.photo_path : null)), SIGNED_SECONDS.admin)
+    : {};
   const back = `/admin?tab=${tab}`;
 
   return (
@@ -115,7 +121,7 @@ export default async function Admin({ searchParams }: { searchParams: Promise<Re
       )}
 
       {tab === "ops" && <OpsTab supabase={supabase} q={sp.q ?? ""} />}
-      {tab === "review" && <ReviewTab queue={(queue ?? []) as QItem[]} />}
+      {tab === "review" && <ReviewTab queue={(queue ?? []) as QItem[]} photos={waitingPhotos} />}
       {tab === "subs" && <SubsTab supabase={supabase} />}
       {tab === "verify" && <VerifyTab supabase={supabase} />}
       {tab === "users" && <UsersTab supabase={supabase} q={sp.q ?? ""} />}
@@ -272,7 +278,7 @@ function show(k: string, v: any) {
 }
 
 /** Everything teachers and institutes want to publish, waiting for the admin. */
-function ReviewTab({ queue }: { queue: QItem[] }) {
+function ReviewTab({ queue, photos }: { queue: QItem[]; photos: Record<string, string> }) {
   return (
     <section className="section">
       <p className="note"><Icon name="shield" />لا يظهر للطلاب أي عرض أو ملف جديد، ولا أي تعديل، قبل موافقتك هنا. الموافقة على أول عرض لمعلم أو معهد جديد توافق على ملفه أيضاً.</p>
@@ -284,6 +290,14 @@ function ReviewTab({ queue }: { queue: QItem[] }) {
             <span className="badge">{q.what === "new" ? (q.kind === "offering" ? "عرض جديد" : q.kind === "teacher" ? "معلم جديد" : "معهد جديد") : q.kind === "offering" ? "تعديل عرض" : q.kind === "teacher" ? "تعديل ملف معلم" : "تعديل ملف معهد"}</span>
           </div>
           <span className="small muted">{q.owner_name} · {dayLong(q.created_at)}</span>
+          {typeof q.changes?.photo_path === "string" && (
+            <div className="row" style={{ gap: 10, alignItems: "center" }} data-waiting-photo="1">
+              {photos[q.changes.photo_path]
+                ? <img className="waiting-photo" src={photos[q.changes.photo_path]} alt="الصورة الجديدة" style={{ width: 72, height: 72, borderRadius: 12, objectFit: "cover" }} />
+                : <span className="small muted">تعذّر عرض الصورة</span>}
+              <span className="small muted">{q.kind === "institute" ? "شعار جديد" : "صورة جديدة"}: خاصة، لا يراها أحد غيرك وصاحبها، وتُنشر للعامة فقط عند الموافقة.</span>
+            </div>
+          )}
           {q.what === "new" ? (
             <div className="summary">
               {Object.entries(q.current).filter(([, v]) => v !== null && v !== false && v !== "").map(([k, v]) => (
@@ -292,7 +306,7 @@ function ReviewTab({ queue }: { queue: QItem[] }) {
             </div>
           ) : (
             <div className="summary">
-              {Object.entries(q.changes ?? {}).map(([k, v]) => (
+              {Object.entries(q.changes ?? {}).filter(([k]) => k !== "photo_path").map(([k, v]) => (
                 <div key={k} style={{ alignItems: "flex-start" }}>
                   <span>{FIELD[k] ?? k}</span>
                   <span className="stack" style={{ gap: 4, alignItems: "flex-end" }}>

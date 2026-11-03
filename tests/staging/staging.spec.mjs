@@ -436,30 +436,46 @@ test("S9. booking that needs the teacher: accept (then the parent cancels) and d
   await p.close(); await t.close();
 });
 
-// ---- Is a photo file really in storage? ----
-// The public link of a photo goes through Supabase's CDN, which can keep serving a copy for a while after the file is
-// deleted (hosted run 41716623354: DELETE 200, then the public link answered 200 with cf-cache-status HIT). So whether
-// a file exists is asked from Supabase Storage itself (its list API, not cached), with the signed-in user's own session,
-// exactly what the app can see. The address and session are taken from the page's own upload request to the
-// classi-staging project; they are kept in memory and never printed. The public link is only logged, for information.
+// ---- Is a photo file really in storage, and who can reach it? ----
+// Since private photos (migrations 20261105000000/010000): users upload only to the private bucket "photos-private";
+// a teacher's new photo waits there until the admin publishes it to the public bucket "avatars"; profile photos stay
+// private and are shown through short signed links. Whether a file exists is asked from Supabase Storage itself (its
+// list API, not cached by the CDN; hosted run 41716623354), with a signed-in user's own session, exactly what that user
+// can see. The owner's session comes from the page's own upload request; another user's from that user's sign-in
+// cookie. Sessions are kept in memory and never printed. Public links are only logged, for information.
+const PRIV = "photos-private", PUB = "avatars";
 function storageWatcher(page) {
-  const w = { origin: null, headers: null, uploads: [] };     // uploads: "<owner id>/<file>" of each upload request
+  const w = { origin: null, headers: null, uploads: [] };     // uploads: { bucket, key: "<owner id>/…" } of each upload
   page.on("request", async (r) => {
     const u = new URL(r.url());
-    if (u.hostname !== TARGET.supabaseHost || r.method() !== "POST" || !u.pathname.startsWith("/storage/v1/object/avatars/")) return;
-    w.uploads.push(decodeURIComponent(u.pathname.slice("/storage/v1/object/avatars/".length)));
+    const m = u.pathname.match(/^\/storage\/v1\/object\/(avatars|photos-private)\/(.+)$/);
+    if (u.hostname !== TARGET.supabaseHost || r.method() !== "POST" || !m) return;
+    w.uploads.push({ bucket: m[1], key: decodeURIComponent(m[2]) });
     const h = await r.allHeaders().catch(() => ({}));
     if (h.authorization && h.apikey) { w.origin = u.origin; w.headers = { authorization: h.authorization, apikey: h.apikey }; }
   });
   return w;
 }
-/** "<owner id>/<file>" from a public photo link. */
-const keyOf = (src) => new URL(src).pathname.split("/avatars/")[1];
-/** The files in the owner's folder, as that signed-in owner sees them in Supabase Storage. */
-async function storedFiles(request, w, folder) {
-  expect(w.headers, "the page's own upload request gave the storage address and session").toBeTruthy();
+/** Another signed-in user's storage session, from that user's sign-in cookie (never printed). */
+async function sessionOf(ctx, w) {
+  const parts = (await ctx.cookies()).filter((c) => /^sb-.+-auth-token(\.\d+)?$/.test(c.name))
+    .sort((x, y) => Number(x.name.split(".").pop()) - Number(y.name.split(".").pop()) || x.name.localeCompare(y.name));
+  let raw = parts.map((c) => c.value).join("");
+  if (raw.startsWith("base64-")) raw = Buffer.from(raw.slice(7), "base64url").toString("utf8");
+  const token = JSON.parse(decodeURIComponent(raw)).access_token;
+  expect(token, "the other user's sign-in session").toBeTruthy();
+  return { origin: w.origin, headers: { apikey: w.headers.apikey, authorization: `Bearer ${token}` } };
+}
+/** "<owner id>/…" from a photo link: a public link (/object/public/avatars/…) or a signed one (/object/sign/photos-private/…). */
+const keyOf = (src) => { const p = new URL(src).pathname; return decodeURIComponent(p.split(p.includes(`/${PRIV}/`) ? `/${PRIV}/` : `/${PUB}/`)[1]); };
+const folderOf = (key) => key.slice(0, key.lastIndexOf("/"));
+/** How long a signed link works, from its token (exp - iat, in seconds). */
+const signedSeconds = (src) => { const t = JSON.parse(Buffer.from(new URL(src).searchParams.get("token").split(".")[1], "base64url").toString("utf8")); return t.exp - t.iat; };
+/** The files in a folder of a bucket, as the given signed-in user sees them in Supabase Storage. */
+async function storedFiles(request, w, folder, bucket = PUB) {
+  expect(w.headers, "a storage session of a signed-in user").toBeTruthy();
   expect(new URL(w.origin).hostname, "storage of the classi-staging project").toBe(TARGET.supabaseHost);
-  const res = await request.post(`${w.origin}/storage/v1/object/list/avatars`, {
+  const res = await request.post(`${w.origin}/storage/v1/object/list/${bucket}`, {
     headers: { ...w.headers, "content-type": "application/json" },
     data: { prefix: folder, limit: 1000, offset: 0, sortBy: { column: "name", order: "asc" } },
   });
@@ -469,13 +485,23 @@ async function storedFiles(request, w, folder) {
   return body.filter((o) => o.id).map((o) => `${folder}/${o.name}`);
 }
 /** Fails if the file is still in storage after `tries` checks, one second apart (the delete itself is synchronous). */
-async function expectGoneFromStorage(request, w, key, message, tries = 10) {
+async function expectGoneFromStorage(request, w, key, message, tries = 10, bucket = PUB) {
   let present = true;
   for (let i = 0; i < tries && present; i++) {
-    present = (await storedFiles(request, w, key.split("/")[0])).includes(key);
+    present = (await storedFiles(request, w, folderOf(key), bucket)).includes(key);
     if (present && i < tries - 1) await new Promise((r) => setTimeout(r, 1000));
   }
   expect(present, message).toBe(false);
+}
+/** A private file must not be reachable by anyone else: not through a public link, not listed or signed by another
+ * signed-in user. Returns what was tried, for the log. */
+async function expectPrivate(request, owner, other, key, who) {
+  const pub = await request.get(`${owner.origin}/storage/v1/object/public/${PRIV}/${key}`);
+  expect(pub.status(), `${who}: no public link to a private photo`).toBeGreaterThanOrEqual(400);
+  expect(await storedFiles(request, other, folderOf(key), PRIV), `${who}: another user does not see the private file`).not.toContain(key);
+  const sign = await request.post(`${other.origin}/storage/v1/object/sign/${PRIV}/${key}`, { headers: { ...other.headers, "content-type": "application/json" }, data: { expiresIn: 60 } });
+  expect(sign.status(), `${who}: another user cannot get a signed link to it`).toBeGreaterThanOrEqual(400);
+  return `public link HTTP ${pub.status()}, another user: not listed, signing HTTP ${sign.status()}`;
 }
 /** Information only: what the public (CDN) link answers. A 200 here after a delete can be a cached copy. */
 async function logPublicLink(request, src, tag) {
@@ -484,84 +510,76 @@ async function logPublicLink(request, src, tag) {
   console.log(`[${tag}] public link ${new URL(src).pathname.replace(/[0-9a-f-]{36}/, "<owner>")} -> HTTP ${res.status()}, CDN cache ${cache} (information only)`);
 }
 
-test("S10. photo: the student uploads a profile photo (stored on staging only) and removes it again", async ({ browser }) => {
+test("S10. photo: the student's profile photo is private (only she can see it, through a short signed link), and removed again", async ({ browser }) => {
   const s = await as(browser, "student"); const page = await s.newPage();
   const store = storageWatcher(page);
   await page.goto("/account");
   const box = page.locator(".photo-up");
   const photo = box.locator("img.photo");
   await expect(box).toBeVisible();
-  // Before any change: the deployed build must be able to remove a photo again (Phase 6), or the test photo would stay.
-  await expect(box, "deployed build cannot remove a photo yet: deploy Phase 6 to staging before running S10 (nothing was changed)").toHaveAttribute("data-can-remove", "1");
+  // Before any change: the deployed build uses private photos (Phase 7), or nothing would be private (nothing changed)
+  await expect(box, "deployed build lacks private photos: deploy Phase 7 to staging before running S10 (nothing was changed)").toHaveAttribute("data-private", "1");
   expect(await photo.count(), "the student account has no photo before the test (so 'no photo' is the state to come back to)").toBe(0);
   // a tiny synthetic picture (1x1 PNG), no real image
   const png = Buffer.from("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==", "base64");
+  const p = await as(browser, "parent");            // another signed-in user
   let uploaded = false;
   try {
     await box.locator('input[type="file"]').setInputFiles({ name: "classi-test.png", mimeType: "image/png", buffer: png });
     await expect(photo.or(box.getByRole("alert")).first()).toBeVisible({ timeout: 20_000 });
-    if (DRY_RUN) {
-      // The local stack serves files over http://127.0.0.1, and the database only accepts photo links on
-      // https://<project>.supabase.co (profiles_avatar_url_chk), so the link is refused by design. What can be checked
-      // here: the refusal is shown, no photo is set, and the uploaded file is deleted again (the CI state check
-      // compares the number of photo files before and after). The full path runs on hosted staging.
-      await expect(box.getByRole("alert")).toBeVisible();
-      await page.reload();
-      await expect(photo).toHaveCount(0);
-      // the refused upload's own file is removed again: checked in storage with the student's session
-      expect(store.uploads, "one upload request to storage").toHaveLength(1);
-      const refused = store.uploads[0];
-      await expectGoneFromStorage(s.request, store, refused, "the refused upload's file is removed from storage");
-      // the storage check itself, proven here: a file put in the student's own folder through the same API is seen,
-      // the check fails while it exists, and passes once it is deleted (local stack only: nothing is added on staging)
-      const folder = refused.split("/")[0], probe = `${folder}/probe-${RUN}.png`;
-      const put = await s.request.post(`${store.origin}/storage/v1/object/avatars/${probe}`, { headers: { ...store.headers, "content-type": "image/png" }, data: png });
-      expect(put.status(), "probe file stored").toBe(200);
-      try {
-        expect(await storedFiles(s.request, store, folder), "the storage check sees a file that exists").toContain(probe);
-        await expect(expectGoneFromStorage(s.request, store, probe, "probe", 1), "the check must fail while the file exists").rejects.toThrow();
-      } finally {
-        const del = await s.request.delete(`${store.origin}/storage/v1/object/avatars`, { headers: { ...store.headers, "content-type": "application/json" }, data: { prefixes: [probe] } });
-        expect(del.status(), "probe file deleted").toBe(200);
-      }
-      await expectGoneFromStorage(s.request, store, probe, "the check passes once the file is deleted");
-      console.log(`[S10] local stack: photo link refused by design, its file removed (checked in storage); storage check proven: sees an existing file, fails on it, passes after its deletion`);
-      await s.close();
-      return;
-    }
     if (await box.getByRole("alert").count()) throw new Error(`upload refused on screen: ${await box.getByRole("alert").textContent()}`);
-    await expect(photo).toHaveCount(1); uploaded = true;
+    uploaded = true;
+    expect(store.uploads.map((u) => u.bucket), "uploaded to the private bucket only").toEqual([PRIV]);
+    await page.reload();
+    await expect(photo, "saved, not only shown").toHaveCount(1);
     const src = await photo.getAttribute("src");
     const u = new URL(src);
     expect(u.hostname, "stored in the classi-staging project").toBe(TARGET.supabaseHost);
-    expect(u.pathname, "a new file of its own (unique name)").toMatch(/^\/storage\/v1\/object\/public\/avatars\/[0-9a-f-]{36}\/profile-[0-9a-z]+-[0-9a-z]{8}\.jpg$/);
-    const got = await s.request.get(src);
-    expect(got.status()).toBe(200);
-    expect(got.headers()["content-type"]).toContain("image/jpeg");
-    await page.reload();
-    await expect(photo, "saved, not only shown").toHaveCount(1);
+    expect(u.pathname, "shown through a signed link to a private file of her own").toMatch(/^\/storage\/v1\/object\/sign\/photos-private\/[0-9a-f-]{36}\/profile-[0-9a-z]+-[0-9a-z]{8}\.jpg$/);
+    expect(signedSeconds(src), "the signed link works one hour at most").toBeLessThanOrEqual(3600);
     const key = keyOf(src);
-    expect(await storedFiles(s.request, store, key.split("/")[0]), "the file is in storage (the student's own session)").toContain(key);
+    expect(key, "the file of this upload").toBe(store.uploads[0].key);
+    const got = await s.request.get(src);
+    expect(got.status(), "the signed link opens the photo for her").toBe(200);
+    expect(await storedFiles(s.request, store, folderOf(key), PRIV), "the file is in private storage (her own session)").toContain(key);
+    const other = await sessionOf(p, store);
+    const tried = await expectPrivate(s.request, store, other, key, "profile photo");
     // the storage check must fail on a file that exists: applied now, while the photo is in use, it has to throw
-    await expect(expectGoneFromStorage(s.request, store, key, "check", 1), "the storage check must fail while the file exists").rejects.toThrow();
-    console.log(`[S10] uploaded to ${u.hostname}${u.pathname.replace(/[0-9a-f-]{36}/, "<student>")} (HTTP ${got.status()}, ${got.headers()["content-type"]}); in storage: yes`);
+    await expect(expectGoneFromStorage(s.request, store, key, "check", 1, PRIV), "the storage check must fail while the file exists").rejects.toThrow();
+    console.log(`[S10] uploaded privately to ${u.hostname}/…/photos-private/<student>/${key.split("/").pop()} (signed link ${signedSeconds(src)} s, HTTP ${got.status()}); ${tried}`);
 
     await box.getByRole("button", { name: "إزالة الصورة" }).click();
     await expect(photo).toHaveCount(0, { timeout: 20_000 }); uploaded = false;
     await page.reload();
     await expect(photo).toHaveCount(0);
     await expect(box.getByRole("button", { name: "رفع صورة شخصية" })).toBeVisible();
-    // the app no longer shows or links the old file: not on the account page, not in the header of the home page
+    // the app no longer shows or links the removed photo: not on the account page, not in the header of the home page
     for (const path of ["/account", "/"]) {
       await page.goto(path);
       expect(await page.content(), `${path}: the removed photo's link is gone from the page`).not.toContain(key);
     }
-    // the file itself: asked from storage with the student's session (not the public link, which the CDN may cache)
-    await expectGoneFromStorage(s.request, store, key, "the file itself is deleted from storage");
-    await logPublicLink(s.request, src, "S10");
-    console.log(`[S10] removed: no photo on the page, no link to it, file gone from storage`);
+    await expectGoneFromStorage(s.request, store, key, "the file itself is deleted from private storage", 10, PRIV);
+    console.log(`[S10] removed: no photo on the page, no link to it, file gone from private storage`);
+
+    if (DRY_RUN) {
+      // the storage check itself, proven here: a file put in the student's own private folder through the same API is
+      // seen, the check fails while it exists, and passes once it is deleted (local stack only: nothing added on staging)
+      const folder = folderOf(key), probe = `${folder}/profile-p${Date.now().toString(36)}-probe001.jpg`;
+      const put = await s.request.post(`${store.origin}/storage/v1/object/${PRIV}/${probe}`, { headers: { ...store.headers, "content-type": "image/jpeg" }, data: png });
+      expect(put.status(), "probe file stored").toBe(200);
+      try {
+        expect(await storedFiles(s.request, store, folder, PRIV), "the storage check sees a file that exists").toContain(probe);
+        await expect(expectGoneFromStorage(s.request, store, probe, "probe", 1, PRIV), "the check must fail while the file exists").rejects.toThrow();
+      } finally {
+        const del = await s.request.delete(`${store.origin}/storage/v1/object/${PRIV}`, { headers: { ...store.headers, "content-type": "application/json" }, data: { prefixes: [probe] } });
+        expect(del.status(), "probe file deleted").toBe(200);
+      }
+      await expectGoneFromStorage(s.request, store, probe, "the check passes once the file is deleted", 10, PRIV);
+      console.log(`[S10] local stack: storage check proven: sees an existing file, fails on it, passes after its deletion`);
+    }
   } finally {
     if (uploaded) { await page.goto("/account"); if (await photo.count()) await box.getByRole("button", { name: "إزالة الصورة" }).click(); }
+    await p.close();
   }
   await s.close();
 });
@@ -583,7 +601,7 @@ test("S10b. admin review: a rejection reason is shown to the owner only; teacher
   };
   await openTeach();
   // Before any change: the deployed build stores every upload as its own file (Phase 6), and nothing is waiting.
-  await expect(box, "deployed build lacks unique photo files: deploy it to staging before running S10b (nothing was changed)").toHaveAttribute("data-unique-files", "1");
+  await expect(box, "deployed build lacks private photos: deploy Phase 7 to staging before running S10b (nothing was changed)").toHaveAttribute("data-private", "1");
 
   // the public teacher page (what families see), the admin review card, and another signed-in user (the parent)
   const v = await newContext(browser); const vp = await v.newPage();
@@ -667,89 +685,114 @@ test("S10b. admin review: a rejection reason is shown to the owner only; teacher
     await expect(tp.getByText(rejectedNotice)).toHaveCount(0);
   }
 
-  if (DRY_RUN) {
-    // local stack: photo links are http://127.0.0.1, which the database refuses (https://<project>.supabase.co only);
-    // the refusal is shown and the new file is removed again (the CI state check counts the photo files)
-    await openTeach();
-    await box.locator('input[type="file"]').setInputFiles({ name: "t.png", mimeType: "image/png", buffer: png });
-    await expect(box.getByRole("alert")).toBeVisible({ timeout: 20_000 });
-    expect(store.uploads, "one upload request to storage").toHaveLength(1);
-    await expectGoneFromStorage(t.request, store, store.uploads[0], "the refused upload's file is removed from storage");
-    console.log("[S10b] local stack: teacher photo link refused by design, its file removed (checked in storage); full photo review cycle runs on hosted staging");
-    await v.close(); await a.close(); await t.close();
-    return;
-  }
-
+  // ---- Photos: a new photo waits PRIVATELY until the admin publishes it ----
+  // Uploads go to the private bucket only. Until the admin approves, the new photo is reachable by Samer and the admin
+  // only (short signed links), never through a public link, and nothing new is in the public bucket. On approval the
+  // app copies it to a new name in Samer's public folder and deletes the private original; on rejection the private
+  // file is deleted at once.
+  const o = await as(browser, "parent"); const other = async () => sessionOf(o, store);      // another signed-in user
+  const teacherFolder = async () => (await storedFiles(t.request, store, (await uidOf()), PUB)).filter((k) => /\/teacher-[^/]+$/.test(k));
+  const uidOf = async () => { expect(store.uploads.length, "an upload gave Samer's folder").toBeGreaterThan(0); return store.uploads[0].key.split("/")[0]; };
+  const waitingCard = () => reviewCard().first().locator("[data-waiting-photo] img.waiting-photo");
+  // a new photo: uploaded privately, waiting; returns its private key
   const upload = async () => {
     await openTeach();
+    const before = store.uploads.length;
     await box.locator('input[type="file"]').setInputFiles({ name: "t.png", mimeType: "image/png", buffer: png });
     await expect(box.getByRole("status")).toContainText("للمراجعة", { timeout: 20_000 });
-    const src = await box.locator("img.photo").getAttribute("src");
-    expect(new URL(src).pathname, "each upload is a new file").toMatch(/\/avatars\/[0-9a-f-]{36}\/teacher-[0-9a-z]+-[0-9a-z]{8}\.jpg$/);
-    expect(await inStorage(src), "the new file is in storage").toBe(true);
-    return src;
+    expect(store.uploads.length, "one upload request").toBe(before + 1);
+    const up = store.uploads.at(-1);
+    expect(up.bucket, "uploaded to the private bucket only").toBe(PRIV);
+    expect(up.key, "a new private file under pending/").toMatch(/^[0-9a-f-]{36}\/pending\/teacher-[0-9a-z]+-[0-9a-z]{8}\.jpg$/);
+    expect(await storedFiles(t.request, store, folderOf(up.key), PRIV), "the new file is in private storage").toContain(up.key);
+    // the owner sees it waiting, through a short signed link, after a real page load
+    await openTeach();
+    const w = box.locator("img.waiting-photo");
+    await expect(w, "the owner sees the waiting photo").toHaveCount(1);
+    const wsrc = await w.getAttribute("src");
+    expect(keyOf(wsrc), "the owner's link is to this private file").toBe(up.key);
+    expect(new URL(wsrc).pathname, "a signed link").toContain(`/object/sign/${PRIV}/`);
+    expect(signedSeconds(wsrc), "the owner's link works 10 minutes at most").toBeLessThanOrEqual(600);
+    // nobody else: no public link, another user cannot list or sign it, and it is not on the public teacher page
+    const tried = await expectPrivate(t.request, store, await other(), up.key, "waiting teacher photo");
+    expect(await publicPhoto(), "families do not see the waiting photo").toBe(approvedNow);
+    expect(await vp.content(), "the public teacher page has no link to the waiting photo").not.toContain(up.key.split("/").pop());
+    // the admin sees it in the review card, through a 5-minute signed link
+    await ap.goto("/admin?tab=review");
+    await expect(waitingCard(), "the admin sees the waiting photo").toHaveCount(1);
+    const asrc = await waitingCard().getAttribute("src");
+    expect(keyOf(asrc), "the admin's link is to this private file").toBe(up.key);
+    expect(signedSeconds(asrc), "the admin's link works 5 minutes at most").toBeLessThanOrEqual(300);
+    console.log(`[S10b] waiting photo ${up.key.split("/").pop()}: private (${tried}); owner link ${signedSeconds(wsrc)} s, admin link ${signedSeconds(asrc)} s`);
+    return up.key;
   };
-  // whether a file exists is asked from storage (Samer's session); the public link may be a CDN copy
-  const inStorage = async (src) => (await storedFiles(t.request, store, keyOf(src).split("/")[0])).includes(keyOf(src));
-
-  const original = await publicPhoto();
-  expect(original, "Samer has no photo before the test (the state to come back to)").toBeNull();
-  const files = [];
+  let approvedNow = null;
+  const keys = [];
   let approvedByTest = false;
+  expect(await publicPhoto(), "Samer has no photo before the test (the state to come back to)").toBeNull();
   try {
-    // 1. new photo -> waits; families still see no photo; the admin rejects it; still no photo
-    files.push(await upload());
-    expect(await publicPhoto(), "waiting photo is not shown to families").toBeNull();
+    // 1. new photo -> waits privately; the admin rejects it -> its private file is deleted at once; still no photo
+    keys.push(await upload());
+    const publicBefore = await teacherFolder();
+    expect(publicBefore, "nothing new in Samer's public folder before approval").toEqual([]);
     await decide(false);
+    await expectGoneFromStorage(t.request, store, keys[0], "rejected: the private file is deleted at once", 10, PRIV);
     expect(await publicPhoto(), "rejected: unchanged").toBeNull();
 
-    // 2. new photo -> approved -> families see it
-    const approved = await upload(); files.push(approved);
-    await decide(true); approvedByTest = true;
-    expect(await publicPhoto(), "approved photo is shown").toBe(approved);
-    expect(await inStorage(approved), "the approved file is in storage").toBe(true);
+    if (DRY_RUN) {
+      // local stack: publishing needs an https photo link (https://<project>.supabase.co, checked by the database), so
+      // the approval and publishing part runs on hosted staging; everything above (private upload, signed links for
+      // the owner and the admin, no public access, rejection deleting the file) ran here
+      console.log("[S10b] local stack: private waiting photo and rejection verified; approval/publishing runs on hosted staging");
+      await o.close(); await v.close(); await a.close(); await t.close();
+      return;
+    }
 
-    // 3. a replacement waits: families keep seeing the approved photo; rejected: still the approved photo
-    files.push(await upload());
-    expect(await publicPhoto(), "approved photo stays while the new one waits").toBe(approved);
-    expect(await inStorage(approved), "the approved file was not overwritten or deleted").toBe(true);
+    // 2. new photo -> approved -> published: a new public file in Samer's folder, the private original deleted
+    keys.push(await upload());
+    await decide(true); approvedByTest = true;
+    approvedNow = await publicPhoto();
+    expect(approvedNow, "approved photo is shown to families").toMatch(/\/storage\/v1\/object\/public\/avatars\/[0-9a-f-]{36}\/teacher-[0-9a-z]+-[0-9a-z]{8}\.jpg$/);
+    expect(keyOf(approvedNow).split("/").pop(), "published under a new name, not the private one").not.toBe(keys[1].split("/").pop());
+    expect(await teacherFolder(), "exactly the published file is in Samer's public folder").toEqual([keyOf(approvedNow)]);
+    await expectGoneFromStorage(t.request, store, keys[1], "published: the private original is deleted", 10, PRIV);
+    console.log(`[S10b] approved: published as ${keyOf(approvedNow).split("/").pop()}, private original deleted`);
+
+    // 3. a replacement waits privately: families keep seeing the approved photo; rejected: still the approved photo
+    keys.push(await upload());
+    expect(await publicPhoto(), "approved photo stays while the new one waits").toBe(approvedNow);
+    expect(await teacherFolder(), "the approved file was not overwritten or deleted, nothing new public").toEqual([keyOf(approvedNow)]);
     await decide(false);
-    expect(await publicPhoto(), "rejected replacement: the approved photo is unchanged").toBe(approved);
+    await expectGoneFromStorage(t.request, store, keys[2], "rejected replacement: its private file is deleted at once", 10, PRIV);
+    expect(await publicPhoto(), "rejected replacement: the approved photo is unchanged").toBe(approvedNow);
 
     // 4. removal waits for review too, then the photo is gone (back to the original state)
     await openTeach();
     await box.getByRole("button", { name: "إزالة الصورة" }).click();
     await expect(box.getByRole("status")).toContainText("للمراجعة", { timeout: 20_000 });
-    expect(await publicPhoto(), "approved photo stays while the removal waits").toBe(approved);
+    expect(await publicPhoto(), "approved photo stays while the removal waits").toBe(approvedNow);
     await decide(true); approvedByTest = false;
     expect(await publicPhoto(), "removed after approval").toBeNull();
-    // the app no longer shows or links the removed photo: the public teacher page and the teacher's own dashboard
-    expect(await vp.content(), "public teacher page: no link to the removed photo").not.toContain(keyOf(approved));
+    expect(await vp.content(), "public teacher page: no link to the removed photo").not.toContain(keyOf(approvedNow));
     await openTeach();
-    expect(await tp.content(), "teacher dashboard: no link to the removed photo").not.toContain(keyOf(approved));
+    expect(await tp.content(), "teacher dashboard: no link to the removed photo").not.toContain(keyOf(approvedNow));
 
-    // 5. unused files are cleared once they are old enough (never sooner: an upload may still be being saved)
-    const wait = Math.max(0, 125_000 - (Date.now() - files.at(-1).match(/teacher-([0-9a-z]+)-/).slice(1).map((x) => parseInt(x, 36))[0]));
+    // 5. the removed public file is cleared on the owner's next visit once old enough (an upload may still be saving)
+    const wait = Math.max(0, 125_000 - (Date.now() - parseInt(keyOf(approvedNow).match(/teacher-([0-9a-z]+)-/)[1], 36)));
     console.log(`[S10b] waiting ${Math.round(wait / 1000)}s before the owner's next visit clears unused files`);
     await tp.waitForTimeout(wait);
-    // the owner's next visit (a real page load): the photo box runs its tidy-up (a server action) when it opens;
-    // the test waits for that request to be answered, then for storage to show the result (no fixed wait)
     const tidied = tp.waitForResponse((r) => r.request().method() === "POST" && !!r.request().headers()["next-action"]
       && new URL(r.url()).pathname === "/teach", { timeout: 30_000 });
     await openTeach();
     const tidyRes = await tidied;
     expect(tidyRes.status(), "the tidy-up request was answered").toBe(200);
-    console.log(`[S10b] owner's visit: page reloaded, tidy-up request answered (HTTP ${tidyRes.status()})`);
-    // in storage (Samer's session): none of the test's files is left, and no other teacher photo file either
-    const folder = keyOf(files[0]).split("/")[0];
-    const teacherFiles = async () => (await storedFiles(t.request, store, folder)).filter((k) => /\/teacher-[^/]+$/.test(k));
-    let stored = await teacherFiles();
-    for (let i = 0; i < 15 && stored.length; i++) { await tp.waitForTimeout(1000); stored = await teacherFiles(); }
-    const left = files.map(keyOf).filter((k) => stored.includes(k));
-    console.log(`[S10b] in storage after the tidy-up: ${files.length - left.length} of ${files.length} test files deleted, teacher photo files left in the folder: ${stored.length}`);
-    for (const f of files) await logPublicLink(t.request, f, "S10b");
-    expect(left, "rejected, replaced and removed files are deleted from storage").toEqual([]);
-    expect(stored, "no teacher photo file is left in Samer's folder").toEqual([]);
+    let left = await teacherFolder();
+    for (let i = 0; i < 15 && left.length; i++) { await tp.waitForTimeout(1000); left = await teacherFolder(); }
+    const leftPrivate = (await storedFiles(t.request, store, `${await uidOf()}/pending`, PRIV));
+    console.log(`[S10b] after the tidy-up: public teacher files left ${left.length}, private waiting files left ${leftPrivate.length}`);
+    await logPublicLink(t.request, approvedNow, "S10b");
+    expect(left, "no teacher photo file is left in Samer's public folder").toEqual([]);
+    expect(leftPrivate, "no waiting photo file is left in Samer's private folder").toEqual([]);
   } finally {
     // put things back if a step failed: nothing waiting for Samer, no approved test photo
     await ap.goto("/admin?tab=review").catch(() => undefined);
@@ -761,7 +804,7 @@ test("S10b. admin review: a rejection reason is shown to the owner only; teacher
         await decide(true).catch((e) => console.log(`[S10b] cleanup approve removal: ${e.message.split("\n")[0]}`));
       }
     }
-    await v.close(); await a.close();
+    await o.close().catch(() => undefined); await v.close(); await a.close();
   }
   await t.close();
 });

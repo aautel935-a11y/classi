@@ -51,9 +51,13 @@ reset role;
 set role authenticated; set request.jwt.claim.sub = '72000000-0000-0000-0000-000000000002';
 select t_is('Samer lists his own three files', $$select count(*)::text from storage.objects where bucket_id = 'avatars' and name like '72000000-0000-0000-0000-000000000002/%'$$, '3');
 select t_is('Samer sees nobody else''s file', $$select count(*)::text from storage.objects where bucket_id = 'avatars' and name not like '72000000-0000-0000-0000-000000000002/%'$$, '0');
-select t_ok('Samer uploads a new file into his own folder (returning the row, as the storage API does)',
+select t_err('Samer cannot add files to the public bucket himself (private photos, 20261105010000)',
   $$insert into storage.objects (bucket_id, name) values ('avatars', '72000000-0000-0000-0000-000000000002/teacher-n1-nnnnnnnn.jpg') returning id$$);
-select t_is('the new file is listed', $$select count(*)::text from storage.objects where name = '72000000-0000-0000-0000-000000000002/teacher-n1-nnnnnnnn.jpg'$$, '1');
+reset role;
+-- a file the admin published earlier and that is no longer used (as the admin would put it there)
+insert into storage.objects (bucket_id, name) values ('avatars', '72000000-0000-0000-0000-000000000002/teacher-n1-nnnnnnnn.jpg');
+set role authenticated; set request.jwt.claim.sub = '72000000-0000-0000-0000-000000000002';
+select t_is('the unused file is listed for its owner', $$select count(*)::text from storage.objects where name = '72000000-0000-0000-0000-000000000002/teacher-n1-nnnnnnnn.jpg'$$, '1');
 select t_err('Samer still cannot upload into the mother''s folder', $$insert into storage.objects (bucket_id, name) values ('avatars', '72000000-0000-0000-0000-000000000003/profile-s1-ssssssss.jpg')$$);
 -- the cleanup (tidyPhotos): list the own folder, keep the photos in use (approved + waiting), delete the rest
 create temp table doomed as select name from storage.objects

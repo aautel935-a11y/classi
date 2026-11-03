@@ -83,3 +83,59 @@ export function noLongerUsed({ owner, kind, before, after }: {
     .filter((p) => !now.has(p))
     .filter((p) => { const [folder, file] = p.split("/"); return folder === owner && !!file && isKindFile(file, kind); });
 }
+
+// ---------- private photos (migrations 20261105000000 / 20261105010000) ----------
+// A teacher's or institute's new photo is uploaded to the private bucket and waits there (<owner>/pending/…) until
+// the admin publishes it to the public bucket; profile photos (students, parents) live only in the private bucket
+// (<owner>/profile-…) and are shown through short signed links. Users never write to the public bucket.
+
+export const PUBLIC_BUCKET = "avatars";
+export const PRIVATE_BUCKET = "photos-private";
+
+/** How long a signed link to a private photo works, by who looks at it. */
+export const SIGNED_SECONDS = { profile: 60 * 60, ownerWaiting: 10 * 60, admin: 5 * 60 } as const;
+
+/** Where a new private upload goes: a waiting teacher/institute photo under "pending/", a profile photo in the folder. */
+export function newPrivatePath(owner: string, kind: PhotoKind, now = Date.now(), random = Math.random()): string {
+  const file = newPhotoName(kind, now, random);
+  return kind === "profile" ? `${owner}/${file}` : `${owner}/pending/${file}`;
+}
+
+const UNIQUE = (kind: PhotoKind) => new RegExp(`^${kind}-[0-9a-z]{1,12}-[0-9a-z]{8}\\.jpg$`);
+
+/** A private path the owner may submit for this kind (the same rule as submit_photo in the database). */
+export function validPrivatePath(path: string | null | undefined, { owner, kind }: { owner: string; kind: PhotoKind }): boolean {
+  if (!path || !owner) return false;
+  const parts = path.split("/");
+  if (kind === "profile") return parts.length === 2 && parts[0] === owner && UNIQUE(kind).test(parts[1]);
+  return parts.length === 3 && parts[0] === owner && parts[1] === "pending" && UNIQUE(kind).test(parts[2]);
+}
+
+/** The owner of a valid private path (its folder), or null. */
+export function privateOwner(path: string | null | undefined, kind: PhotoKind): string | null {
+  const owner = (path ?? "").split("/")[0];
+  return owner && validPrivatePath(path, { owner, kind }) ? owner : null;
+}
+
+/** Where an approved waiting photo is published: a new unique name in the owner's public folder. */
+export function publishedPath(waiting: string, kind: "teacher" | "institute", now = Date.now(), random = Math.random()): string | null {
+  const owner = privateOwner(waiting, kind);
+  return owner ? `${owner}/${newPhotoName(kind, now, random)}` : null;
+}
+
+/** Which of the owner's private files of this kind cleanup may delete: same rules as photosToDelete (never in use, never
+ * younger than minAgeMs, only this kind), for the files listed in the private folder of that kind. */
+export function privateToDelete({ owner, kind, files, keep, now = Date.now(), minAgeMs = PHOTO_MIN_AGE_MS }: {
+  owner: string; kind: PhotoKind; files: StoredFile[]; keep: (string | null | undefined)[]; now?: number; minAgeMs?: number;
+}): string[] {
+  const folder = kind === "profile" ? owner : `${owner}/pending`;
+  const keepSet = new Set(keep.filter((k): k is string => !!k));
+  return files
+    .filter((f) => UNIQUE(kind).test(f.name))
+    .filter((f) => {
+      const at = f.created_at ? Date.parse(f.created_at) : NaN;
+      return Number.isFinite(at) && now - at >= minAgeMs;         // unknown age: keep (fail safe)
+    })
+    .map((f) => `${folder}/${f.name}`)
+    .filter((p) => !keepSet.has(p) && validPrivatePath(p, { owner, kind }));
+}

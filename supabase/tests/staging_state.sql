@@ -16,6 +16,8 @@ select line from (
   union all select 6, 'profile photo ' || right(id::text, 1) || ' ' || coalesce(avatar_url, '-')
     from public.profiles where id::text like '00000000-0000-4000-8000-00000000000_'
   union all select 7, 'photo files ' || count(*) from storage.objects where bucket_id = 'avatars'
+  union all select 7, 'private photo files ' || count(*) from storage.objects where bucket_id = 'photos-private'
+  union all select 6, 'profile photo paths set ' || count(*) from public.profiles where avatar_path is not null
   union all select 8, 'children ' || count(*) from public.children
   union all select 9, 'pending or confirmed bookings ' || count(*) from public.bookings where status in ('pending', 'confirmed')
 ) x order by o, line;

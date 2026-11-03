@@ -3,6 +3,8 @@ import Link from "next/link";
 import { Icon } from "@/components/Icon";
 import { addStaffAction, instituteSetupAction, removeStaffAction, updateInstituteAction } from "@/app/actions";
 import { PhotoUpload } from "@/components/PhotoUpload";
+import { signedPhotoUrls } from "@/lib/private-photos";
+import { SIGNED_SECONDS } from "@/lib/photos";
 import { WaitlistOwner, type WRow } from "@/components/WaitlistOwner";
 import { PaymentsOwner, type MoneySummary, type PayRow } from "@/components/PaymentsOwner";
 import { SubscriptionBox, type Plan, type SubRequest } from "@/components/SubscriptionBox";
@@ -42,6 +44,12 @@ export default async function Manage({ searchParams }: { searchParams: Promise<R
       </div>
     );
   }
+  // the logo waiting for the admin is private: a short signed link for its owner (own rows only, my_review_state)
+  const { data: instReview } = await supabase.rpc("my_review_state");
+  const logoWaiting = ((instReview ?? []) as { kind: string; id: string; pending_changes: Record<string, unknown> | null }[])
+    .find((r) => r.kind === "institute" && r.id === inst.id)?.pending_changes?.photo_path;
+  const logoWaitingPath = typeof logoWaiting === "string" ? logoWaiting : null;
+  const logoWaitingUrl = logoWaitingPath ? (await signedPhotoUrls(supabase, [logoWaitingPath], SIGNED_SECONDS.ownerWaiting))[logoWaitingPath] ?? null : null;
 
   const [{ data: courses }, { data: seats }, { data: rooms }, { data: staff }, { data: allTeachers }, { data: log }, { data: wl }, { data: pays }, { data: money }, { data: bitRow }, { data: plans }, { data: subReq }, { data: paid }, { data: settings }, { data: myReviews }] = await Promise.all([
     supabase.from("offerings").select("id,title,seats,schedule_note,review_status,course_teacher:teachers!offerings_course_teacher_id_fkey(name)").eq("institute_id", inst.id).eq("type", "course").order("created_at"),
@@ -105,7 +113,7 @@ export default async function Manage({ searchParams }: { searchParams: Promise<R
         {sp.ok === "profile" && <p className="okmsg">حُفظ ملف المعهد.</p>}
         {sp.ok === "created" && <p className="okmsg">أُنشئ المعهد. أضف قاعاتك ودوراتك.</p>}
         <div className="card">
-          <PhotoUpload kind="institute" name={inst.name} current={inst.logo_url} />
+          <PhotoUpload kind="institute" name={inst.name} current={inst.logo_url} waiting={logoWaitingUrl} />
           <details>
             <summary className="link small">تعديل الاسم والنبذة</summary>
             <form id="kf-updateInstitute" action={updateInstituteAction} className="formstack" style={{ marginTop: 12 }}>

@@ -63,7 +63,7 @@ select seq, to_char(starts_at at time zone 'Asia/Jerusalem','Dy DD/MM HH24:MI') 
 update profiles set roles = '{guardian,admin}' where id='00000000-0000-0000-0000-00000000000a';
 
 set role authenticated; set request.jwt.claim.sub='00000000-0000-0000-0000-00000000000b';
-select 'upload own folder' t; insert into storage.objects (bucket_id, name) values ('avatars','00000000-0000-0000-0000-00000000000b/teacher.jpg');
+select 'upload own folder (private bucket)' t; insert into storage.objects (bucket_id, name) values ('photos-private','00000000-0000-0000-0000-00000000000b/pending/teacher-f1-aaaaaaaa.jpg');
 select 'upload other folder (expect error)' t; insert into storage.objects (bucket_id, name) values ('avatars','00000000-0000-0000-0000-00000000000a/x.jpg');
 select 'teacher self-verify (expect error)' t; select admin_verify('teacher', (select id from teachers where name='سامر مصاروة'), 'verified');
 reset role;

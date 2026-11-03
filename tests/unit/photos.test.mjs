@@ -88,3 +88,62 @@ test("a replaced or removed photo is deleted at once, only if it is the owner's 
   // never someone else's file, never another kind
   assert.deepEqual(noLongerUsed({ owner: A, kind: "teacher", before: [`${B}/teacher.jpg`, `${A}/profile.jpg`], after: [] }), []);
 });
+
+// ---------- private photos ----------
+const P = require(`${process.env.CLASSI_LIB}/photos.js`);
+
+test("private paths: waiting teacher/institute photos under pending/, profile photos in the owner's folder", () => {
+  assert.match(P.newPrivatePath(A, "teacher", 1793700000000, 0.5), new RegExp(`^${A}/pending/teacher-[0-9a-z]+-[0-9a-z]{8}\\.jpg$`));
+  assert.match(P.newPrivatePath(A, "institute", 1793700000000, 0.5), new RegExp(`^${A}/pending/institute-`));
+  assert.match(P.newPrivatePath(A, "profile", 1793700000000, 0.5), new RegExp(`^${A}/profile-[0-9a-z]+-[0-9a-z]{8}\\.jpg$`));
+  for (const kind of ["teacher", "institute", "profile"]) {
+    const p = P.newPrivatePath(A, kind);
+    assert.ok(P.validPrivatePath(p, { owner: A, kind }), p);
+    assert.equal(P.privateOwner(p, kind), A);
+    assert.ok(!P.validPrivatePath(p, { owner: B, kind }), "another owner");
+  }
+  assert.equal(P.PRIVATE_BUCKET, "photos-private");
+  assert.equal(P.PUBLIC_BUCKET, "avatars");
+});
+
+test("private paths: only exact names; the same rule as submit_photo in the database", () => {
+  const bad = [
+    [`${A}/teacher-m1-aaaaaaaa.jpg`, "teacher"],              // a waiting photo outside pending/
+    [`${A}/pending/profile-m1-aaaaaaaa.jpg`, "profile"],      // a profile photo under pending/
+    [`${A}/pending/teacher-m1-aaaaaaaa.jpg`, "institute"],    // another kind
+    [`${A}/pending/x/teacher-m1-aaaaaaaa.jpg`, "teacher"],    // deeper
+    [`${A}/pending/../pending/teacher-m1-aaaaaaaa.jpg`, "teacher"],
+    [`${A}/pending/teacher.jpg`, "teacher"],                  // old fixed name
+    [`${A}/pending/teacher-m1-aaaaaaaa.png`, "teacher"],
+    [`/pending/teacher-m1-aaaaaaaa.jpg`, "teacher"],
+    ["", "profile"], [null, "profile"],
+  ];
+  for (const [p, kind] of bad) { assert.ok(!P.validPrivatePath(p, { owner: A, kind }), String(p)); assert.equal(P.privateOwner(p, kind), null); }
+  assert.ok(!P.validPrivatePath(`${A}/profile-m1-aaaaaaaa.jpg`, { owner: "", kind: "profile" }));
+});
+
+test("publishing: a new unique name in the owner's public folder; nothing for an invalid waiting path", () => {
+  const w = `${A}/pending/teacher-m1-aaaaaaaa.jpg`;
+  const pub = P.publishedPath(w, "teacher", 1793700000000, 0.25);
+  assert.match(pub, new RegExp(`^${A}/teacher-[0-9a-z]+-[0-9a-z]{8}\\.jpg$`));
+  assert.notEqual(P.publishedPath(w, "teacher", 1793700000000, 0.26), pub);
+  assert.equal(P.publishedPath(`${A}/teacher-m1-aaaaaaaa.jpg`, "teacher"), null);
+  assert.equal(P.publishedPath(w, "institute"), null);
+});
+
+test("private cleanup: never a file in use, never a young one, never another kind", () => {
+  const now = Date.parse("2026-11-04T10:00:00Z");
+  const old = "2026-11-04T09:50:00Z", young = "2026-11-04T09:59:30Z";
+  const files = [
+    { name: "teacher-a1-aaaaaaaa.jpg", created_at: old },     // in use (waiting)
+    { name: "teacher-a2-bbbbbbbb.jpg", created_at: old },     // replaced: delete
+    { name: "teacher-a3-cccccccc.jpg", created_at: young },   // being saved: keep
+    { name: "teacher-a4-dddddddd.jpg", created_at: null },    // unknown age: keep
+    { name: "institute-a5-eeeeeeee.jpg", created_at: old },   // other kind
+    { name: "notes.txt", created_at: old },
+  ];
+  assert.deepEqual(P.privateToDelete({ owner: A, kind: "teacher", files, keep: [`${A}/pending/teacher-a1-aaaaaaaa.jpg`], now }), [`${A}/pending/teacher-a2-bbbbbbbb.jpg`]);
+  const prof = [{ name: "profile-p1-aaaaaaaa.jpg", created_at: old }, { name: "profile-p2-bbbbbbbb.jpg", created_at: old }];
+  assert.deepEqual(P.privateToDelete({ owner: A, kind: "profile", files: prof, keep: [`${A}/profile-p2-bbbbbbbb.jpg`], now }), [`${A}/profile-p1-aaaaaaaa.jpg`]);
+  assert.equal(P.SIGNED_SECONDS.admin, 300);
+});

@@ -3,10 +3,10 @@
 import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
-import { removePhotoAction, savePhotoAction, tidyPhotosAction } from "@/app/actions";
+import { removePhotoAction, submitPhotoAction, tidyPhotosAction } from "@/app/actions";
 import { Avatar } from "./Avatar";
 import { friendlyError } from "@/lib/errors";
-import { newPhotoName, type PhotoKind as Kind } from "@/lib/photos";
+import { PRIVATE_BUCKET, newPrivatePath, type PhotoKind as Kind } from "@/lib/photos";
 
 /** Shrinks the picture in the browser (max 512px, JPEG) before uploading it. */
 async function shrink(file: File): Promise<Blob> {
@@ -25,10 +25,17 @@ async function shrink(file: File): Promise<Blob> {
   return new Promise((res, rej) => canvas.toBlob((b) => (b ? res(b) : rej(new Error("x"))), "image/jpeg", 0.85));
 }
 
-export function PhotoUpload({ kind, name, current }: { kind: Kind; name: string; current: string | null }) {
+/** Photo box. `current`: the photo shown now (the approved public teacher/institute photo, or a short signed link to the
+ * private profile photo). `waiting`: a short signed link to the teacher's/institute's new photo waiting for the admin
+ * (private: only the owner and the admin can open it). Uploads go to the private bucket only (lib/photos.ts). */
+export function PhotoUpload({ kind, name, current, waiting = null }: { kind: Kind; name: string; current: string | null; waiting?: string | null }) {
   const router = useRouter();
   const input = useRef<HTMLInputElement>(null);
   const [preview, setPreview] = useState<string | null>(current);
+  const [waitingPreview, setWaitingPreview] = useState<string | null>(waiting);
+  // the page passes fresh signed links after router.refresh(): show them instead of the local preview
+  useEffect(() => { setPreview(current); }, [current]);
+  useEffect(() => { setWaitingPreview(waiting); }, [waiting]);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [note, setNote] = useState<string | null>(null);
@@ -49,19 +56,20 @@ export function PhotoUpload({ kind, name, current }: { kind: Kind; name: string;
       const supabase = createClient();
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) throw new Error("سجّل الدخول أولاً.");
-      // A new file every time (never overwrite): the approved photo stays untouched while a new one waits for review.
-      const path = `${user.id}/${newPhotoName(kind)}`;
-      const { error: upErr } = await supabase.storage.from("avatars").upload(path, blob, { upsert: false, contentType: "image/jpeg" });
+      // A new private file every time (never overwrite, never public): a teacher's/institute's photo waits privately
+      // for the admin, who publishes it; the approved photo stays untouched meanwhile. A profile photo stays private.
+      const path = newPrivatePath(user.id, kind);
+      const { error: upErr } = await supabase.storage.from(PRIVATE_BUCKET).upload(path, blob, { upsert: false, contentType: "image/jpeg" });
       if (upErr) throw new Error(`تعذّر رفع الصورة: ${upErr.message}`);
-      const url = supabase.storage.from("avatars").getPublicUrl(path).data.publicUrl;
-      const r = await savePhotoAction(kind, url);
+      const r = await submitPhotoAction(kind, path);
       if (r.error) {
         // not saved: this new file is used by nothing, so it is removed again
-        await supabase.storage.from("avatars").remove([path]).catch(() => undefined);
+        await supabase.storage.from(PRIVATE_BUCKET).remove([path]).catch(() => undefined);
         throw new Error(r.error);
       }
-      setPreview(url);
-      setNote(reviewed ? "وصلت الصورة الجديدة للإدارة للمراجعة. تبقى صورتك الحالية ظاهرة للأهل حتى الموافقة." : null);
+      const local = URL.createObjectURL(blob);                 // shown until the page sends its signed link
+      if (reviewed) setWaitingPreview(local); else setPreview(local);
+      setNote(reviewed ? "وصلت الصورة الجديدة للإدارة للمراجعة. لا تظهر لأحد غيرك قبل الموافقة، وتبقى صورتك الحالية ظاهرة للأهل." : null);
       router.refresh();
     } catch (err) {
       setError(err instanceof Error && err.message ? friendlyError({ message: err.message }) : "تعذّر رفع الصورة، حاول مرة أخرى.");
@@ -89,8 +97,15 @@ export function PhotoUpload({ kind, name, current }: { kind: Kind; name: string;
   }
 
   return (
-    <div className="photo-up" data-can-remove="1" data-unique-files="1">
+    <div className="photo-up" data-can-remove="1" data-unique-files="1" data-private="1">
       <Avatar name={name} url={preview} size="lg" inst={kind === "institute"} />
+      {reviewed && waitingPreview && (
+        <figure className="stack" style={{ gap: 2, margin: 0, alignItems: "center" }}>
+          <img className="waiting-photo" src={waitingPreview} alt="الصورة الجديدة بانتظار الموافقة" width={56} height={56}
+               style={{ width: 56, height: 56, borderRadius: 12, objectFit: "cover", opacity: 0.85 }} />
+          <figcaption className="small muted">بانتظار الموافقة</figcaption>
+        </figure>
+      )}
       <div className="stack" style={{ gap: 4 }}>
         <button type="button" className="btn sm ghost" onClick={() => input.current?.click()} disabled={busy}>
           {busy ? "جارٍ الرفع…" : preview ? "تغيير الصورة" : kind === "institute" ? "رفع شعار المعهد" : "رفع صورة شخصية"}

@@ -9,7 +9,10 @@ import { cleanMobile } from "@/lib/contact";
 import type { OfferingType, Place, Role } from "@/lib/types";
 import { safePath } from "@/lib/safe";
 import { friendlyError } from "@/lib/errors";
-import { PHOTO_KINDS, noLongerUsed, photoPath, photosToDelete, validPhotoUrl, type PhotoKind } from "@/lib/photos";
+import {
+  PHOTO_KINDS, PRIVATE_BUCKET, PUBLIC_BUCKET, noLongerUsed, photoPath, photosToDelete, privateOwner, privateToDelete, publishedPath,
+  validPrivatePath, type PhotoKind,
+} from "@/lib/photos";
 
 type Result = { error?: string; ok?: boolean; count?: number; created?: number; skipped?: string[] };
 
@@ -400,19 +403,20 @@ export async function saveAttendanceAction(form: FormData) {
   redirect(withQ(path, error ? `error=${encodeURIComponent(friendlyError(error))}` : `saved=${rows.length}`));
 }
 
-// ---------- photos ----------
-// ---------- photos (unique file per upload; see lib/photos.ts) ----------
+// ---------- photos (private uploads, admin publishing; see lib/photos.ts and migrations 20261105000000/010000) ----------
+// Users upload only to the private bucket: a teacher's/institute's new photo waits there (pending_changes.photo_path)
+// until the admin publishes it to the public bucket; a profile photo stays private (profiles.avatar_path) and is shown
+// through short signed links. Public files: the approved teacher/institute photos (and old public files from before).
 type PhotoDb = Awaited<ReturnType<typeof client>>["supabase"];
 
-/** The owner's photos of this kind that are in use: the approved one and the one waiting for admin review
- * (teacher/institute changes wait in pending_changes). null when it cannot be read: then nothing is deleted. */
+/** The owner's public photos of this kind that are in use: the live one, and an old public link still waiting in
+ * pending_changes (from before private photos). null when it cannot be read: then nothing is deleted. */
 async function photosInUse(supabase: PhotoDb, uid: string, kind: PhotoKind): Promise<(string | null)[] | null> {
   if (kind === "profile") {
     const { data, error } = await supabase.from("profiles").select("avatar_url").eq("id", uid).maybeSingle();
     return error ? null : [photoPath(data?.avatar_url)];
   }
   const col = kind === "teacher" ? "photo_url" : "logo_url";
-  // the approved photo is a public column; the one waiting for review comes from my_review_state() (owner only)
   const [{ data, error }, { data: review, error: rErr }] = await Promise.all([
     kind === "teacher"
       ? supabase.from("teachers").select("id, photo_url").eq("user_id", uid)
@@ -428,76 +432,139 @@ async function photosInUse(supabase: PhotoDb, uid: string, kind: PhotoKind): Pro
   });
 }
 
-/** Deletes the owner's own unused photo files of this kind: `extra` (files that were in use until this change) at
+/** The owner's private photo of this kind that is in use: the waiting photo (teacher/institute) or the profile photo. */
+async function privateInUse(supabase: PhotoDb, uid: string, kind: PhotoKind): Promise<(string | null)[] | null> {
+  if (kind === "profile") {
+    const { data, error } = await supabase.from("profiles").select("avatar_path").eq("id", uid).maybeSingle();
+    return error ? null : [(data?.avatar_path as string | null) ?? null];
+  }
+  const { data, error } = await supabase.rpc("my_review_state");
+  if (error) return null;
+  return ((data ?? []) as { kind: string; pending_changes: Record<string, unknown> | null }[])
+    .filter((r) => r.kind === kind)
+    .map((r) => (typeof r.pending_changes?.photo_path === "string" ? (r.pending_changes.photo_path as string) : null));
+}
+
+/** Deletes the owner's own unused photo files of this kind, in both buckets: `extra` (files in use until this change) at
  * once, other unused files once they are older than PHOTO_MIN_AGE_MS. Never a file in use, never another user's file
- * (the paths are built from the signed-in user, and the storage policy "avatars: delete own" enforces it again). */
-async function tidyPhotos(supabase: PhotoDb, uid: string, kind: PhotoKind, extra: string[] = []): Promise<number> {
-  const inUse = await photosInUse(supabase, uid, kind);
-  if (!inUse) return 0;
-  const { data: files, error } = await supabase.storage.from("avatars").list(uid, { limit: 100 });
-  if (error) return 0;
-  const keep = new Set(inUse.filter(Boolean));
-  const doomed = [...new Set([...extra, ...photosToDelete({ owner: uid, kind, files: files ?? [], keep: [...keep] })])]
-    .filter((p) => p.startsWith(`${uid}/`) && !keep.has(p));
-  if (!doomed.length) return 0;
-  const { error: rmErr } = await supabase.storage.from("avatars").remove(doomed);
-  return rmErr ? 0 : doomed.length;
+ * (paths are built from the signed-in user, and the storage policies enforce it again). */
+async function tidyPhotos(supabase: PhotoDb, uid: string, kind: PhotoKind, extra: { pub?: string[]; priv?: string[] } = {}): Promise<number> {
+  let n = 0;
+  const pubUse = await photosInUse(supabase, uid, kind);
+  if (pubUse) {
+    const { data: files, error } = await supabase.storage.from(PUBLIC_BUCKET).list(uid, { limit: 100 });
+    if (!error) {
+      const keep = new Set(pubUse.filter(Boolean));
+      const doomed = [...new Set([...(extra.pub ?? []), ...photosToDelete({ owner: uid, kind, files: files ?? [], keep: [...keep] })])]
+        .filter((p) => p.startsWith(`${uid}/`) && !keep.has(p));
+      if (doomed.length && !(await supabase.storage.from(PUBLIC_BUCKET).remove(doomed)).error) n += doomed.length;
+    }
+  }
+  const privUse = await privateInUse(supabase, uid, kind);
+  if (privUse) {
+    const folder = kind === "profile" ? uid : `${uid}/pending`;
+    const { data: files, error } = await supabase.storage.from(PRIVATE_BUCKET).list(folder, { limit: 100 });
+    if (!error) {
+      const keep = new Set(privUse.filter(Boolean));
+      const doomed = [...new Set([...(extra.priv ?? []), ...privateToDelete({ owner: uid, kind, files: files ?? [], keep: [...keep] })])]
+        .filter((p) => validPrivatePath(p, { owner: uid, kind }) && !keep.has(p));
+      if (doomed.length && !(await supabase.storage.from(PRIVATE_BUCKET).remove(doomed)).error) n += doomed.length;
+    }
+  }
+  return n;
 }
 
 const isKind = (k: unknown): k is PhotoKind => PHOTO_KINDS.includes(k as PhotoKind);
 
-/** Saves a newly uploaded photo (its own unique file). A teacher's or institute's photo waits for admin review: the
- * approved photo keeps showing until then, and stays if the new one is rejected. */
-export async function savePhotoAction(kind: PhotoKind, url: string): Promise<Result> {
+/** Saves a newly uploaded private photo (its own unique file in the private bucket). A teacher's or institute's photo
+ * waits for the admin, privately: the approved photo keeps showing until the admin publishes the new one. A profile
+ * photo is private and applies at once. Returns nothing about other users. */
+export async function submitPhotoAction(kind: PhotoKind, path: string): Promise<Result> {
   revalidateTag("catalog");
   const { supabase, user } = await client();
   if (!user) return { error: "سجّل الدخول أولاً." };
   if (!isKind(kind)) return { error: "طلب غير صالح." };
-  let host = "";
-  try { host = new URL((process.env.NEXT_PUBLIC_SUPABASE_URL ?? "").trim()).hostname; } catch { host = ""; }
-  if (!host || !validPhotoUrl(url, { host, owner: user.id, kind })) return { error: "تعذّر حفظ الصورة: الرابط لا يطابق حسابك." };
-  const before = (await photosInUse(supabase, user.id, kind)) ?? [];
-  const { error } =
-    kind === "teacher"
-      ? await supabase.from("teachers").update({ photo_url: url }).eq("user_id", user.id)
-      : kind === "institute"
-        ? await supabase.from("institutes").update({ logo_url: url }).eq("owner_id", user.id)
-        : await supabase.from("profiles").update({ avatar_url: url }).eq("id", user.id);
+  if (!validPrivatePath(path, { owner: user.id, kind })) return { error: "تعذّر حفظ الصورة: الملف لا يطابق حسابك." };
+  const { data: previous, error } = await supabase.rpc("submit_photo", { p_kind: kind, p_path: path });
   if (error) return { error: friendlyError(error) };
-  const after = await photosInUse(supabase, user.id, kind);
-  // the replaced photo (a profile photo, or an earlier photo still waiting for review) is not used any more
-  if (after) await tidyPhotos(supabase, user.id, kind, noLongerUsed({ owner: user.id, kind, before, after }));
+  const priv = typeof previous === "string" && previous !== path ? [previous] : [];
+  let pub: string[] = [];
+  if (kind === "profile") {
+    // an old public profile photo (from before private photos) is no longer used: clear the link and delete the file
+    const { data: prof } = await supabase.from("profiles").select("avatar_url").eq("id", user.id).maybeSingle();
+    const old = photoPath(prof?.avatar_url as string | null);
+    if (prof?.avatar_url) await supabase.from("profiles").update({ avatar_url: null }).eq("id", user.id);
+    if (old?.startsWith(`${user.id}/`)) pub = [old];
+  }
+  await tidyPhotos(supabase, user.id, kind, { pub, priv });
   revalidatePath("/", "layout");
   return { ok: true };
 }
 
 /** Removes the account's own photo. A profile photo goes at once (link and file). For a teacher or institute the
- * removal waits for admin review like any profile change, so the approved photo (and its file) stays meanwhile. */
+ * removal of the live photo waits for admin review like any profile change, so the approved photo stays meanwhile. */
 export async function removePhotoAction(kind: PhotoKind): Promise<Result> {
   revalidateTag("catalog");
   const { supabase, user } = await client();
   if (!user) return { error: "سجّل الدخول أولاً." };
   if (!isKind(kind)) return { error: "طلب غير صالح." };
   const before = (await photosInUse(supabase, user.id, kind)) ?? [];
+  const beforePriv = kind === "profile" ? ((await privateInUse(supabase, user.id, kind)) ?? []) : [];
   const { error } =
     kind === "teacher"
       ? await supabase.from("teachers").update({ photo_url: null }).eq("user_id", user.id)
       : kind === "institute"
         ? await supabase.from("institutes").update({ logo_url: null }).eq("owner_id", user.id)
-        : await supabase.from("profiles").update({ avatar_url: null }).eq("id", user.id);
+        : await supabase.from("profiles").update({ avatar_url: null, avatar_path: null }).eq("id", user.id);
   if (error) return { error: friendlyError(error) };
   const after = await photosInUse(supabase, user.id, kind);
-  if (after) await tidyPhotos(supabase, user.id, kind, noLongerUsed({ owner: user.id, kind, before, after }));
+  if (after) {
+    await tidyPhotos(supabase, user.id, kind, {
+      pub: noLongerUsed({ owner: user.id, kind, before, after }),
+      priv: beforePriv.filter((p): p is string => !!p),
+    });
+  }
   revalidatePath("/", "layout");
   return { ok: true };
 }
 
-/** Clears the owner's unused photo files of this kind (for example a photo the admin rejected, or the previous photo
- * after a new one was approved). Called when the owner opens a page with their photo box; changes nothing visible. */
+/** Clears the owner's unused photo files of this kind (for example a replaced waiting photo, or an old public photo
+ * after a new one was published). Called when the owner opens a page with their photo box; changes nothing visible. */
 export async function tidyPhotosAction(kind: PhotoKind): Promise<Result> {
   const { supabase, user } = await client();
   if (!user || !isKind(kind)) return { ok: true, count: 0 };
   return { ok: true, count: await tidyPhotos(supabase, user.id, kind) };
+}
+
+/** Admin: publishes an approved waiting photo. Copies the private file to a new name in the owner's public folder (with
+ * the admin's own session; the storage policies allow exactly that), sets it live with admin_publish_photo (which checks
+ * the waiting path and the copied file), then deletes the private original and the previous public photo. If setting
+ * it live fails, the copy is deleted again, so no public file is left behind. */
+async function publishWaitingPhoto(supabase: PhotoDb, kind: "teacher" | "institute", id: string, waiting: string): Promise<string | null> {
+  const dest = publishedPath(waiting, kind);
+  if (!dest) return "الصورة المنتظرة غير صالحة.";
+  const { error: cpErr } = await supabase.storage.from(PRIVATE_BUCKET).copy(waiting, dest, { destinationBucket: PUBLIC_BUCKET });
+  if (cpErr) return `تعذّر نشر الصورة: ${cpErr.message}`;
+  const url = supabase.storage.from(PUBLIC_BUCKET).getPublicUrl(dest).data.publicUrl;
+  const { data: previous, error } = await supabase.rpc("admin_publish_photo", { p_kind: kind, p_id: id, p_path: waiting, p_url: url });
+  if (error) {
+    await supabase.storage.from(PUBLIC_BUCKET).remove([dest]);
+    return friendlyError(error);
+  }
+  await supabase.storage.from(PRIVATE_BUCKET).remove([waiting]);
+  const owner = privateOwner(waiting, kind);
+  const old = photoPath(typeof previous === "string" ? previous : null);
+  if (owner && old && old.startsWith(`${owner}/`) && old !== dest) await supabase.storage.from(PUBLIC_BUCKET).remove([old]);
+  return null;
+}
+
+/** The private photo waiting for the admin in this review item, if any (read with the admin's own rights). */
+async function waitingPhotoOf(supabase: PhotoDb, kind: string, id: string): Promise<string | null> {
+  if (kind !== "teacher" && kind !== "institute") return null;
+  const { data } = await supabase.rpc("admin_review_queue");
+  const row = ((data ?? []) as { kind: string; id: string; changes: Record<string, unknown> | null }[]).find((r) => r.kind === kind && r.id === id);
+  const p = row?.changes?.photo_path;
+  return typeof p === "string" && privateOwner(p, kind) ? p : null;
 }
 
 export async function updateTeacherAction(form: FormData) {
@@ -982,11 +1049,20 @@ export async function confirmPaymentAction(form: FormData) {
 export async function adminReviewAction(form: FormData) {
   revalidateTag("catalog");
   const { supabase } = await client();
-  const { error } = await supabase.rpc("admin_review", {
-    p_kind: str(form, "kind"), p_id: str(form, "id"), p_approve: str(form, "approve") === "1", p_note: str(form, "note") || null,
-  });
+  const kind = str(form, "kind"), id = str(form, "id"), approve = str(form, "approve") === "1";
+  // a teacher's/institute's new photo waits in the private bucket: on approval it is published (copied to the public
+  // bucket) only after the other changes are approved; on rejection its private file is deleted at once
+  const waiting = await waitingPhotoOf(supabase, kind, id);
+  const { error } = await supabase.rpc("admin_review", { p_kind: kind, p_id: id, p_approve: approve, p_note: str(form, "note") || null });
+  let photoError: string | null = null;
+  if (!error && waiting && (kind === "teacher" || kind === "institute")) {
+    if (approve) photoError = await publishWaitingPhoto(supabase, kind, id, waiting);
+    else await supabase.storage.from(PRIVATE_BUCKET).remove([waiting]);
+  }
   revalidatePath("/admin");
-  redirect(`/admin?tab=review&${error ? `error=${encodeURIComponent(friendlyError(error))}` : "done=1"}`);
+  revalidatePath("/", "layout");
+  const msg = error ? friendlyError(error) : photoError;
+  redirect(`/admin?tab=review&${msg ? `error=${encodeURIComponent(msg)}` : "done=1"}`);
 }
 
 // ---------- subscriptions (teachers & institutes pay the platform) ----------

@@ -142,8 +142,3 @@ set role authenticated; set request.jwt.claim.sub = '73000000-0000-0000-0000-000
 select t_is('the owner reads the reason through my_review_state', $$select review_note from my_review_state() where kind = 'institute'$$, 'شعار غير مناسب');
 reset role;
 
-\echo '===== 8. the current flow still works (step B is not applied): public photos as before'
-set role authenticated; set request.jwt.claim.sub = '73000000-0000-0000-0000-000000000003';
-select t_ok('a user still uploads into her own public folder', $$insert into storage.objects (bucket_id, name) values ('avatars', '73000000-0000-0000-0000-000000000003/profile-m5-qqqqqqqq.jpg')$$);
-select t_ok('…and sets it as her public profile photo', $$update profiles set avatar_url = (select base from k) || '73000000-0000-0000-0000-000000000003/profile-m5-qqqqqqqq.jpg' where id = auth.uid()$$);
-reset role;

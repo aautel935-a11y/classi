@@ -4,6 +4,8 @@ import { Icon } from "@/components/Icon";
 import { OfferCard } from "@/components/OfferCard";
 import { answerStaffInviteAction, deleteOfferingAction, respondAction, startBookingConversationAction, saveAvailabilityAction, teacherSetupAction, toggleOfferingAction, updateTeacherAction } from "@/app/actions";
 import { PhotoUpload } from "@/components/PhotoUpload";
+import { signedPhotoUrls } from "@/lib/private-photos";
+import { SIGNED_SECONDS } from "@/lib/photos";
 import { PushToggle } from "@/components/PushToggle";
 import { SubscriptionBox, type Plan, type SubRequest } from "@/components/SubscriptionBox";
 import { ReviewsList, type ReviewRow } from "@/components/ReviewsList";
@@ -35,6 +37,10 @@ export default async function Teach({ searchParams }: { searchParams: Promise<Re
   const review = (reviewRows ?? []) as { kind: string; id: string; pending_changes: Record<string, unknown> | null; review_note: string | null }[];
   const reviewFor = (kind: string, id: string) => review.find((r) => r.kind === kind && r.id === id);
   const t = t0 ? { ...t0, pending_changes: reviewFor("teacher", t0.id)?.pending_changes ?? null, review_note: reviewFor("teacher", t0.id)?.review_note ?? null } : null;
+
+  // the photo waiting for the admin is private: a short signed link for its owner
+  const waitingPath = typeof t?.pending_changes?.photo_path === "string" ? (t.pending_changes.photo_path as string) : null;
+  const waitingUrl = waitingPath ? (await signedPhotoUrls(supabase, [waitingPath], SIGNED_SECONDS.ownerWaiting))[waitingPath] ?? null : null;
 
   if (!t) {
     const { subjects } = await loadReference();
@@ -172,7 +178,7 @@ export default async function Teach({ searchParams }: { searchParams: Promise<Re
         {t.pending_changes && <p className="note"><Icon name="clock" />تعديلات ملفك بانتظار موافقة الإدارة. يرى الطلاب النسخة السابقة حتى الموافقة.</p>}
         {!t.pending_changes && t.review_note && <p className="err small">لم تتم الموافقة على آخر تعديل لملفك: {t.review_note}</p>}
         <div className="card">
-          <PhotoUpload kind="teacher" name={t.name} current={t.photo_url} />
+          <PhotoUpload kind="teacher" name={t.name} current={t.photo_url} waiting={waitingUrl} />
           <details>
             <summary className="link small">تعديل البيانات والنبذة</summary>
             <form id="kf-updateTeacher" action={updateTeacherAction} className="formstack" style={{ marginTop: 12 }}>

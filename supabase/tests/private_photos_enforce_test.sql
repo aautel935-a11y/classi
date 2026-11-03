@@ -1,5 +1,4 @@
--- Private photos, step B (supabase/pending/20261105010000_private_photos_enforce.sql), applied on top of every
--- migration by CI: only the admin adds files to the public bucket; users cannot set public photo links any more, only
+-- Private photos, step B (migration 20261105010000_private_photos_enforce): only the admin adds files to the public bucket; users cannot set public photo links any more, only
 -- clear them; the private flow keeps working. PASS:/FAIL: lines. Synthetic accounts only (ids 7400…).
 \pset pager off
 \pset footer off

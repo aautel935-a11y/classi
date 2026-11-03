@@ -8,6 +8,8 @@ import Link from "next/link";
 import { ErrorNote } from "@/components/ErrorNote";
 import { safePath } from "@/lib/safe";
 import { KeepForm } from "@/components/KeepForm";
+import { signedPhotoUrls } from "@/lib/private-photos";
+import { SIGNED_SECONDS } from "@/lib/photos";
 
 export const dynamic = "force-dynamic";
 
@@ -18,16 +20,20 @@ export default async function Account({ searchParams }: { searchParams: Promise<
   const { supabase, user, profile } = await requireUser("/account");
   const [{ data: kids }, { data: me }] = await Promise.all([
     supabase.from("children").select("id,name,grade").order("created_at"),
-    supabase.from("profiles").select("phone,sms_ok").eq("id", user.id).maybeSingle(),
+    supabase.from("profiles").select("phone,sms_ok,avatar_path").eq("id", user.id).maybeSingle(),
   ]);
   const smsOk = me?.sms_ok !== false;
+  // the profile photo is private: a short signed link for its owner (an old public photo from before still shows)
+  const avatarPath = (me?.avatar_path as string | null) ?? null;
+  const signed = await signedPhotoUrls(supabase, [avatarPath], SIGNED_SECONDS.profile);
+  const photo = (avatarPath && signed[avatarPath]) || profile?.avatar_url || null;
   const active = profile?.active_role === "student" ? "guardian" : profile?.active_role ?? "guardian";
   return (
     <div className="wrap">
       <div className="section">
         <h1 style={{ fontSize: 22 }}>{profile?.full_name || "حسابي"}</h1>
         <span className="muted small num" dir="ltr" style={{ textAlign: "right" }}>{user.email || (user.phone ? `0${String(user.phone).replace(/^\+?972/, "")}` : "")}</span>
-        <PhotoUpload kind="profile" name={profile?.full_name || user.email || "؟"} current={profile?.avatar_url ?? null} />
+        <PhotoUpload kind="profile" name={profile?.full_name || user.email || "؟"} current={photo} />
         {profile?.roles?.includes("admin") && <Link className="btn ghost block" href="/admin">لوحة الإدارة: توثيق المعلمين والمعاهد</Link>}
 
         <h2>الواجهة</h2>

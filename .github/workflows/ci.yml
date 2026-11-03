@@ -102,23 +102,23 @@ jobs:
         run: sh supabase/tests/rollback_drill.sh supabase/rollback/20261101000000_phase4_performance.down.sql,supabase/rollback/20261031020000_phase3_performance_settings.down.sql flow_test roles_test security_test functional_test 2>&1 | tee /tmp/drill3.log
       - name: Rollback drill (phase 6 photo owner guard)
         if: always()
-        run: sh supabase/tests/rollback_drill.sh supabase/rollback/20261103000000_photo_owner_guard.down.sql rollback_photo_owner_checks flow_test roles_test security_test review_test 2>&1 | tee /tmp/drill6a.log
+        run: sh supabase/tests/rollback_drill.sh supabase/rollback/20261105010000_private_photos_enforce.down.sql,supabase/rollback/20261105000000_private_photos.down.sql,supabase/rollback/20261103000000_photo_owner_guard.down.sql rollback_photo_owner_checks roles_test security_test review_test 2>&1 | tee /tmp/drill6a.log
       - name: Rollback drill (phase 6 review columns owner-only)
         if: always()
-        run: sh supabase/tests/rollback_drill.sh supabase/rollback/20261103010000_review_columns_owner_only.down.sql rollback_review_columns_checks flow_test roles_test security_test review_test photos_test 2>&1 | tee /tmp/drill6b.log
+        run: sh supabase/tests/rollback_drill.sh supabase/rollback/20261105010000_private_photos_enforce.down.sql,supabase/rollback/20261105000000_private_photos.down.sql,supabase/rollback/20261103010000_review_columns_owner_only.down.sql rollback_review_columns_checks roles_test security_test review_test 2>&1 | tee /tmp/drill6b.log
       - name: Rollback drill (both phase 6 migrations, newest first)
         if: always()
-        run: sh supabase/tests/rollback_drill.sh supabase/rollback/20261103010000_review_columns_owner_only.down.sql,supabase/rollback/20261103000000_photo_owner_guard.down.sql rollback_review_columns_checks rollback_photo_owner_checks flow_test security_test 2>&1 | tee /tmp/drill6.log
+        run: sh supabase/tests/rollback_drill.sh supabase/rollback/20261105010000_private_photos_enforce.down.sql,supabase/rollback/20261105000000_private_photos.down.sql,supabase/rollback/20261103010000_review_columns_owner_only.down.sql,supabase/rollback/20261103000000_photo_owner_guard.down.sql rollback_review_columns_checks rollback_photo_owner_checks security_test 2>&1 | tee /tmp/drill6.log
       - name: Rollback drill (photos bucket listing owner-only)
         if: always()
-        run: sh supabase/tests/rollback_drill.sh supabase/rollback/20261104000000_avatars_read_own.down.sql rollback_avatars_read_checks photos_test flow_test security_test review_test 2>&1 | tee /tmp/drill7.log
+        run: sh supabase/tests/rollback_drill.sh supabase/rollback/20261105010000_private_photos_enforce.down.sql,supabase/rollback/20261105000000_private_photos.down.sql,supabase/rollback/20261104000000_avatars_read_own.down.sql rollback_avatars_read_checks security_test review_test 2>&1 | tee /tmp/drill7.log
       - name: The suite catches the open listing (must fail on the old policy)
         if: always()
         run: |
           # the same suite, after the rollback, must report the enumeration (FAIL lines); otherwise it proves nothing
-          sh supabase/tests/rollback_drill.sh supabase/rollback/20261104000000_avatars_read_own.down.sql avatars_read_test > /tmp/drill7b.log 2>&1 && { echo "::error::avatars_read_test passed on the old policy"; exit 1; }
+          sh supabase/tests/rollback_drill.sh supabase/rollback/20261105010000_private_photos_enforce.down.sql,supabase/rollback/20261105000000_private_photos.down.sql,supabase/rollback/20261104000000_avatars_read_own.down.sql avatars_read_test > /tmp/drill7b.log 2>&1 && { echo "::error::avatars_read_test passed on the old policy"; exit 1; }
           n=$(grep -c "FAIL:" /tmp/drill_avatars_read_test.out); echo "FAIL lines on the old policy: $n"; [ "$n" -ge 8 ]
-      - name: Staging apply file refuses any database but classi-staging
+      - name: Staging apply files refuse any database but classi-staging
         if: always()
         run: |
           P="psql -h ${PGSOCK:-/var/tmp/pgc} -p ${PGPORT:-54329} -U postgres -q"
@@ -127,16 +127,18 @@ jobs:
           echo "$out" | grep -q "refusing: not the classi-staging database" || { echo "::error::apply file did not refuse: $out"; exit 1; }
           awk '/^-- ===== BEGIN MIGRATION/{f=1;next}/^-- ===== END MIGRATION/{f=0}f' supabase/staging/apply_20261104000000_avatars_read_own.sql | cmp - supabase/migrations/20261104000000_avatars_read_own.sql
           echo "refused outside staging; embedded migration identical to the committed file"
-      - name: Rollback drill (private photos, step A)
+          for f in 20261105000000_private_photos 20261105010000_private_photos_enforce; do
+            out=$($P -d ct_apply -v ON_ERROR_STOP=1 -f supabase/staging/apply_$f.sql 2>&1 || true)
+            echo "$out" | grep -q "refusing: not the classi-staging database" || { echo "::error::apply_$f did not refuse: $out"; exit 1; }
+            awk '/^-- ===== BEGIN MIGRATION/{f=1;next}/^-- ===== END MIGRATION/{f=0}f' supabase/staging/apply_$f.sql | cmp - supabase/migrations/$f.sql
+            echo "apply_$f: refused outside staging; embedded migration identical"
+          done
+      - name: Rollback drill (private photos, steps B then A)
         if: always()
-        run: sh supabase/tests/rollback_drill.sh supabase/rollback/20261105000000_private_photos.down.sql rollback_private_photos_checks photos_test flow_test security_test review_test review_access_test 2>&1 | tee /tmp/drill8.log
-      - name: Private photos step B (prepared, not yet a migration) on top of every migration
+        run: sh supabase/tests/rollback_drill.sh supabase/rollback/20261105010000_private_photos_enforce.down.sql,supabase/rollback/20261105000000_private_photos.down.sql rollback_private_photos_checks security_test review_test review_access_test functional_test 2>&1 | tee /tmp/drill8.log
+      - name: Rollback drill (private photos, step B), newest first
         if: always()
-        run: |
-          sh supabase/tests/forward_drill.sh supabase/pending/20261105010000_private_photos_enforce.sql private_photos_enforce_checks security_test review_access_test functional_test 2>&1 | tee /tmp/fwd8.log
-          # and its rollback brings the current photo flow back exactly
-          DOWN=supabase/rollback/20261105010000_private_photos_enforce.down.sql sh supabase/tests/forward_drill.sh supabase/pending/20261105010000_private_photos_enforce.sql photos_test flow_test review_test private_photos_test 2>&1 | tee -a /tmp/fwd8.log
-          DOWN=supabase/rollback/20261105010000_private_photos_enforce.down.sql,supabase/rollback/20261105000000_private_photos.down.sql sh supabase/tests/forward_drill.sh supabase/pending/20261105010000_private_photos_enforce.sql rollback_private_photos_checks photos_test 2>&1 | tee -a /tmp/fwd8.log
+        run: sh supabase/tests/rollback_drill.sh supabase/rollback/20261105010000_private_photos_enforce.down.sql rollback_private_photos_enforce_checks private_photos_test security_test review_access_test functional_test 2>&1 | tee /tmp/drill9.log
       - name: Search equivalence at growth size (3,000 offers, 409 filter combinations)
         if: always()
         run: |
