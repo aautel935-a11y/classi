@@ -574,9 +574,11 @@ test("S10b. admin review: a rejection reason is shown to the owner only; teacher
   const box = tp.locator("#profile .photo-up");
   // Always a real page load of the dashboard. goto() to the address the page is already on, with a "#", only moves
   // within the page (no load, the photo box is not mounted again, so its tidy-up does not run): hosted run
-  // 41721336243. So when the dashboard is already open it is reloaded.
+  // 41721336243. So exactly in that case (already on /teach#profile) the page is reloaded; any other address (also
+  // /teach?ok=profile after a save) is a real navigation, which clears the "?ok=" the save waits for.
   const openTeach = async () => {
-    if (new URL(tp.url()).pathname === "/teach") await tp.reload();
+    const here = new URL(tp.url());
+    if (here.pathname === "/teach" && !here.search && here.hash === "#profile") await tp.reload();
     else await tp.goto("/teach#profile");
   };
   await openTeach();
