@@ -395,8 +395,9 @@ test("S9. booking that needs the teacher: accept (then the parent cancels) and d
     const b2 = await bookAsParent(pp, 6); made.push(b2);
     await expect(lessonCard(pp, b2).getByText("بانتظار موافقة المعلم")).toBeVisible();
     await tp.goto("/teach");
-    await requestCard(b2).getByRole("button", { name: "رفض" }).click();
-    await tp.getByRole("button", { name: "تأكيد الرفض" }).click();
+    // "رفض" opens a confirmation (<details>/<summary>, works without JavaScript); the real button is inside it
+    await requestCard(b2).locator("summary", { hasText: "رفض" }).click();
+    await requestCard(b2).getByRole("button", { name: "تأكيد الرفض" }).click();
     await expect(requestCard(b2)).toHaveCount(0, { timeout: 20_000 }); made.pop();
     await pp.goto("/schedule");
     await expect(lessonCard(pp, b2)).toHaveCount(0);
