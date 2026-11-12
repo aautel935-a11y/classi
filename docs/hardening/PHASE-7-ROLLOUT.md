@@ -42,7 +42,7 @@
 - المالك يرى مجلده؛
 - `/health`.
 
-**التراجع:** `20261104000000_avatars_read_own.down.sql`، ثم حذف السجل.
+**التراجع:** على staging `supabase/staging/rollback_20261104000000_avatars_read_own.sql` (محمي، معاملة واحدة، يعيد السياسة والسجل معًا).
 
 ### الخطوة 1: Migration A
 

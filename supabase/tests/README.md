@@ -8,6 +8,7 @@ The test database is built from every migration, then `seed.sql`, then `grants.s
 | `sh supabase/tests/run_all.sh` | Runs every `*_test.sql` suite, each in its own database, 4 at a time. It fails on a different number of expected refusals (see `expected_errors.txt`) or on any `FAIL:` line |
 | `sh supabase/tests/run.sh <suite>` | Runs one suite and prints its output |
 | `sh supabase/tests/concurrency_test.sh` | Two real connections at the same moment: payment confirmations, institute slots, teacher slots |
+| `sh supabase/tests/staging_p0_1_test.sh` | The classi-staging files of P0-1 (apply and guarded rollback of `20261104000000_avatars_read_own`) on local staging-like databases: every refusal changes nothing, apply and rollback succeed and restore the exact state |
 | `sh supabase/tests/check_rpc_grants.sh` | Checks that every `rpc("…")` in the app is executable by `authenticated` |
 | `sh tests/run-unit.sh` | Unit tests for `lib/*.ts` (Node test runner) |
 

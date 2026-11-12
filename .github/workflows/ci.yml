@@ -118,6 +118,9 @@ jobs:
           # the same suite, after the rollback, must report the enumeration (FAIL lines); otherwise it proves nothing
           sh supabase/tests/rollback_drill.sh supabase/rollback/20261105010000_private_photos_enforce.down.sql,supabase/rollback/20261105000000_private_photos.down.sql,supabase/rollback/20261104000000_avatars_read_own.down.sql avatars_read_test > /tmp/drill7b.log 2>&1 && { echo "::error::avatars_read_test passed on the old policy"; exit 1; }
           n=$(grep -c "FAIL:" /tmp/drill_avatars_read_test.out); echo "FAIL lines on the old policy: $n"; [ "$n" -ge 8 ]
+      - name: P0-1 staging files (guards, apply, rollback) on a staging-like local database
+        if: always()
+        run: sh supabase/tests/staging_p0_1_test.sh 2>&1 | tee /tmp/p01.log
       - name: Staging apply files refuse any database but classi-staging
         if: always()
         run: |
