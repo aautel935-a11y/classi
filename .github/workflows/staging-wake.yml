@@ -1,20 +1,24 @@
-# D-08: ONE test wake-up of the push dispatch route on classi-staging, by hand only, with owner approval (Environment
-# "staging"). classi-staging's database cannot wake the app itself (its dispatch_url is unreachable on purpose, so nothing
-# real is ever sent), so step B's guard (d08_worker_seen_at) needs this one call to prove the deployed code uses the
-# server-only worker functions. Sends nothing real: classi-staging has no push subscriptions and no VAPID keys, SMS is
-# blocked for NEXT_PUBLIC_DEPLOY_ENV=staging, and no email service is configured there. Side effect on test data only:
-# waiting test notifications get pushed_at set (as any wake-up does).
+# D-08: ONE probe of the server-only path on classi-staging, by hand only, with owner approval (Environment "staging").
+# classi-staging's database cannot wake the app itself (its dispatch_url is unreachable on purpose), so step B's guard
+# (app_secrets.d08_worker_seen_at) needs this call to prove that the deployed code reaches worker_wake_ok with the
+# server key.
+#
+# It calls ONLY /api/push/probe, which wakes and returns: it never claims, delivers, logs or drops anything (enforced in
+# CI by tests/check-worker-key.mjs). So no notification, sign-in code or SMS quota changes, and nothing can be pushed,
+# texted or emailed, whatever classi-staging's push, email or SMS settings become later. It never calls
+# /api/push/dispatch or /api/sms/otp. A deployment without the probe route answers 404 and nothing happens.
+#
 # Needs in Environment "staging" (never in code or chat):
-#   secret STAGING_DISPATCH_SECRET   the value of app_secrets.dispatch_secret in classi-staging (owner copies it there)
+#   secret STAGING_DISPATCH_SECRET   the value of app_secrets.dispatch_secret in classi-staging (the owner copies it)
 #   secret VERCEL_AUTOMATION_BYPASS_SECRET (already there)
-# Prints only HTTP status codes and the route's counters, never a secret or a response header.
-name: Staging wake-up (D-08)
+# Prints only HTTP status codes and the probe's answer, never a secret or a response header.
+name: Staging probe (D-08)
 
 on:
   workflow_dispatch:
     inputs:
       confirm:
-        description: 'Type exactly: wake classi-staging once'
+        description: 'Type exactly: probe classi-staging once'
         required: true
 
 permissions:
@@ -29,8 +33,8 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
-  wake:
-    if: inputs.confirm == 'wake classi-staging once'
+  probe:
+    if: inputs.confirm == 'probe classi-staging once'
     runs-on: ubuntu-latest
     timeout-minutes: 5
     environment: staging
@@ -48,29 +52,28 @@ jobs:
           [ -n "$WAKE" ] || { echo "::error::STAGING_DISPATCH_SECRET missing in Environment staging"; exit 1; }
           [ -z "$LEFTOVER_DB_URL" ] || { echo "::error::a database link is visible to this job"; exit 1; }
           echo "target: $BASE_URL"
-      - name: Before - the site answers (public health; the "worker" check runs only on /admin and the daily cron)
+      - name: Before - the site answers (public health)
         env: { BYPASS: "${{ secrets.VERCEL_AUTOMATION_BYPASS_SECRET }}" }
         run: |
           c=$(curl -sS -o /tmp/h.json -w '%{http_code}' -H "x-vercel-protection-bypass: $BYPASS" "${BASE_URL%/}/api/health")
           echo "health HTTP $c"; node -e 'const h=require("/tmp/h.json");console.log(h.checks.map(c=>c.name+":"+c.status).join(" "));process.exit(h.ok?0:1)'
-      - name: Wrong secret is refused (401)
+      - name: Wrong secret is refused (401) and records nothing
         env: { BYPASS: "${{ secrets.VERCEL_AUTOMATION_BYPASS_SECRET }}" }
         run: |
           c=$(curl -sS -o /dev/null -w '%{http_code}' -X POST -H "x-vercel-protection-bypass: $BYPASS" -H 'content-type: application/json' \
-            --data '{"secret":"not-the-secret"}' "${BASE_URL%/}/api/push/dispatch")
-          echo "wrong secret: HTTP $c"; [ "$c" = 401 ]
-      - name: The one wake-up
+            --data '{"secret":"not-the-secret"}' "${BASE_URL%/}/api/push/probe")
+          echo "wrong secret: HTTP $c"; [ "$c" = 401 ] || { echo "::error::expected 401 (404 means the deployed code has no probe route: stop)"; exit 1; }
+      - name: The one probe
         env:
           BYPASS: ${{ secrets.VERCEL_AUTOMATION_BYPASS_SECRET }}
           WAKE: ${{ secrets.STAGING_DISPATCH_SECRET }}
         run: |
           body=$(node -e 'process.stdout.write(JSON.stringify({secret:process.env.WAKE}))')
-          c=$(curl -sS -o /tmp/w.json -w '%{http_code}' -X POST -H "x-vercel-protection-bypass: $BYPASS" -H 'content-type: application/json' \
-            --data "$body" "${BASE_URL%/}/api/push/dispatch")
+          c=$(curl -sS -o /tmp/p.json -w '%{http_code}' -X POST -H "x-vercel-protection-bypass: $BYPASS" -H 'content-type: application/json' \
+            --data "$body" "${BASE_URL%/}/api/push/probe")
           unset body
-          echo "wake-up: HTTP $c"
-          # only the counters (items, pushed, removed, emailed, texted, failed, batches)
-          node -e 'const r=require("/tmp/w.json");const k=["ok","items","pushed","removed","emailed","texted","failed","batches"];console.log(JSON.stringify(Object.fromEntries(k.map(x=>[x,r[x]]))));if(r.pushed||r.emailed||r.texted){console.log("::error::something was delivered");process.exit(1)}' || { rm -f /tmp/w.json; exit 1; }
-          rm -f /tmp/w.json
+          echo "probe: HTTP $c"
+          node -e 'const r=require("/tmp/p.json");const ok=r.ok===true&&r.probe===true&&r.delivered===0;console.log(JSON.stringify({ok:r.ok,probe:r.probe,delivered:r.delivered,error:r.error}));process.exit(ok?0:1)'
+          rm -f /tmp/p.json
           [ "$c" = 200 ]
-          echo "Proof (read-only, outside this job): app_secrets.d08_worker_seen_at is now recent (written only by worker_wake_ok, i.e. the server key worked); nothing was pushed, texted or emailed (counters above)."
+          echo "Proof (read-only, outside this job): app_secrets.d08_worker_seen_at is now recent; it is written only by worker_wake_ok, which only the server key may call."

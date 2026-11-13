@@ -217,6 +217,10 @@ jobs:
           echo "NEXT_PUBLIC_SUPABASE_URL=$API_URL" >> "$GITHUB_ENV"
           echo "NEXT_PUBLIC_SUPABASE_ANON_KEY=$ANON_KEY" >> "$GITHUB_ENV"
           echo "E2E_DB_URL=$DB_URL" >> "$GITHUB_ENV"
+          # D-08: the LOCAL stack's service-role key (never a hosted one), so the app uses the worker path and
+          # tests/e2e/d08.spec.mjs can prove it over HTTP
+          echo "::add-mask::$SERVICE_ROLE_KEY"
+          echo "SUPABASE_SERVICE_ROLE_KEY=$SERVICE_ROLE_KEY" >> "$GITHUB_ENV"
       - name: npm ci + browsers
         run: |
           npm ci --no-audit --no-fund && npx playwright install --with-deps chromium
@@ -235,7 +239,7 @@ jobs:
           psql "$E2E_DB_URL" -v ON_ERROR_STOP=1 -Atq -f supabase/tests/staging_state.sql > /tmp/staging-state-before.txt
           # the suite must work with no database connection in reach: E2E_DB_URL is removed from its environment
           rc=0
-          env -u E2E_DB_URL STAGING_DRY_RUN=1 BASE_URL=http://localhost:3000 \
+          env -u E2E_DB_URL -u SUPABASE_SERVICE_ROLE_KEY STAGING_DRY_RUN=1 BASE_URL=http://localhost:3000 \
             STAGING_OTP_TEACHER=111111 STAGING_OTP_INSTITUTE=222222 STAGING_OTP_PARENT=333333 STAGING_OTP_STUDENT=444444 STAGING_OTP_ADMIN=555555 \
             npx playwright test -c tests/staging/playwright.config.mjs 2>&1 | tee /tmp/staging-dry.log || rc=$?
           # the state check runs even when a test failed: a failed test must still have put everything back

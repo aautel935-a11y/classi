@@ -3,7 +3,8 @@
 //  2. none of them may be a client component, and no client component may import them;
 //  3. the variable is read only in lib/supabase/worker.ts and lib/deploy-guard.ts (never NEXT_PUBLIC_);
 //  4. the old secret-gated anon functions are not called anywhere except the temporary fallback in the two routes;
-//  5. a Web Push never carries the notification body (TM-12): the payload comes from lib/push-text.ts.
+//  5. a Web Push never carries the notification body (TM-12): the payload comes from lib/push-text.ts;
+//  6. the probe route (app/api/push/probe) only wakes: it never claims, delivers, logs or drops anything.
 // Usage: node tests/check-worker-key.mjs
 import { readdirSync, readFileSync, statSync } from "node:fs";
 import { join } from "node:path";
@@ -15,7 +16,7 @@ const walk = (d) => { for (const f of readdirSync(d)) { const p = join(d, f); if
 const rel = (p) => p.slice(root.length);
 const src = Object.fromEntries(files.map((f) => [rel(f), readFileSync(f, "utf8")]));
 
-const ALLOWED = ["app/api/push/dispatch/route.ts", "app/api/sms/otp/route.ts", "lib/health.ts"];
+const ALLOWED = ["app/api/push/dispatch/route.ts", "app/api/sms/otp/route.ts", "app/api/push/probe/route.ts", "lib/health.ts"];
 const KEY_READERS = ["lib/supabase/worker.ts", "lib/deploy-guard.ts"];
 const LEGACY = ["claim_push", "claim_otp", "log_sms", "drop_push_subscriptions"];
 let bad = 0;
@@ -38,5 +39,10 @@ for (const [f, s] of Object.entries(src)) {
 const dispatch = src["app/api/push/dispatch/route.ts"] ?? "";
 if (/sendNotification\([\s\S]{0,200}it\.body/.test(dispatch)) fail("app/api/push/dispatch/route.ts puts the notification body into a Web Push (TM-12)");
 if (!/pushPayload\(it\)/.test(dispatch)) fail("app/api/push/dispatch/route.ts does not build the push with pushPayload (lib/push-text.ts)");
+const probe = src["app/api/push/probe/route.ts"] ?? "";
+if (!probe) fail("app/api/push/probe/route.ts is missing");
+for (const bad of ["worker_claim", "worker_push_keys", "worker_log_sms", "worker_drop", "claim_push", "claim_otp", "sendNotification", "sendSms", "resend", "web-push", "lib/sms", "publicClient"])
+  if (probe.toLowerCase().includes(bad.toLowerCase())) fail(`app/api/push/probe/route.ts must only wake (found "${bad}")`);
+if (!/rpc\(\s*["']worker_wake_ok["']/.test(probe)) fail("app/api/push/probe/route.ts does not call worker_wake_ok");
 console.log(bad ? `${bad} problem(s)` : `worker key and push text: ok (${files.length} files)`);
 process.exit(bad ? 1 : 0);

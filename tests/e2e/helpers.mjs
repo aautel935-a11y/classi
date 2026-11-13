@@ -14,6 +14,8 @@ async function sql(text, params = []) {
   try { return (await c.query(text, params)).rows; } finally { await c.end(); }
 }
 const one = async (text, params) => (await sql(text, params))[0] ?? {};
+/** Raw query for the D-08 route tests (local test database only, see the guard above). */
+export const localSql = sql;
 
 /** Everything the tests read or do in the local test database (they play the admin's part and read codes). */
 export const db = {
