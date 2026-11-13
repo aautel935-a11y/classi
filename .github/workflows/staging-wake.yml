@@ -48,12 +48,11 @@ jobs:
           [ -n "$WAKE" ] || { echo "::error::STAGING_DISPATCH_SECRET missing in Environment staging"; exit 1; }
           [ -z "$LEFTOVER_DB_URL" ] || { echo "::error::a database link is visible to this job"; exit 1; }
           echo "target: $BASE_URL"
-      - name: Before - the deployed code has the server key (health check "worker")
+      - name: Before - the site answers (public health; the "worker" check runs only on /admin and the daily cron)
         env: { BYPASS: "${{ secrets.VERCEL_AUTOMATION_BYPASS_SECRET }}" }
         run: |
-          curl -sS -o /tmp/h.json -w '%{http_code}\n' -H "x-vercel-protection-bypass: $BYPASS" "${BASE_URL%/}/api/health" > /tmp/h.code
-          echo "health HTTP $(cat /tmp/h.code)"
-          node -e 'const h=require("/tmp/h.json");const w=(h.checks||[]).find(c=>c.name==="worker");console.log("worker:",w?w.status:"absent");process.exit(w&&w.status==="ok"?0:1)'
+          c=$(curl -sS -o /tmp/h.json -w '%{http_code}' -H "x-vercel-protection-bypass: $BYPASS" "${BASE_URL%/}/api/health")
+          echo "health HTTP $c"; node -e 'const h=require("/tmp/h.json");console.log(h.checks.map(c=>c.name+":"+c.status).join(" "));process.exit(h.ok?0:1)'
       - name: Wrong secret is refused (401)
         env: { BYPASS: "${{ secrets.VERCEL_AUTOMATION_BYPASS_SECRET }}" }
         run: |
@@ -74,4 +73,4 @@ jobs:
           node -e 'const r=require("/tmp/w.json");const k=["ok","items","pushed","removed","emailed","texted","failed","batches"];console.log(JSON.stringify(Object.fromEntries(k.map(x=>[x,r[x]]))));if(r.pushed||r.emailed||r.texted){console.log("::error::something was delivered");process.exit(1)}' || { rm -f /tmp/w.json; exit 1; }
           rm -f /tmp/w.json
           [ "$c" = 200 ]
-          echo "Next (read-only, outside this job): app_secrets.d08_worker_seen_at is now recent; nothing was pushed, texted or emailed (counters above)."
+          echo "Proof (read-only, outside this job): app_secrets.d08_worker_seen_at is now recent (written only by worker_wake_ok, i.e. the server key worked); nothing was pushed, texted or emailed (counters above)."
