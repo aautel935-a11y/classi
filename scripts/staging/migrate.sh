@@ -65,6 +65,12 @@ for f in "$REPO"/supabase/migrations/*.sql; do
   v=$(basename "$f" | cut -d_ -f1)
   [ "$(Q -c "select count(*) from supabase_migrations.schema_migrations where version = '$v'")" = 1 ] || pending="$pending $(basename "$f")"
 done
+# Migrations that have their own guarded file in supabase/staging/ (apply_<name>.sql) are applied ONLY with that file,
+# one at a time, after the owner's approval: never here, and never together (for example the private-photo steps A
+# and B, which need the new app code deployed in between). Refuse before changing anything.
+manual=""
+for f in $pending; do [ -f "$REPO/supabase/staging/apply_${f%.sql}.sql" ] && manual="$manual $f"; done
+[ -z "$manual" ] || { echo "refusing: these pending migrations are applied only with their own guarded staging file (supabase/staging/apply_<name>.sql), one at a time:$manual"; exit 2; }
 if [ -z "$pending" ]; then
   echo "no new migrations: nothing to apply ($applied_before applied)"
 else

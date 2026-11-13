@@ -121,6 +121,9 @@ jobs:
       - name: P0-1 staging files (guards, apply, rollback) on a staging-like local database
         if: always()
         run: sh supabase/tests/staging_p0_1_test.sh 2>&1 | tee /tmp/p01.log
+      - name: Private photos staging files (A, B, marker; guards, apply, rollback; generated and up to date)
+        if: always()
+        run: sh supabase/tests/staging_private_photos_test.sh 2>&1 | tee /tmp/pp_staging.log
       - name: Staging apply files refuse any database but classi-staging
         if: always()
         run: |

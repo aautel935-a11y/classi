@@ -36,8 +36,17 @@ run STAGING_DB_URL="$URL" MIGRATE_TEST=1 CI= && ko "test mode outside CI refused
 run STAGING_DB_URL="$URL" MIGRATE_TEST=1 CI=true && grep -q "no new migrations" /tmp/stgmig.out && grep -q "counts unchanged" /tmp/stgmig.out \
   && ok "nothing new: nothing applied, counts unchanged" || ko "nothing new ($(tail -3 /tmp/stgmig.out | tr '\n' ' '))"
 before=$($D -Atc "select count(*) from public.teachers")
-# one migration pending (the latest; its functions are re-created in place): applied once, counts unchanged
-last=$(ls "$REPO"/supabase/migrations/*.sql | tail -1); lv=$(basename "$last" | cut -d_ -f1)
+# migrations with their own guarded staging file are never applied here: not one, not two together (A and B)
+for set in "20261105010000" "20261105000000 20261105010000" "20261104000000"; do
+  for v in $set; do $D -c "delete from supabase_migrations.schema_migrations where version = '$v'"; done
+  b=$($D -Atc "select count(*) from supabase_migrations.schema_migrations")
+  run STAGING_DB_URL="$URL" MIGRATE_TEST=1 CI=true && ko "manual-only migrations refused ($set)" || {
+    grep -q "applied only with their own guarded staging file" /tmp/stgmig.out && [ "$($D -Atc "select count(*) from supabase_migrations.schema_migrations")" = "$b" ] \
+      && ok "pending manual-only migration(s) $set: refused, nothing applied" || ko "manual-only ($set): $(tail -1 /tmp/stgmig.out)"; }
+  for v in $set; do n=$(basename "$(ls "$REPO"/supabase/migrations/${v}_*.sql)" .sql); $D -c "insert into supabase_migrations.schema_migrations (version, name) values ('$v', '${n#*_}') on conflict do nothing"; done
+done
+# one migration pending (the latest one WITHOUT a guarded staging file; function bodies only): applied once, counts unchanged
+last=$(for f in "$REPO"/supabase/migrations/*.sql; do [ -f "$REPO/supabase/staging/apply_$(basename "$f" .sql).sql" ] || echo "$f"; done | tail -1); lv=$(basename "$last" | cut -d_ -f1)
 $D -c "delete from supabase_migrations.schema_migrations where version = '$lv'"
 run STAGING_DB_URL="$URL" MIGRATE_TEST=1 CI=true && grep -q "new migrations: $(basename "$last")" /tmp/stgmig.out && grep -q "counts unchanged" /tmp/stgmig.out \
   && [ "$($D -Atc "select count(*) from supabase_migrations.schema_migrations where version = '$lv'")" = 1 ] \

@@ -13,6 +13,9 @@ drop policy if exists "private photos: admin deletes waiting" on storage.objects
 drop policy if exists "avatars: admin publishes approved photo" on storage.objects;
 drop policy if exists "avatars: admin reads teacher and institute photos" on storage.objects;
 drop policy if exists "avatars: admin deletes teacher and institute photos" on storage.objects;
+drop trigger if exists teachers_insert_review on public.teachers;
+drop trigger if exists institutes_insert_review on public.institutes;
+drop function if exists public.profile_insert_review();
 drop function if exists public.submit_photo(text, text);
 drop function if exists public.admin_publish_photo(text, uuid, text, text);
 create or replace function public.admin_review(p_kind text, p_id uuid, p_approve boolean, p_note text default null) returns void

@@ -1,6 +1,6 @@
 -- Private photos, step B (enforcement). Apply ONLY after the app with the private flow is deployed (step 2 of
 -- docs/hardening/PHASE-7-PRIVATE-PHOTOS-PLAN.md): an older app still uploads to the public bucket and saves public photo
--- links, which this refuses. Order on a hosted project: app code, then 20261105000000 (A), then this one (B).
+-- links, which this refuses. Order on a hosted project: 20261105000000 (A), then the app code, then this one (B).
 --   * nobody but the admin can put a file in the public bucket "avatars" (users lose "upload own" and "replace own")
 --   * a signed-in user (not an admin) can no longer set a public photo link: teachers.photo_url, institutes.logo_url
 --     (also as a value waiting in pending_changes) and profiles.avatar_url may only be cleared; the live teacher /
@@ -11,7 +11,7 @@ drop policy if exists "avatars: upload own" on storage.objects;
 drop policy if exists "avatars: replace own" on storage.objects;
 
 create or replace function public.photo_publish_guard() returns trigger
-language plpgsql security definer set search_path = public as $$
+language plpgsql security definer set search_path = public, pg_temp as $$
 declare v_col text; v_new text; v_old text; v_pnew text; v_pold text;
 begin
   if auth.uid() is null or is_admin() then return new; end if;

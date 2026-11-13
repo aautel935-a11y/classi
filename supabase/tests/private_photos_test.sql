@@ -142,3 +142,33 @@ set role authenticated; set request.jwt.claim.sub = '73000000-0000-0000-0000-000
 select t_is('the owner reads the reason through my_review_state', $$select review_note from my_review_state() where kind = 'institute'$$, 'شعار غير مناسب');
 reset role;
 
+
+\echo '===== 8. a waiting photo from another user''s folder is never published; a new row brings no pending_changes'
+set role authenticated; set request.jwt.claim.sub = '73000000-0000-0000-0000-000000000002';
+select t_ok('Samer uploads another waiting photo (the victim''s file)', $$insert into storage.objects (bucket_id, name) values ('photos-private', '73000000-0000-0000-0000-000000000002/pending/teacher-v8-vvvvvvvv.jpg')$$);
+reset role;
+set role authenticated; set request.jwt.claim.sub = '73000000-0000-0000-0000-000000000003';
+select t_ok('the mother creates a teacher row and tries to bring a waiting photo and a review note with it',
+  $$insert into teachers (user_id, name, town, pending_changes, review_note) values ('73000000-0000-0000-0000-000000000003', 'أم يوسف', 'باقة',
+    jsonb_build_object('photo_path', '73000000-0000-0000-0000-000000000002/pending/teacher-v8-vvvvvvvv.jpg'), 'approved by me')$$);
+reset role;
+select t_is('the new row has no pending_changes and no review note', $$select coalesce(pending_changes::text, '-') || ' | ' || coalesce(review_note, '-') from teachers where user_id = '73000000-0000-0000-0000-000000000003'$$, '- | -');
+-- the same foreign path, as if it had got there another way (server job, older data)
+reset request.jwt.claim.sub;
+update teachers set pending_changes = jsonb_build_object('photo_path', '73000000-0000-0000-0000-000000000002/pending/teacher-v8-vvvvvvvv.jpg') where user_id = '73000000-0000-0000-0000-000000000003';
+set role authenticated; set request.jwt.claim.sub = '73000000-0000-0000-0000-000000000001';
+select t_ok('the admin copies it into the mother''s public folder', $$insert into storage.objects (bucket_id, name) values ('avatars', '73000000-0000-0000-0000-000000000003/teacher-v8-wwwwwwww.jpg')$$);
+select t_err('publishing a waiting photo from another user''s folder is refused',
+  $$select admin_publish_photo('teacher', (select id from teachers where user_id = '73000000-0000-0000-0000-000000000003'), '73000000-0000-0000-0000-000000000002/pending/teacher-v8-vvvvvvvv.jpg', (select base from k) || '73000000-0000-0000-0000-000000000003/teacher-v8-wwwwwwww.jpg')$$);
+reset role;
+select t_is('…and the row is unchanged (no live photo, the foreign path still waits)', $$select coalesce(photo_url, '-') || ' | ' || (pending_changes ->> 'photo_path') from teachers where user_id = '73000000-0000-0000-0000-000000000003'$$, '- | 73000000-0000-0000-0000-000000000002/pending/teacher-v8-vvvvvvvv.jpg');
+update teachers set pending_changes = jsonb_build_object('photo_path', '73000000-0000-0000-0000-000000000003/pending/teacher-v9-xxxxxxxx.jpg') where user_id = '73000000-0000-0000-0000-000000000003';
+set role authenticated; set request.jwt.claim.sub = '73000000-0000-0000-0000-000000000001';
+select t_err('publishing a waiting photo whose private file does not exist is refused',
+  $$select admin_publish_photo('teacher', (select id from teachers where user_id = '73000000-0000-0000-0000-000000000003'), '73000000-0000-0000-0000-000000000003/pending/teacher-v9-xxxxxxxx.jpg', (select base from k) || '73000000-0000-0000-0000-000000000003/teacher-v8-wwwwwwww.jpg')$$);
+reset role;
+select t_is('the SECURITY DEFINER functions of step A pin search_path to public, pg_temp',
+  $$select string_agg(proname || '=' || array_to_string(proconfig, ','), ' ' order by proname) from pg_proc p join pg_namespace n on n.oid = p.pronamespace
+    where n.nspname = 'public' and proname in ('submit_photo','admin_publish_photo','admin_review','profile_insert_review')$$,
+  'admin_publish_photo=search_path=public, pg_temp admin_review=search_path=public, pg_temp profile_insert_review=search_path=public, pg_temp submit_photo=search_path=public, pg_temp');
+select t_is('nobody but the trigger runs profile_insert_review', $$select (has_function_privilege('anon','public.profile_insert_review()','execute') or has_function_privilege('authenticated','public.profile_insert_review()','execute'))::text$$, 'false');

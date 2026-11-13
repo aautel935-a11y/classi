@@ -9,6 +9,8 @@ insert into storage.buckets (id, name, public) values ('avatars', 'avatars', tru
 select t_is('no policy mentions photos-private any more', $$select count(*)::text from pg_policies where tablename = 'objects' and (coalesce(qual, '') || coalesce(with_check, '')) like '%photos-private%'$$, '0');
 select t_is('the admin policies on the public bucket are gone', $$select count(*)::text from pg_policies where tablename = 'objects' and policyname like 'avatars: admin%'$$, '0');
 select t_is('submit_photo and admin_publish_photo are gone', $$select count(*)::text from pg_proc where proname in ('submit_photo', 'admin_publish_photo')$$, '0');
+select t_is('the insert guard and its triggers are gone', $$select (select count(*) from pg_proc where proname = 'profile_insert_review') + (select count(*) from pg_trigger where tgname in ('teachers_insert_review', 'institutes_insert_review'))$$, '0');
+select t_is('admin_review is exactly the previous function again (search_path public)', $$select array_to_string(proconfig, ',') from pg_proc where proname = 'admin_review'$$, 'search_path=public');
 select t_is('admin_review is the previous version (no photo_path handling)', $$select (prosrc like '%photo_path%')::text from pg_proc where proname = 'admin_review'$$, 'false');
 select t_is('admin_review still callable by signed-in users (admin check inside)', $$select has_function_privilege('authenticated', 'public.admin_review(text, uuid, boolean, text)', 'execute')::text$$, 'true');
 select t_is('kept on purpose: the private bucket (its files are not lost)', $$select count(*)::text from storage.buckets where id = 'photos-private'$$, '1');

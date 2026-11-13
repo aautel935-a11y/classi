@@ -12,8 +12,13 @@
 --     profile photo. admin_publish_photo(kind, id, path, url): after the admin copied the file to "avatars", sets the
 --     live photo. admin_review(): approving other fields keeps a waiting photo waiting (it needs admin_publish_photo);
 --     rejecting drops it.
--- Step B (supabase/pending/20261105010000_private_photos_enforce.sql) removes users' own uploads to the public bucket and
--- public photo links set by users; it is applied only after the app uses this flow.
+--   * a signed-in user (not an admin) cannot put anything in pending_changes when creating a teacher / institute row
+--     (only submit_photo and the content review write it), and admin_publish_photo only publishes a waiting photo
+--     from the owner's own pending folder that still exists in the private bucket.
+-- Step B (supabase/migrations/20261105010000_private_photos_enforce.sql) removes users' own uploads to the public bucket
+-- and public photo links set by users.
+-- Order on a hosted project: this migration (A), then the app code that uses the private flow, then B. The app code
+-- before A fails (it calls submit_photo); B before the app code makes every photo upload of the old app fail.
 -- Rollback: supabase/rollback/20261105000000_private_photos.down.sql. Safe on a live database: no data change.
 
 insert into storage.buckets (id, name, public, file_size_limit, allowed_mime_types)
@@ -58,7 +63,7 @@ alter table public.profiles add constraint profiles_avatar_path_chk
 
 -- ---------- submit_photo ----------
 create or replace function public.submit_photo(p_kind text, p_path text) returns text
-language plpgsql security definer set search_path = public as $$
+language plpgsql security definer set search_path = public, pg_temp as $$
 declare v_uid uuid := auth.uid(); v_prev text; v_n int;
 begin
   if v_uid is null then raise exception 'سجّل الدخول أولاً.'; end if;
@@ -94,7 +99,7 @@ end $$;
 
 -- ---------- admin_publish_photo ----------
 create or replace function public.admin_publish_photo(p_kind text, p_id uuid, p_path text, p_url text) returns text
-language plpgsql security definer set search_path = public as $$
+language plpgsql security definer set search_path = public, pg_temp as $$
 declare v_owner uuid; v_waiting text; v_prev text; v_file text;
 begin
   if not is_admin() then raise exception 'هذه الصفحة للمدير فقط'; end if;
@@ -107,6 +112,11 @@ begin
   end if;
   if v_owner is null then raise exception 'الملف غير موجود'; end if;
   if v_waiting is null or v_waiting is distinct from p_path then raise exception 'هذه ليست الصورة المنتظرة للمراجعة.'; end if;
+  -- the waiting photo must be the owner's own (in their pending folder, for this kind) and still be in the private bucket
+  if p_path !~ ('^' || v_owner::text || '/pending/' || p_kind || '-[0-9a-z]{1,12}-[0-9a-z]{8}\.jpg$')
+     or not exists (select 1 from storage.objects where bucket_id = 'photos-private' and name = p_path) then
+    raise exception 'الصورة المنتظرة ليست من صور صاحب الملف.';
+  end if;
   v_file := substring(p_url from '/storage/v1/object/public/avatars/(.*)$');
   if p_url !~ ('^https://[a-z0-9]+\.supabase\.co/storage/v1/object/public/avatars/' || v_owner::text || '/' || p_kind || '-[0-9a-z]{1,12}-[0-9a-z]{8}\.jpg$')
      or not exists (select 1 from storage.objects where bucket_id = 'avatars' and name = v_file) then
@@ -124,6 +134,23 @@ begin
   return v_prev;
 end $$;
 
+-- ---------- a new teacher / institute row cannot bring its own pending_changes or review_note ----------
+-- Only submit_photo (the waiting photo) and the content review (edits of a verified profile) write pending_changes. Without
+-- this, a user creating their row could put any photo_path there (for example a path in another user's folder).
+create or replace function public.profile_insert_review() returns trigger
+language plpgsql security definer set search_path = public, pg_temp as $$
+begin
+  if auth.uid() is null or is_admin() or coalesce(current_setting('classi.bypass_review', true), '') = 'on' then return new; end if;
+  new.pending_changes := null;
+  new.review_note := null;
+  return new;
+end $$;
+revoke execute on function public.profile_insert_review() from anon, authenticated, public;
+drop trigger if exists teachers_insert_review on public.teachers;
+create trigger teachers_insert_review before insert on public.teachers for each row execute function public.profile_insert_review();
+drop trigger if exists institutes_insert_review on public.institutes;
+create trigger institutes_insert_review before insert on public.institutes for each row execute function public.profile_insert_review();
+
 revoke execute on function public.submit_photo(text, text), public.admin_publish_photo(text, uuid, text, text) from anon, public;
 grant execute on function public.submit_photo(text, text), public.admin_publish_photo(text, uuid, text, text) to authenticated;
 
@@ -131,7 +158,7 @@ grant execute on function public.submit_photo(text, text), public.admin_publish_
 -- Same as 20261027010000_one_approval.sql, except the two lines that clear pending_changes on approval of a teacher /
 -- institute: they now keep "photo_path" (published separately by admin_publish_photo). Rejection clears it as before.
 create or replace function public.admin_review(p_kind text, p_id uuid, p_approve boolean, p_note text default null) returns void
-language plpgsql security definer set search_path = public as $$
+language plpgsql security definer set search_path = public, pg_temp as $$
 declare v_owner uuid; v_title text; v_changes jsonb; v_new boolean; v_note text := nullif(trim(p_note), '');
 begin
   if not is_admin() then raise exception 'هذه الصفحة للمدير فقط'; end if;
