@@ -8,6 +8,7 @@ export default async function Login({ searchParams }: { searchParams: Promise<Re
     <div className="wrap">
       <div className="section">
         <ErrorNote msg={sp.error} />
+        {sp.signed_out === "all" && <p className="note" role="status">خرجت من حسابك على كل الأجهزة.</p>}
         <LoginForm next={safePath(sp.next, "/")} initial={sp.mode === "up" ? "up" : "in"} />
       </div>
     </div>

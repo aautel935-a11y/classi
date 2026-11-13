@@ -47,17 +47,20 @@ select 'own subs' t, count(*) from push_subscriptions;
 select 'secrets hidden (expect error)' t;
 select * from app_secrets;
 reset role;
+-- D-08 / TM-13: the delivery queue is claimed only with the server's service-role key; anon cannot reach it at all.
 set role anon;
-select 'wrong secret (expect error)' t;
-select claim_push('nope');
+select 'anon claims the queue (expect error)' t;
+select worker_claim_push(25);
 reset role;
 insert into app_secrets values ('dispatch_secret','s3cret'), ('vapid_public','PUB'), ('vapid_private','PRIV');
-set role anon;
-select 'claim' t, jsonb_array_length(x->'items') items, x->>'vapid_public' pub,
-       (select count(*) from jsonb_array_elements(x->'items') e where jsonb_array_length(e->'subs') > 0) with_phone,
-       (select string_agg(e->>'email', ',') from jsonb_array_elements(x->'items') e where e->>'email' is not null) emails
-  from (select claim_push('s3cret') x) q;
-select 'claim again (expect 0)' t, jsonb_array_length(claim_push('s3cret')->'items');
-select 'drop dead sub' t, drop_push_subscriptions('s3cret', array['https://fcm.googleapis.com/fcm/send/abc']);
+set role service_role;
+select 'claim' t, jsonb_array_length(x) items,
+       (select count(*) from jsonb_array_elements(x) e where jsonb_array_length(e->'subs') > 0) with_phone,
+       (select string_agg(e->>'email', ',') from jsonb_array_elements(x) e where e->>'email' is not null) emails,
+       x::text not like '%PRIV%' no_private_key
+  from (select worker_claim_push(25) x) q;
+select 'keys for the server only' t, worker_push_keys()->>'vapid_public' pub, worker_push_keys() ? 'vapid_private' has_private;
+select 'claim again (expect 0)' t, jsonb_array_length(worker_claim_push(25));
+select 'drop dead sub' t, worker_drop_push_subscriptions(array['https://fcm.googleapis.com/fcm/send/abc']);
 reset role;
 select 'subs left' t, count(*) from push_subscriptions;

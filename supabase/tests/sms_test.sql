@@ -14,10 +14,12 @@ insert into notifications (user_id, kind, body) values
  ('40000000-0000-0000-0000-000000000004','schedule_changed','تغيّر الموعد'),
  ('40000000-0000-0000-0000-000000000005','reminder','تذكير لأبي آدم'),
  ('40000000-0000-0000-0000-000000000006','reminder','تذكير بلا رقم');
+set role service_role;
+select 'sms targets' t, e->>'kind' kind, e->>'phone' phone from jsonb_array_elements(worker_claim_push(25)) e order by 2, 3;
+select 'log' t, worker_log_sms('[{"id":"","phone":"0501234567","ok":true}]');
+reset role;
 set role anon;
-select 'sms targets' t, e->>'kind' kind, e->>'phone' phone from jsonb_array_elements(claim_push('s')->'items') e order by 2, 3;
-select 'log' t, log_sms('s', '[{"id":"","phone":"0501234567","ok":true}]');
-select 'log wrong secret (expect error)' t;
-select log_sms('x', '[]');
+select 'anon writes the SMS log (expect error)' t;
+select worker_log_sms('[]');
 reset role;
 select 'logged' t, count(*) from sms_log;

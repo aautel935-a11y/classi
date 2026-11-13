@@ -129,6 +129,14 @@ export async function signOutAction() {
   redirect("/");
 }
 
+// D-08 / TM-21: a lost or shared device. Revokes every session of this account (all refresh tokens), here and elsewhere;
+// other devices are signed out when their short access token expires (at most an hour) or at once on their next refresh.
+export async function signOutEverywhereAction() {
+  const { supabase } = await client();
+  await supabase.auth.signOut({ scope: "global" });
+  redirect("/login?signed_out=all");
+}
+
 export async function switchRoleAction(form: FormData) {
   const { supabase, user } = await client();
   if (!user) redirect("/login");

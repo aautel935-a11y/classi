@@ -30,6 +30,6 @@ test("production pointing at the staging database fails; production on productio
 });
 test("the summary never contains a value", () => {
   const line = deploySummary({ NEXT_PUBLIC_DEPLOY_ENV: "staging", NEXT_PUBLIC_SUPABASE_URL: S, NEXT_PUBLIC_SUPABASE_ANON_KEY: jwt.stagingAnon });
-  assert.equal(line, "[deploy-check] env=staging supabase=classi-staging key=jwt role=anon key-project=classi-staging");
+  assert.equal(line, "[deploy-check] env=staging supabase=classi-staging key=jwt role=anon key-project=classi-staging worker-key=missing");
   assert.ok(!line.includes("eyJ") && !line.includes("https://"));
 });

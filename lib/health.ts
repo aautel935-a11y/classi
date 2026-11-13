@@ -1,5 +1,6 @@
 import { realSmsAllowed, sendSms, smsConfigured } from "@/lib/sms";
 import { publicClient } from "./supabase/public";
+import { workerClient, workerKeyConfigured } from "./supabase/worker";
 
 export type Check = { name: string; label: string; status: "ok" | "fail" | "skipped"; detail: string; ms: number };
 
@@ -44,7 +45,18 @@ export async function runHealthChecks({ external = true }: { external?: boolean 
       if (!r.ok) throw new Error(`رمز الاستجابة ${r.status}`);
       return "تعمل";
     }),
-    ...(!external ? [] : [timed("alerts", "تنبيه الفحص اليومي", async () => {
+    ...(!external ? [] : [timed("worker", "مفتاح الإرسال الخادمي (D-08)", async () => {
+      // TM-13: push, email, SMS and sign-in codes are claimed with the server-only key. Without it the old public path
+      // is used, and that path stops working once step B is applied.
+      if (!workerKeyConfigured()) throw new Error("أضف SUPABASE_SERVICE_ROLE_KEY (المفتاح السري لمشروع Supabase) في إعدادات Vercel، بيئة Production فقط");
+      const w = workerClient();
+      if (!w) throw new Error("NEXT_PUBLIC_SUPABASE_URL غير مضبوط");
+      // An empty secret is always refused (false); an error means the key cannot call the worker functions.
+      const { data, error } = await w.rpc("worker_wake_ok", { p_secret: "" });
+      if (error) throw new Error(error.message.includes("worker_wake_ok") ? "دوال D-08 غير مطبّقة على قاعدة البيانات" : "المفتاح لا يملك صلاحية دوال الإرسال");
+      if (data !== false) throw new Error("رد غير متوقع من worker_wake_ok");
+      return "مضبوط ويعمل";
+    }), timed("alerts", "تنبيه الفحص اليومي", async () => {
       // BUG-06: without these the daily check runs but nobody hears about a failure.
       const missing = ["ADMIN_EMAIL", "CRON_SECRET"].filter((k) => !process.env[k]);
       if (missing.length) throw new Error(`أضف ${missing.join(" و")} في إعدادات Vercel، وإلا لن يصلك بريد عند تعطل خدمة`);

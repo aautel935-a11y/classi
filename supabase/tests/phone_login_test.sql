@@ -17,11 +17,13 @@ select 'queued for' t, phone from otp_outbox order by id desc limit 1;
 delete from otp_outbox where phone = '972524445555';
 select 'bad event' t, send_sms_hook('{"user":{"phone":""},"sms":{"otp":"1"}}') -> 'error' ->> 'http_code';
 
-\echo '===== 2. The site collects it once'
-select 'wrong secret (expect error)' t;
-select claim_otp('nope');
-select 'claim' t, claim_otp('s3cret');
-select 'again (expect [])' t, claim_otp('s3cret');
+\echo '===== 2. The site collects it once (D-08: service role only; the secret only proves the wake-up)'
+select 'wrong secret: not woken (expect f)' t, worker_wake_ok('nope');
+select 'right secret: woken (expect t)' t, worker_wake_ok('s3cret');
+set role service_role;
+select 'claim' t, worker_claim_otp();
+select 'again (expect [])' t, worker_claim_otp();
+reset role;
 select 'outbox empty' t, count(*) from otp_outbox;
 
 \echo '===== 3. New account by phone: role, name, verified number'
@@ -41,8 +43,17 @@ select 'email signup ignores typed phone' t, phone from profiles where id = '500
 update auth.users set phone = '972523334444' where id = '50000000-0000-0000-0000-000000000002';
 select 'after verified change' t, phone from profiles where id = '50000000-0000-0000-0000-000000000002';
 
-\echo '===== 6. Sign-in codes keep the account email for the fallback; phone-change codes never do (SEC-10)'
-select send_sms_hook('{"user":{"phone":"972529998877","email":"majd@t"},"sms":{"otp":"654321"}}');
-select 'claim with email' t, claim_otp('s3cret') -> 0 ->> 'email' email, claim_otp('s3cret') = '[]'::jsonb emptied;
-select send_sms_hook('{"user":{"phone":"","phone_change":"972529998866","email":"majd@t"},"sms":{"otp":"654322","sms_type":"phone_change"}}');
-select 'phone change: no email (expect empty)' t, claim_otp('s3cret') -> 0 ->> 'email' email;
+\echo '===== 6. Email fallback only to a CONFIRMED account email (D-08 / TM-14); phone-change codes never (SEC-10)'
+insert into auth.users (id, phone, email, email_confirmed_at) values ('50000000-0000-0000-0000-000000000003', '972529998877', 'majd@t', now());
+select send_sms_hook('{"user":{"phone":"972529998877","email":"majd@t","email_confirmed_at":"2026-11-01T00:00:00Z"},"sms":{"otp":"654321"}}');
+set role service_role;
+select 'confirmed email kept (expect majd@t)' t, worker_claim_otp() -> 0 ->> 'email' email, worker_claim_otp() = '[]'::jsonb emptied;
+reset role;
+select send_sms_hook('{"user":{"phone":"972529998878","email":"unconfirmed@t"},"sms":{"otp":"654323"}}');
+set role service_role;
+select 'unconfirmed email: no fallback (expect empty)' t, worker_claim_otp() -> 0 ->> 'email' email;
+reset role;
+select send_sms_hook('{"user":{"phone":"","phone_change":"972529998866","email":"majd@t","email_confirmed_at":"2026-11-01T00:00:00Z"},"sms":{"otp":"654322","sms_type":"phone_change"}}');
+set role service_role;
+select 'phone change: no email (expect empty)' t, worker_claim_otp() -> 0 ->> 'email' email;
+reset role;

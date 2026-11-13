@@ -17,7 +17,8 @@ const one = async (text, params) => (await sql(text, params))[0] ?? {};
 
 /** Everything the tests read or do in the local test database (they play the admin's part and read codes). */
 export const db = {
-  otp: async (digits) => (await one("select otp as v from otp_outbox where regexp_replace(phone, '\\D', '', 'g') = $1 order by created_at desc limit 1", [digits])).v,
+  // D-08 / TM-14: the code is no longer kept in its own column; it is read from the SMS text (local test stack only).
+  otp: async (digits) => (await one("select substring(body from '(\\d{6})') as v from otp_outbox where regexp_replace(phone, '\\D', '', 'g') = $1 order by created_at desc limit 1", [digits])).v,
   otpCount: async (digits) => (await one("select count(*)::int as v from otp_outbox where regexp_replace(phone, '\\D', '', 'g') = $1", [digits])).v,
   userId: async (digits) => (await one("select id as v from auth.users where phone in ($1, '+' || $1) limit 1", [digits])).v,
   teacherId: async (user) => (await one("select id as v from teachers where user_id = $1", [user])).v,

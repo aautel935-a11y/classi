@@ -5,13 +5,54 @@ import { SITE } from "@/lib/site";
 import { sendSms, smsConfigured } from "@/lib/sms";
 import { escapeHtml } from "@/lib/escape";
 import { runPool } from "@/lib/pool";
+import { workerClient } from "@/lib/supabase/worker";
+import { pushPayload } from "@/lib/push-text";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 30;
 
 type Sub = { endpoint: string; keys: { p256dh: string; auth: string } };
 type Item = { id: string; kind: string; body: string; link: string | null; email: string | null; phone: string | null; name: string | null; subs: Sub[] };
-type Claim = { vapid_public: string | null; vapid_private: string | null; subject: string; items: Item[] };
+type Keys = { vapid_public: string | null; vapid_private: string | null; subject: string };
+
+// D-08 / TM-13: with SUPABASE_SERVICE_ROLE_KEY the route uses the worker_* functions (service role only; the secret only
+// proves the database woke us). Without it, the old anon functions behind the secret (removed by step B).
+type Api = {
+  wakeOk: () => Promise<boolean>;
+  claim: (limit: number) => Promise<{ items: Item[]; keys: Keys } | null>;
+  drop: (endpoints: string[]) => Promise<unknown>;
+  log: (rows: unknown[]) => Promise<unknown>;
+};
+
+function api(secret: string): Api {
+  const w = workerClient();
+  if (w) {
+    let keys: Keys | null = null;
+    return {
+      wakeOk: async () => { const { data, error } = await w.rpc("worker_wake_ok", { p_secret: secret }); return !error && data === true; },
+      claim: async (limit) => {
+        const { data, error } = await w.rpc("worker_claim_push", { p_limit: limit });
+        if (error) return null;
+        if (!keys) keys = ((await w.rpc("worker_push_keys")).data as Keys | null) ?? { vapid_public: null, vapid_private: null, subject: "" };
+        return { items: (data as Item[]) ?? [], keys };
+      },
+      drop: (endpoints) => w.rpc("worker_drop_push_subscriptions", { p_endpoints: endpoints }) as unknown as Promise<unknown>,
+      log: (rows) => w.rpc("worker_log_sms", { p_rows: rows }) as unknown as Promise<unknown>,
+    };
+  }
+  const db = publicClient();
+  return {
+    wakeOk: async () => true, // the legacy functions check the secret themselves
+    claim: async (limit) => {
+      const { data, error } = await db.rpc("claim_push", { p_secret: secret, p_limit: limit });
+      if (error) return null;
+      const c = data as Keys & { items: Item[] };
+      return { items: c.items ?? [], keys: c };
+    },
+    drop: (endpoints) => db.rpc("drop_push_subscriptions", { p_secret: secret, p_endpoints: endpoints }) as unknown as Promise<unknown>,
+    log: (rows) => db.rpc("log_sms", { p_secret: secret, p_rows: rows }) as unknown as Promise<unknown>,
+  };
+}
 
 
 // Woken by the database (pg_net) when notifications are waiting. The secret is checked
@@ -23,7 +64,8 @@ export async function POST(request: NextRequest) {
   } catch {}
   if (!secret) return NextResponse.json({ error: "unauthorized" }, { status: 401 });
 
-  const db = publicClient();
+  const db = api(secret);
+  if (!(await db.wakeOk())) return NextResponse.json({ error: "unauthorized" }, { status: 401 });
   // BUG-22: work in small batches with a time budget. claim_push marks what it hands over as sent, so a function
   // killed at its 30 s limit used to lose the rest of a large batch silently. Now at most one batch of 25 is in
   // flight, sending runs in parallel lanes, and the SMS log is written after every batch.
@@ -32,29 +74,28 @@ export async function POST(request: NextRequest) {
   // Each batch has a hard ceiling (every request times out after 6 s), so starting a batch before 12 s always
   // finishes well inside Vercel's 30 s limit.
   while (Date.now() - started < 12000) {
-    const { data, error } = await db.rpc("claim_push", { p_secret: secret, p_limit: 25 });
-    if (error) return totals.batches ? NextResponse.json({ ok: true, ...totals }) : NextResponse.json({ error: "unauthorized" }, { status: 401 });
-    const claim = data as Claim;
-    const items = claim.items ?? [];
+    const claim = await db.claim(25);
+    if (!claim) return totals.batches ? NextResponse.json({ ok: true, ...totals }) : NextResponse.json({ error: "unauthorized" }, { status: 401 });
+    const items = claim.items;
     if (!items.length) break;
     totals.batches++;
     totals.items += items.length;
-    await deliver(db, secret, claim, items, totals);
+    await deliver(db, claim.keys, items, totals);
   }
   return NextResponse.json({ ok: true, ...totals });
 }
 
-async function deliver(db: ReturnType<typeof publicClient>, secret: string, claim: Claim, items: Item[], totals: Record<string, number>) {
-  // Push notifications
-  if (claim.vapid_public && claim.vapid_private) {
-    webpush.setVapidDetails(claim.subject, claim.vapid_public, claim.vapid_private);
+async function deliver(db: Api, keys: Keys, items: Item[], totals: Record<string, number>) {
+  // Push notifications (TM-12: a neutral line by kind on the lock screen; the details open in the app)
+  if (keys.vapid_public && keys.vapid_private) {
+    webpush.setVapidDetails(keys.subject, keys.vapid_public, keys.vapid_private);
     const subs = items.flatMap((it) => it.subs.map((s) => ({ it, s })));
     const dead: string[] = [];
     const res = await runPool(subs, 10, async ({ it, s }) => {
       try {
         await webpush.sendNotification(
           s,
-          JSON.stringify({ title: "Classi", body: it.body, url: `/n/${it.id}`, tag: it.kind.startsWith("reminder") ? `r-${it.id}` : undefined }),
+          pushPayload(it),
           { TTL: it.kind.startsWith("reminder") ? 3600 : 86400, urgency: it.kind === "reminder_soon" || it.kind === "message" ? "high" : "normal", timeout: 6000 }
         );
       } catch (e: any) {
@@ -65,7 +106,7 @@ async function deliver(db: ReturnType<typeof publicClient>, secret: string, clai
     totals.pushed += res.filter((r) => r.ok).length;
     if (dead.length) {
       totals.removed += dead.length;
-      await db.rpc("drop_push_subscriptions", { p_secret: secret, p_endpoints: dead });
+      await db.drop(dead);
     }
   }
 
@@ -100,7 +141,7 @@ async function deliver(db: ReturnType<typeof publicClient>, secret: string, clai
     const log = res.map((r) => ({ id: r.item.id, phone: r.item.phone!, ok: r.ok && r.value.ok, detail: r.ok ? r.value.detail : r.error }));
     totals.texted += log.filter((l) => l.ok).length;
     totals.failed += log.filter((l) => !l.ok).length;
-    if (log.length) await db.rpc("log_sms", { p_secret: secret, p_rows: log });
+    if (log.length) await db.log(log);
   }
 }
 

@@ -12,7 +12,7 @@ ops_test            6
 payments_test       4
 phase3_test         0
 phase4_test 0
-phone_login_test    1
+phone_login_test    0
 recurring_test      4
 reminders_test      3
 reports_test        3
@@ -25,3 +25,4 @@ trial_packages_test 3
 waitlist_test       3
 photos_test         0
 review_access_test  0
+d08_test            0

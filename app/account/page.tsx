@@ -1,5 +1,5 @@
 import { Icon } from "@/components/Icon";
-import { addChildAction, deleteAccountAction, removeChildAction, signOutAction, switchRoleAction, updateProfileAction } from "@/app/actions";
+import { addChildAction, deleteAccountAction, removeChildAction, signOutAction, signOutEverywhereAction, switchRoleAction, updateProfileAction } from "@/app/actions";
 import { requireUser } from "@/lib/session";
 import { TOWNS, type Role } from "@/lib/types";
 import { PhotoUpload } from "@/components/PhotoUpload";
@@ -98,6 +98,13 @@ export default async function Account({ searchParams }: { searchParams: Promise<
         <form action={signOutAction}>
           <button className="btn ghost block"><Icon name="logout" />تسجيل الخروج</button>
         </form>
+        <details className="card" id="sign-out-all">
+          <summary className="link small">الخروج من كل الأجهزة</summary>
+          <form action={signOutEverywhereAction} className="formstack" style={{ marginTop: 10 }}>
+            <p className="small">إن فقدت هاتفك أو دخلت من جهاز ليس لك: يُغلق حسابك على كل الأجهزة، وتدخل من جديد برمز SMS.</p>
+            <button className="btn ghost block"><Icon name="logout" />أخرجني من كل الأجهزة</button>
+          </form>
+        </details>
         <details className="card" id="delete">
           <summary className="link small" style={{ color: "var(--bad)" }}>حذف حسابي نهائياً</summary>
           <form action={deleteAccountAction} className="formstack" style={{ marginTop: 10 }}>

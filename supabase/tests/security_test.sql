@@ -58,8 +58,8 @@ select t_is('trigger functions callable by authenticated', $$select count(*)::te
    and p.prorettype='trigger'::regtype and has_function_privilege('authenticated', p.oid, 'execute')$$, '0');
 select t_is('functions callable by anon: nothing outside the allow-list', $$select coalesce(string_agg(proname, ',' order by proname), '') from pg_proc p
    where p.pronamespace='public'::regnamespace and has_function_privilege('anon', p.oid, 'execute') and proname not like 't\_%' and proname <> 'test_day'
-     and proname <> all (array['claim_otp','claim_push','course_seats','drop_push_subscriptions','health_ping','is_active_user','is_admin',
-       'is_conversation_member','is_conversation_reported','is_offering_owner','is_offering_staff','log_sms','my_teacher_id',
+     and proname <> all (array['course_seats','health_ping','is_active_user','is_admin',
+       'is_conversation_member','is_conversation_reported','is_offering_owner','is_offering_staff','my_teacher_id',
        'offering_owner_verified','owner_has_access','search_offers','seats_overview','setting','teacher_buffer','teacher_busy'])$$,
   '');  -- course_seats and search_offers: public read functions of phase 4 (absent after its rollback, which is fine)
 
@@ -135,7 +135,7 @@ select t_is('6th code within an hour refused', $$select send_sms_hook('{"user":{
 \echo '===== SEC-02/07 SMS budget per person per day'
 delete from notifications;
 insert into notifications (user_id, kind, body) select '60000000-0000-0000-0000-00000000000b', 'schedule_changed', 'تغيير ' || g from generate_series(1, 10) g;
-select t_is('10 SMS-type notifications -> at most 6 SMS', $$select count(*)::text from jsonb_array_elements(claim_push('s3cret')->'items') e where e->>'phone' is not null$$, '6');
+select t_is('10 SMS-type notifications -> at most 6 SMS', $$select count(*)::text from jsonb_array_elements(worker_claim_push(500)) e where e->>'phone' is not null$$, '6');
 
 \echo '===== SEC-06 notifications can only be marked read'
 insert into notifications (user_id, kind, body) values ('60000000-0000-0000-0000-00000000000d', 'message', 'رسالة');

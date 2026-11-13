@@ -33,6 +33,34 @@ export function deployProblems(env: Env): string[] {
   } else if (env.VERCEL_ENV === "production") {
     if (url.includes(STAGING_REF) || claims?.ref === STAGING_REF) problems.push("production build points at the classi-staging database");
   }
+  problems.push(...workerKeyProblems(env));
+  return problems;
+}
+
+/**
+ * D-08 / TM-13: the server-only key of the dispatch routes. It must never be a NEXT_PUBLIC_ variable (those are built
+ * into the browser code), and when it is a JWT it must be the service_role key of the same project as the site.
+ */
+export function workerKeyProblems(env: Env): string[] {
+  const problems: string[] = [];
+  for (const [name, value] of Object.entries(env)) {
+    if (!name.startsWith("NEXT_PUBLIC_") || !value) continue;
+    const v = value.trim();
+    const c = v.startsWith("eyJ") ? jwtClaims(v) : null;
+    if (/^sb_secret_/.test(v) || c?.role === "service_role") problems.push(`${name} holds a server-only (service role / secret) key`);
+  }
+  const key = (env.SUPABASE_SERVICE_ROLE_KEY ?? "").trim();
+  if (!key) return problems;
+  if (/^sb_publishable_/.test(key)) problems.push("SUPABASE_SERVICE_ROLE_KEY is a publishable key, not the secret / service role key");
+  const claims = key.startsWith("eyJ") ? jwtClaims(key) : null;
+  if (claims) {
+    if (claims.role !== "service_role") problems.push(`SUPABASE_SERVICE_ROLE_KEY is a "${claims.role ?? "?"}" key, not service_role`);
+    const url = (env.NEXT_PUBLIC_SUPABASE_URL ?? "").trim();
+    const m = /^https:\/\/([a-z0-9]{20})\.supabase\.co\/?$/.exec(url);
+    if (m && claims.ref && claims.ref !== m[1]) problems.push("SUPABASE_SERVICE_ROLE_KEY belongs to another Supabase project than NEXT_PUBLIC_SUPABASE_URL");
+  } else if (!/^sb_secret_/.test(key)) {
+    problems.push("SUPABASE_SERVICE_ROLE_KEY is not a Supabase secret key (sb_secret_…) or a service_role JWT");
+  }
   return problems;
 }
 
@@ -44,5 +72,6 @@ export function deploySummary(env: Env): string {
   const url = env.NEXT_PUBLIC_SUPABASE_URL ?? "";
   const target = url.includes(STAGING_REF) ? "classi-staging" : url.includes(PRODUCTION_REF) ? "production" : url ? "other" : "missing";
   const keyProject = claims?.ref ? (claims.ref === STAGING_REF ? "classi-staging" : claims.ref === PRODUCTION_REF ? "production" : "other") : "n/a";
-  return `[deploy-check] env=${env.NEXT_PUBLIC_DEPLOY_ENV === "staging" ? "staging" : "production/other"} supabase=${target} key=${kind} key-project=${keyProject}`;
+  const worker = (env.SUPABASE_SERVICE_ROLE_KEY ?? "").trim() ? "set" : "missing";
+  return `[deploy-check] env=${env.NEXT_PUBLIC_DEPLOY_ENV === "staging" ? "staging" : "production/other"} supabase=${target} key=${kind} key-project=${keyProject} worker-key=${worker}`;
 }

@@ -232,12 +232,10 @@ export function LoginForm({ next: rawNext, initial = "in" }: { next: string; ini
     setBusy(true);
     const err = await sendCode(e164, mode === "up");
     setBusy(false);
-    if (err === "NOT_FOUND") {
-      setPhone(e164);
-      setMode("up");
-      return setError("هذا الرقم غير مسجّل بعد. أكمل بياناتك لإنشاء حساب جديد.");
-    }
-    if (err) return setError(err);
+    // D-08 / TM-06: an unregistered number gets exactly the same screen as a registered one (the code step), so the
+    // page never tells a stranger whether a number has an account. Only the phone's owner sees whether an SMS arrives,
+    // and the code step offers "create an account" to someone who has none.
+    if (err && err !== "NOT_FOUND") return setError(err);
     setPhone(e164);
     setStep("code");
     setWait(60);
@@ -274,7 +272,7 @@ export function LoginForm({ next: rawNext, initial = "in" }: { next: string; ini
     return (
       <form className="formstack" onSubmit={onCode}>
         <h1>أدخل الرمز</h1>
-        <p>أرسلنا رسالة فيها رمز من 6 أرقام إلى <b className="num" dir="ltr">{phone.replace(/^\+972/, "0")}</b>.</p>
+        <p>{mode === "in" ? "إن كان الرقم مسجّلاً في Classi فستصلك" : "أرسلنا"} رسالة فيها رمز من 6 أرقام إلى <b className="num" dir="ltr">{phone.replace(/^\+972/, "0")}</b>.</p>
         <label className="field" htmlFor="code">
           الرمز
           <input ref={codeRef} id="code" name="code" inputMode="numeric" autoComplete="one-time-code" pattern="[0-9]*" maxLength={6} required dir="ltr"
@@ -282,7 +280,10 @@ export function LoginForm({ next: rawNext, initial = "in" }: { next: string; ini
         </label>
         {error && <p className="err">{error}</p>}
         <button className="btn block" disabled={busy}>{busy ? "لحظة…" : "دخول"}</button>
-        <p className="small muted">لم تصل الرسالة خلال دقيقة؟ إن كان لحسابك بريد إلكتروني نرسل الرمز إليه تلقائياً، أو <button type="button" className="link" onClick={() => setUseEmail(true)}>ادخل بالبريد وكلمة المرور</button>.</p>
+        <p className="small muted">لم تصل الرسالة خلال دقيقة؟ إن كان لحسابك بريد إلكتروني مؤكد نرسل الرمز إليه تلقائياً، أو <button type="button" className="link" onClick={() => setUseEmail(true)}>ادخل بالبريد وكلمة المرور</button>.</p>
+        {mode === "in" && (
+          <p className="small muted">ليس لديك حساب بعد؟ <button type="button" className="link" onClick={() => { setMode("up"); setStep("phone"); setError(null); }}>أنشئ حساباً جديداً</button>.</p>
+        )}
         <div className="row between small">
           <button type="button" className="link" onClick={() => { setStep("phone"); setError(null); }}>تغيير الرقم</button>
           {wait <= 0 && <Turnstile onToken={setCaptcha} resetKey={captchaRound} />}
