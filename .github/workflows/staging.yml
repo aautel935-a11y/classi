@@ -13,6 +13,14 @@ on:
   push:
     branches: [staging-test]
   workflow_dispatch:
+    inputs:
+      photos:
+        description: >-
+          Private-photo rollout stage on classi-staging: before-A (skip S10, S10b, S13), after-A-old-app (skip S10, S10b;
+          S13 storage checks), after-app (all), after-B (all, and S13 expects user uploads to the public bucket refused)
+        type: choice
+        options: [before-A, after-A-old-app, after-app, after-B]
+        default: before-A
 
 permissions:
   contents: read
@@ -68,7 +76,18 @@ jobs:
           STAGING_OTP_PARENT: ${{ secrets.STAGING_OTP_PARENT }}
           STAGING_OTP_STUDENT: ${{ secrets.STAGING_OTP_STUDENT }}
           STAGING_OTP_ADMIN: ${{ secrets.STAGING_OTP_ADMIN }}
-        run: npx playwright test -c tests/staging/playwright.config.mjs 2>&1 | tee /tmp/e2e.log
+          PHOTOS: ${{ inputs.photos }}
+        run: |
+          # a push to staging-test runs the suite as before (S13 needs STAGING_PRIVATE_PHOTOS and is skipped there)
+          inv=""
+          case "$PHOTOS" in
+            before-A) inv="S10|S13" ;;
+            after-A-old-app) inv="S10"; export STAGING_PRIVATE_PHOTOS=1 ;;
+            after-app) export STAGING_PRIVATE_PHOTOS=1 ;;
+            after-B) export STAGING_PRIVATE_PHOTOS=1 STAGING_EXPECT_ENFORCED=1 ;;
+          esac
+          echo "private photos stage: ${PHOTOS:-push (as before)}${inv:+, skipping $inv}"
+          npx playwright test -c tests/staging/playwright.config.mjs ${inv:+--grep-invert "$inv"} 2>&1 | tee /tmp/e2e.log
       - name: Lighthouse against staging
         # also after failed journeys (useful numbers), but never when the safety check or the install did not pass
         if: always() && steps.deps.outcome == 'success'

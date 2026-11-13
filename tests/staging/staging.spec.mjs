@@ -12,6 +12,7 @@ const RUN = `run-${Date.now().toString(36)}`;
 const OFFER = "رياضيات بجروت 5 وحدات";        // Samer's private lesson (demo seed, instant confirmation; S9 turns it off and back on)
 const CHILD = "يوسف التجريبي";                 // the parent's child (staging data)
 const sessions = {};                           // role -> storage state (in memory only)
+const API = { origin: null, apikey: null };    // classi-staging Supabase origin and public app key (memory only)
 const violations = [];                         // production hosts the browser tried to reach
 
 /** Every request of a context is checked: production hosts are blocked and fail the test; Supabase must be staging. */
@@ -48,7 +49,13 @@ async function as(browser, role, extra = {}) {
   const ctx = await newContext(browser, undefined, extra);
   const page = await ctx.newPage();
   const authHosts = new Set();
-  page.on("request", (r) => { if (r.url().includes("/auth/v1/")) authHosts.add(new URL(r.url()).hostname); });
+  page.on("request", async (r) => {
+    if (!r.url().includes("/auth/v1/")) return;
+    const u = new URL(r.url()); authHosts.add(u.hostname);
+    // the project's public app key (the same for every visitor), for direct Storage API checks (S13); kept in memory
+    const k = (await r.allHeaders().catch(() => ({}))).apikey;
+    if (k && u.hostname === TARGET.supabaseHost) Object.assign(API, { origin: u.origin, apikey: k });
+  });
   await page.goto("/login");
   await page.locator("#phone").fill(ACCOUNTS[role].phone);
   await page.getByRole("button", { name: "أرسل رمز الدخول" }).click();
@@ -833,4 +840,73 @@ test("S12. admin: every tab of the admin page opens (nothing is approved, reject
     await expect(page.locator("h1").first()).not.toHaveText(/تعذّر فتح الصفحة/);
   }
   await a.close();
+});
+
+// ---- S13: private photos through Supabase Storage directly (no UI): who can reach whose file ----
+// Needs migration 20261105000000 (step A) on the target. Synthetic 1x1 images with test names, uploaded by the test
+// accounts with their own sessions (the public app key, never a service key) and deleted again by their owners.
+// After step B (STAGING_EXPECT_ENFORCED=1, and always in the CI dry run) users may no longer upload to the public bucket.
+const JPEG = Buffer.concat([Buffer.from("/9j/4AAQSkZJRgABAQEASABIAAD/2wBDAP//////////////////////////////////////////////////////////////////////////////////////wgALCAABAAEBAREA/8QAFBABAAAAAAAAAAAAAAAAAAAAAP/aAAgBAQABPxA=", "base64"), Buffer.from([0xff, 0xd9])]);
+const uidOf = (s) => JSON.parse(Buffer.from(s.headers.authorization.slice(7).split(".")[1], "base64url").toString("utf8")).sub;
+const testName = (kind) => `${kind}-s13${Date.now().toString(36).slice(-7)}-${Math.random().toString(36).slice(2, 10).padEnd(8, "0")}.jpg`;
+
+test("S13. private photos through Supabase Storage: owners only, the admin sees waiting photos only, visitors nothing; test files removed", async ({ browser, request }) => {
+  test.skip(!DRY_RUN && process.env.STAGING_PRIVATE_PHOTOS !== "1", "needs migration 20261105000000 on the target (run the Staging workflow with photos >= after-A-old-app)");
+  const t = await as(browser, "teacher"), p = await as(browser, "parent"), a = await as(browser, "admin");
+  expect(API.apikey, "the public app key seen at sign-in").toBeTruthy();
+  expect(new URL(API.origin).hostname, "storage of the classi-staging project").toBe(TARGET.supabaseHost);
+  const w = { origin: API.origin, headers: { apikey: API.apikey } };
+  const T = await sessionOf(t, w), Pa = await sessionOf(p, w), Ad = await sessionOf(a, w);
+  const tu = uidOf(T), pu = uidOf(Pa);
+  const tWait = `${tu}/pending/${testName("teacher")}`, tProf = `${tu}/${testName("profile")}`, pProf = `${pu}/${testName("profile")}`;
+  const put = (s, bucket, key) => request.post(`${s.origin}/storage/v1/object/${bucket}/${key}`, { headers: { ...s.headers, "content-type": "image/jpeg", "x-upsert": "false" }, data: JPEG });
+  const sign = (s, key) => request.post(`${s.origin}/storage/v1/object/sign/${PRIV}/${key}`, { headers: { ...s.headers, "content-type": "application/json" }, data: { expiresIn: 60 } });
+  const del = (s, bucket, keys) => request.delete(`${s.origin}/storage/v1/object/${bucket}`, { headers: { ...s.headers, "content-type": "application/json" }, data: { prefixes: keys } });
+  const created = [];                              // [session, bucket, key] of every test file, for the cleanup
+  try {
+    for (const [s, key] of [[T, tWait], [T, tProf], [Pa, pProf]]) {
+      const r = await put(s, PRIV, key);
+      expect(r.status(), `owner uploads ${key.split("/").slice(1).join("/")} to the private bucket`).toBe(200);
+      created.push([s, PRIV, key]);
+    }
+    // another signed-in user (the parent): cannot list, sign, read, delete or add files in the teacher's folder
+    expect(await storedFiles(request, Pa, `${tu}/pending`, PRIV)).not.toContain(tWait);
+    expect(await storedFiles(request, Pa, tu, PRIV)).not.toContain(tProf);
+    expect((await sign(Pa, tWait)).status(), "parent cannot sign the teacher's waiting photo").toBeGreaterThanOrEqual(400);
+    expect((await request.get(`${Pa.origin}/storage/v1/object/authenticated/${PRIV}/${tWait}`, { headers: Pa.headers })).status(), "parent cannot download it").toBeGreaterThanOrEqual(400);
+    await del(Pa, PRIV, [tWait, tProf]);
+    expect(await storedFiles(request, T, `${tu}/pending`, PRIV), "the parent's delete removed nothing").toContain(tWait);
+    expect(await storedFiles(request, T, tu, PRIV)).toContain(tProf);
+    const intrude = await put(Pa, PRIV, `${tu}/${testName("profile")}`);
+    expect(intrude.status(), "parent cannot upload into the teacher's private folder").toBeGreaterThanOrEqual(400);
+    // and the other way round
+    expect(await storedFiles(request, T, pu, PRIV)).not.toContain(pProf);
+    expect((await sign(T, pProf)).status(), "teacher cannot sign the parent's profile photo").toBeGreaterThanOrEqual(400);
+    // visitors: no public link to a private file, no listing
+    for (const key of [tWait, tProf, pProf]) {
+      expect((await request.get(`${w.origin}/storage/v1/object/public/${PRIV}/${key}`)).status(), "no public link to a private photo").toBeGreaterThanOrEqual(400);
+    }
+    const anonList = await request.post(`${w.origin}/storage/v1/object/list/${PRIV}`, { headers: { ...w.headers, "content-type": "application/json" }, data: { prefix: `${tu}/pending`, limit: 100, offset: 0 } });
+    const anonBody = anonList.status() === 200 ? await anonList.json() : [];
+    expect(Array.isArray(anonBody) ? anonBody.filter((o) => o.id).length : 0, "a visitor lists nothing").toBe(0);
+    // the admin: sees and signs waiting photos only, never a profile photo
+    expect(await storedFiles(request, Ad, `${tu}/pending`, PRIV), "the admin sees the waiting photo").toContain(tWait);
+    expect((await sign(Ad, tWait)).status(), "the admin signs the waiting photo").toBe(200);
+    expect(await storedFiles(request, Ad, tu, PRIV), "the admin does not see a profile photo").not.toContain(tProf);
+    for (const key of [tProf, pProf]) expect((await sign(Ad, key)).status(), "the admin cannot sign a profile photo").toBeGreaterThanOrEqual(400);
+    // owners: their own files, signed links that work
+    const own = await sign(T, tProf);
+    expect(own.status(), "the owner signs her own profile photo").toBe(200);
+    // the public bucket after step B: no user uploads
+    const pubKey = `${tu}/${testName("teacher")}`;
+    const pubUp = await put(T, PUB, pubKey);
+    if (pubUp.status() === 200) created.push([T, PUB, pubKey]);
+    if (DRY_RUN || process.env.STAGING_EXPECT_ENFORCED === "1") expect(pubUp.status(), "after step B a user cannot upload to the public bucket").toBeGreaterThanOrEqual(400);
+    else console.log(`[S13] public bucket upload by a user: HTTP ${pubUp.status()} (step B not expected yet: information only)`);
+    console.log(`[S13] private photos: owner only; another user, a visitor: nothing; the admin: waiting photos only`);
+  } finally {
+    for (const [s, bucket, key] of created) await del(s, bucket, [key]);
+    for (const [s, bucket, key] of created) await expectGoneFromStorage(request, s, key, `test file removed: ${bucket}/${key.split("/").slice(1).join("/")}`, 10, bucket);
+    await t.close(); await p.close(); await a.close();
+  }
 });
