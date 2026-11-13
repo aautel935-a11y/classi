@@ -154,6 +154,35 @@ jobs:
         if: always()
         run: sh .github/report.sh "database" /tmp/stgmig.log /tmp/safeupdate.log /tmp/sql.log /tmp/conc.log /tmp/grants.log /tmp/drill.log /tmp/drill5.log /tmp/drill4.log /tmp/drill3.log /tmp/searcheq.log
 
+  staging-files-pg17:
+    # classi-staging runs PostgreSQL 17: the guarded staging files compare the database state as PostgreSQL prints it
+    # (policies, function settings), so they are also checked on 17. A difference here fails before any hosted use.
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:17
+        env: { POSTGRES_PASSWORD: postgres }
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd "pg_isready -U postgres" --health-interval 5s --health-timeout 5s --health-retries 20
+    env:
+      PGSOCK: 127.0.0.1
+      PGPORT: "5432"
+      PGPASSWORD: postgres
+    steps:
+      - uses: actions/checkout@v4
+      - name: Server version
+        run: psql -h 127.0.0.1 -U postgres -Atc "select version()"
+      - name: Private photos staging files on PostgreSQL 17 (generated output identical, guards, apply, rollback)
+        if: always()
+        run: sh supabase/tests/staging_private_photos_test.sh 2>&1 | tee /tmp/pp17.log
+      - name: P0-1 staging files on PostgreSQL 17
+        if: always()
+        run: sh supabase/tests/staging_p0_1_test.sh 2>&1 | tee /tmp/p0117.log
+      - name: Report (annotations)
+        if: always()
+        run: sh .github/report.sh "staging-files-pg17" /tmp/pp17.log /tmp/p0117.log
+
   e2e:
     # Full browser tests against a local Supabase stack (Docker) and a production build of the app.
     runs-on: ubuntu-latest
