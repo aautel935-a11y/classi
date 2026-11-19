@@ -24,7 +24,7 @@ Plan: [Classi v3 — الخطة الموحدة](https://claude.ai/artifact/VnmWq
 | Job | Result | Run |
 |---|---|---|
 | quality: npm ci, npm audit, TypeScript, ESLint, unit tests, guards, `next build` | PASS | [job](https://github.com/aautel935-a11y/classi/actions/runs/44613829890/job/135877066377) |
-| database: 34 SQL suites, RPC grants, rollback drills, v3 rollback exactness | PASS | [job](https://github.com/aautel935-a11y/classi/actions/runs/44613829890/job/135877066346) |
+| database: all 32 SQL suites, RPC grants, rollback drills, v3 rollback exactness | PASS | [job](https://github.com/aautel935-a11y/classi/actions/runs/44613829890/job/135877066346) |
 | staging files on PostgreSQL 17 | PASS | [job](https://github.com/aautel935-a11y/classi/actions/runs/44613829890/job/135877066353) |
 | e2e: Playwright on a local Supabase stack (37 passed, 5 skipped as before), incl. the new ledger journey on phone and desktop; backup/restore drill | PASS | [job](https://github.com/aautel935-a11y/classi/actions/runs/44613829890/job/135877065784) |
 | Gitleaks, whole history | PASS | [job](https://github.com/aautel935-a11y/classi/actions/runs/44613829874/job/135877066511) |
