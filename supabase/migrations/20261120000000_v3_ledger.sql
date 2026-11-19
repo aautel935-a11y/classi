@@ -48,7 +48,7 @@ create table if not exists public.payments (
   method       text check (method in ('cash','bit','paybox','bank_transfer','cheque','other')),
   paid_on      date,
   note         text check (note is null or length(note) <= 300),
-  voids        uuid unique references public.payments(id),
+  voids        uuid unique references public.payments(id) deferrable initially deferred,   -- restores need no row order
   recorded_by  uuid,                 -- no foreign key: an entry must outlive the account that wrote it
   recorded_by_name text,
   recorded_at  timestamptz not null default now(),
