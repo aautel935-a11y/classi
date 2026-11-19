@@ -1,0 +1,13 @@
+# Dependabot (free). Security updates and weekly version PRs for npm and the workflow actions. PRs only: nothing merges
+# without CI and the owner's review.
+version: 2
+updates:
+  - package-ecosystem: npm
+    directory: /
+    schedule: { interval: weekly, day: monday, time: "05:00", timezone: Asia/Jerusalem }
+    open-pull-requests-limit: 5
+    groups:
+      minor-and-patch: { update-types: [minor, patch] }
+  - package-ecosystem: github-actions
+    directory: /
+    schedule: { interval: weekly, day: monday, time: "05:00", timezone: Asia/Jerusalem }

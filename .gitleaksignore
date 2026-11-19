@@ -1,0 +1,4 @@
+# Gitleaks: known false positives (fingerprint = commit:file:rule:line). Reviewed 19/11/2026.
+# lib/push.ts holds the PUBLIC VAPID key (meant to be public; the private key is server-only, never in Git).
+7c30f10a87f6ca11046405827cb86ebb10c20389:lib/push.ts:generic-api-key:2
+lib/push.ts:generic-api-key:2
