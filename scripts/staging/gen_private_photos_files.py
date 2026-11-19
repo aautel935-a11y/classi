@@ -16,10 +16,11 @@ import re, subprocess, sys
 
 REPO = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
 SOCK = os.environ.get("PGSOCK", "/var/tmp/pgc"); PORT = os.environ.get("PGPORT", "54329")
-# Local test server only: the socket must be a plain absolute path and the port a number (they reach psql as list
-# arguments, never through a shell).
-if not re.fullmatch(r"/[A-Za-z0-9_./-]{1,200}", SOCK) or ".." in SOCK or not re.fullmatch(r"\d{2,5}", PORT):
-    sys.exit("PGSOCK must be an absolute socket directory and PGPORT a port number")
+# Local test server only: PGSOCK is a plain absolute socket directory or a loopback host (CI's PostgreSQL 17 service),
+# and the port a number. They reach psql as list arguments, never through a shell.
+if not (re.fullmatch(r"/[A-Za-z0-9_./-]{1,200}", SOCK) and ".." not in SOCK or SOCK in ("127.0.0.1", "localhost", "::1")) \
+        or not re.fullmatch(r"\d{2,5}", PORT):
+    sys.exit("PGSOCK must be an absolute socket directory or a loopback host, and PGPORT a port number")
 DB = "ct_gen_pp"
 STAGING_ID = "7702070854497379551"
 A, B, PREV = "20261105000000", "20261105010000", "20261104000000"
