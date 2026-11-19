@@ -42,11 +42,11 @@ jobs:
     name: Semgrep CE
     runs-on: ubuntu-latest
     timeout-minutes: 15
+    # The official image, pinned: a pip install of semgrep 1.95.0 on the runner broke on a newer dependency
+    # (opentelemetry import error), the image carries its own locked dependencies.
+    container: semgrep/semgrep:1.95.0
     steps:
       - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
-        with: { python-version: "3.12" }
-      - run: pip install --quiet "semgrep==1.95.0"
       # ERROR-severity findings fail the job. Every finding and every rule-loading error is printed as an annotation
       # (file, line, rule), so the result can be read without the job log.
       - name: Scan (TypeScript, React, Next.js, secrets, OWASP Top 10)
