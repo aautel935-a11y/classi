@@ -8,12 +8,15 @@ import { safePath } from "@/lib/safe";
 export async function GET(request: NextRequest) {
   const url = new URL(request.url);
   const token_hash = url.searchParams.get("token_hash");
-  const type = url.searchParams.get("type") as "signup" | "email" | "recovery" | "invite" | "magiclink" | "email_change" | null;
+  // only the link types Classi sends; anything else is treated as no link at all
+  const TYPES = ["signup", "email", "recovery", "invite", "magiclink", "email_change"] as const;
+  const rawType = url.searchParams.get("type");
+  const type = (TYPES as readonly string[]).includes(rawType ?? "") ? (rawType as (typeof TYPES)[number]) : null;
   const fallback = type === "recovery" ? "/account/password" : "/";
   const next = url.searchParams.get("next") ?? fallback;
   const safeNext = safePath(next, fallback);
 
-  if (token_hash && type) {
+  if (token_hash && /^[A-Za-z0-9_-]{8,512}$/.test(token_hash) && type) {
     const supabase = await createClient();
     const { error } = await supabase.auth.verifyOtp({ type, token_hash });
     if (!error) return NextResponse.redirect(new URL(type === "recovery" ? "/account/password" : safeNext, url.origin));
