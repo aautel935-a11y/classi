@@ -18,7 +18,7 @@ const newInstitute = async (name, owner) =>
 
 test("staff permissions and isolation between institutes", async ({ browser }, info) => {
   test.setTimeout(300_000);
-  const tag = info.project.name;
+  const tag = `${info.project.name} ${Date.now().toString(36)}`; // unique per attempt (a retry signs up again)
   const instName = `معهد السجل ${tag}`, otherName = `معهد آخر ${tag}`, custName = `زبونة المعهد ${tag}`;
 
   // ---------- people ----------

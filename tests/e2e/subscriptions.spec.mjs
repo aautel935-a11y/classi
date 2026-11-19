@@ -8,6 +8,15 @@ import { dayIL, db, localSql as sql, phoneFor, rpcAs, signUp } from "./helpers.m
 
 test.describe.configure({ mode: "serial" });
 
+// On failure, print what each open page shows, so the CI annotation explains the cause.
+test.afterEach(async ({ browser }, info) => {
+  if (info.status === info.expectedStatus) return;
+  for (const ctx of browser.contexts()) for (const p of ctx.pages()) {
+    const msg = await p.locator(".err, .okmsg, [role=alert], .note").allTextContents().catch(() => []);
+    console.log(`[page] ${p.url()} | ${msg.map((m) => m.trim()).filter(Boolean).join(" / ").slice(0, 300)}`);
+  }
+});
+
 async function resetAccess() {
   await sql("update app_settings set value = 'false' where key = 'subscriptions_required'");
   await sql("insert into app_settings (key, value) values ('launch_at', ''), ('trial_days', '30'), ('grace_days', '7') on conflict (key) do update set value = excluded.value");
@@ -23,7 +32,7 @@ test("subscriptions: admin settings and actions, owner trial, warning, grace, ex
   try {
     // ---------- a teacher (created before launch) and an admin ----------
     const tctx = await browser.newContext(); const tp = await tctx.newPage();
-    const tName = `حرفي الاشتراك ${info.project.name}`;
+    const tName = `حرفي الاشتراك ${info.project.name} ${Date.now().toString(36)}`; // unique per attempt (a retry signs up again)
     const tUser = await signUp(tp, { phone: await phoneFor(info, 51), name: tName, role: "teacher" });
     await tp.goto("/teach", { waitUntil: "networkidle" });
     await tp.locator("#bio").fill("أفتح الأقفال وأنسخ المفاتيح، بياناتي يجب أن تبقى.");
