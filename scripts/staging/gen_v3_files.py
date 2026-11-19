@@ -64,7 +64,7 @@ def exprs():
     return {
         "FN": ("coalesce((select string_agg(format('%s(%s)|%s|%s|%s|anon=%s|authenticated=%s|service_role=%s', p.proname, pg_catalog.pg_get_function_identity_arguments(p.oid), "
                "md5(p.prosrc), coalesce(array_to_string(p.proconfig, ','), '-'), p.prosecdef, has_function_privilege('anon', p.oid, 'execute'), "
-               "has_function_privilege('authenticated', p.oid, 'execute'), has_function_privilege('service_role', p.oid, 'execute')), E'\\n' order by p.proname, 2) "
+               "has_function_privilege('authenticated', p.oid, 'execute'), has_function_privilege('service_role', p.oid, 'execute')), E'\\n' order by p.proname, pg_catalog.pg_get_function_identity_arguments(p.oid)) "
                f"from pg_catalog.pg_proc p where p.pronamespace = 'public'::regnamespace and p.proname in ({q(fns)})), '')"),
         "TBL": ("coalesce((select string_agg(format('%s|rls=%s|anon=%s|authenticated=%s|policies=%s', c.relname, c.relrowsecurity, "
                 "has_table_privilege('anon', c.oid, 'SELECT,INSERT,UPDATE,DELETE'), has_table_privilege('authenticated', c.oid, 'SELECT,INSERT,UPDATE,DELETE'), "

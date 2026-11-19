@@ -20,11 +20,18 @@ run() { $P -d "$DB" -v ON_ERROR_STOP=1 -f "$1" > "$W/out" 2>&1; }
 # the whole public schema (functions with body, settings and grants; tables; columns), the triggers, the recorded migrations
 schema() { q "select md5(concat_ws('#',
   (select string_agg(format('%s(%s)|%s|%s|%s|%s|%s', p.proname, pg_get_function_identity_arguments(p.oid), md5(p.prosrc), coalesce(array_to_string(p.proconfig, ','), '-'), p.prosecdef,
-     has_function_privilege('anon', p.oid, 'execute'), has_function_privilege('authenticated', p.oid, 'execute')), E'\n' order by p.proname, p.oid) from pg_proc p where p.pronamespace='public'::regnamespace),
+     has_function_privilege('anon', p.oid, 'execute'), has_function_privilege('authenticated', p.oid, 'execute')), E'\n' order by p.proname, pg_get_function_identity_arguments(p.oid)) from pg_proc p where p.pronamespace='public'::regnamespace),
   (select string_agg(table_name || '.' || column_name, ',' order by table_name, column_name) from information_schema.columns where table_schema='public'),
-  (select string_agg(tgrelid::regclass || '.' || tgname, ',' order by 1) from pg_trigger where not tgisinternal),
+  (select string_agg(tgrelid::regclass || '.' || tgname, ',' order by tgrelid::regclass::text, tgname) from pg_trigger where not tgisinternal),
   (select string_agg(version, ',' order by version) from supabase_migrations.schema_migrations),
   (select string_agg(key || '=' || value, ',' order by key) from public.app_settings)))"; }
+# the same pieces one by one (printed only when a comparison fails)
+parts() { q "select 'fn ' || p.proname || '(' || pg_get_function_identity_arguments(p.oid) || ') ' || md5(p.prosrc) || ' ' || coalesce(array_to_string(p.proconfig, ','), '-') || ' ' || p.prosecdef || ' '
+    || has_function_privilege('anon', p.oid, 'execute') || has_function_privilege('authenticated', p.oid, 'execute') from pg_proc p where p.pronamespace='public'::regnamespace
+  union all select 'col ' || table_name || '.' || column_name from information_schema.columns where table_schema='public'
+  union all select 'trg ' || tgrelid::regclass || '.' || tgname from pg_trigger where not tgisinternal
+  union all select 'mig ' || version from supabase_migrations.schema_migrations
+  union all select 'set ' || key || '=' || value from public.app_settings order by 1"; }
 # row counts of every public table (data)
 data() { q "select md5(string_agg(c.relname || '=' || (xpath('/row/n/text()', query_to_xml(format('select count(*) as n from public.%I', c.relname), false, true, '')))[1]::text, ',' order by c.relname))
   from pg_class c where c.relnamespace='public'::regnamespace and c.relkind='r'"; }
@@ -105,7 +112,7 @@ expect_ok "ledger applies on a staging-like database (newest = D-08 A)" "$W/appl
 [ "$(q "select count(*) from supabase_migrations.schema_migrations where version = '20261120000000'")" = 1 ] && ok "ledger recorded once" || ko "ledger record"
 expect_refusal "ledger twice" "$W/apply_$L.sql" "already recorded"
 expect_refusal "rollback business access before it is applied" "$W/rollback_$S.sql" "newest recorded migration is not"
-AFTER_L=$(schema)
+AFTER_L=$(schema); parts > "$W/p1"
 expect_ok "business access applies after the ledger" "$W/apply_$S.sql"
 expect_refusal "business access twice" "$W/apply_$S.sql" "already recorded"
 expect_refusal "rollback the ledger while business access is recorded" "$W/rollback_$L.sql" "newest recorded migration is not"
@@ -141,7 +148,7 @@ expect_ok "rollback the ledger, discarding its data (explicit variant)" "$W/roll
 [ "$(schema)" = "$SCHEMA0" ] && ok "after both rollbacks: exactly the schema before v3" || ko "schema after both rollbacks differs from before v3"
 [ "$(data)" = "$DATA0" ] && ok "after both rollbacks: every table's row count as before v3" || ko "data after both rollbacks differs"
 expect_ok "ledger applies again after a full rollback" "$W/apply_$L.sql"
-[ "$(schema)" = "$AFTER_L" ] && ok "…and the same state as the first time" || ko "second apply: state differs"
+[ "$(schema)" = "$AFTER_L" ] && ok "…and the same state as the first time" || { ko "second apply: state differs"; parts > "$W/p2"; diff "$W/p1" "$W/p2" | head -20; }
 expect_ok "rollback the ledger (no v3 data)" "$W/rollback_$L.sql"
 
 # ---------- the B base: v3 does not depend on D-08 step B ----------
