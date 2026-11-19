@@ -1,0 +1,81 @@
+# Classi v3 → classi-staging: plan (NOT executed; each step needs the owner's approval)
+
+Scope: the two v3 migrations (`20261120000000_v3_ledger`, `20261120010000_v3_business_access`) and the `v3/dev` code on
+classi-staging only. Production, `main` and D-08 Migration B are out of scope. `subscriptions_required` stays **off** and
+`launch_at` stays **empty** on staging unless the owner decides otherwise, so no business changes visibility.
+
+## 0. Preconditions (GO to start)
+
+| Check | Pass when |
+|---|---|
+| CI on the exact commit to deploy | every job green (quality, database, staging-files-pg17, e2e, Gitleaks, Semgrep, CodeQL) |
+| Nothing else in flight | no other staging workflow running; D-08 B decided separately (v3 does not depend on it) |
+| Staging state known | newest recorded migration read (read-only): `20261114000000` (D-08 A) or `20261114010000` (if B ran first) |
+
+## 1. Backup (before anything changes)
+
+1. Supabase dashboard → classi-staging → Database → Backups: note the newest daily backup (time).
+2. Logical backup by the owner, on their computer or a protected GitHub Environment (needs the staging DB URL, never in
+   chat): `DB_URL=… sh scripts/db/backup.sh <folder outside the repo>` → `schema.sql`, `data.sql`, `counts.txt`, `SHA256SUMS`.
+3. Prove it restores: `sh scripts/db/restore-check.sh <that folder>` into a local Postgres → **PASS: every row count
+   matches**. No restore proof = NO-GO.
+4. Fingerprint (read-only SQL, saved with the backup): public functions (name, args, body md5, grants), table/column list,
+   row counts of every public table, `app_settings` keys and values.
+
+## 2. Guarded apply files (prepared in `v3/dev`, tested in CI before use)
+
+Generated like D-08's: each file refuses to run unless the cluster id is classi-staging's, the staging marker is set, the
+newest recorded migration is the one read in step 0, RLS is on everywhere, the three functions it replaces
+(`owner_has_access`, `admin_set_setting`, `subscription_reminders`) have exactly the expected bodies, and none of the new
+tables exist yet. One transaction each; a failed check rolls back everything. CI applies them to a staging-like local
+database (PostgreSQL 16 and 17), runs the suites, rolls back, and proves the state is byte-identical.
+
+## 3. Apply (owner, SQL Editor, once each)
+
+1. `apply_20261120000000_v3_ledger.sql`
+2. `apply_20261120010000_v3_business_access.sql`
+
+Stop at the first error. No automatic retry, no automatic rollback.
+
+## 4. Verify (read-only)
+
+| # | Check | Pass when |
+|---|---|---|
+| V1 | migrations recorded | each once, the newest = `20261120010000` |
+| V2 | new tables | `charges`, `payments`, `audit_log`, `staff_permissions`, `business_trials`, `business_exemptions`: RLS on, no grants to anon/authenticated, append-only triggers on `payments` and `audit_log` |
+| V3 | functions | the generated fingerprint, exactly; `worker_*` still service-role only |
+| V4 | nothing else changed | every pre-existing table's row count = step 1; settings unchanged except the three new keys (`trial_days`=30, `grace_days`=7, `launch_at`='') |
+| V5 | visibility unchanged | the teachers and institutes a visitor can read: same list before and after (switch off) |
+| V6 | private photos, D-08 | the existing staging checks still pass |
+
+## 5. Code
+
+Fast-forward the `staging` branch to the CI-green `v3/dev` commit (classi-staging builds `staging` only). After the
+build: `/api/health` ok, `/admin` worker check ok, no new runtime errors.
+
+## 6. Tests on staging
+
+1. The existing staging suite (`staging.yml`, owner approval): S1–S13 must pass, state left as found.
+2. A v3 walkthrough with the five staging test accounts (no real data, no real SMS):
+   - owner: a charge, a deposit, a payment, a documented correction, the CSV;
+   - staff: record only; correction, adjust, cancel, refund, report refused;
+   - customer: sees her charge with the notice, nothing else;
+   - admin: trial/grace/launch settings screen opens; extension, exemption and discount on a test business, then
+     revoked; the switch stays off.
+3. Everything created by the walkthrough is cancelled or voided (the ledger keeps its history by design).
+
+## 7. Rollback (if any check fails)
+
+| What | How | Proof |
+|---|---|---|
+| Code | promote the previous classi-staging deployment (`dpl_7sVox…`, commit `f80f072`) | `/api/health` ok |
+| Database | SQL Editor: `rollback_20261120010000_v3_business_access` then `rollback_20261120000000_v3_ledger` (guarded the same way) | fingerprint = step 1 (CI already proves this locally: `v3_rollback_test.sh`) |
+| Data | the ledger rollback deletes ledger rows; on staging these are test rows only | counts of every other table = step 1 |
+| Last resort | restore the step-1 backup | restore-check PASS |
+
+## GO / NO-GO for each later step
+
+- **GO** to apply only with: CI green on that commit, a backup proven by restore, the fingerprint saved.
+- **GO** to deploy code only after V1–V6 pass.
+- **NO-GO** on: any guard refusal, any V-check difference, any staging-suite failure, any cross-business read in the
+  walkthrough, or any setting changed without approval. Then stop, report, roll back only with approval.

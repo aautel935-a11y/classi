@@ -39,6 +39,43 @@ Permission review (after the first push): a charge may be linked to a customer's
 or bought a package from the business; refunds need the owner or `payments.correct`. Both covered by `ledger_test`
 (100 checks).
 
+## Round 2 — E2E for subscriptions, staff and isolation (20/11/2026, code commit `06feee0`)
+
+| Job | Result | Run |
+|---|---|---|
+| quality: npm audit, TypeScript, ESLint, unit tests, guards, `next build` | PASS | [job](https://github.com/aautel935-a11y/classi/actions/runs/44623715051/job/135911849511) |
+| database: 32 SQL suites, RPC grants, rollback drills, v3 rollback exactness | PASS | [job](https://github.com/aautel935-a11y/classi/actions/runs/44623715051/job/135911849523) |
+| staging files on PostgreSQL 17 | PASS | [job](https://github.com/aautel935-a11y/classi/actions/runs/44623715051/job/135911849555) |
+| e2e: **41 passed**, 5 skipped (by design, below) | PASS | [job](https://github.com/aautel935-a11y/classi/actions/runs/44623715051/job/135911848860) |
+| Gitleaks | PASS | [job](https://github.com/aautel935-a11y/classi/actions/runs/44623714948/job/135911850722) |
+| Semgrep CE | PASS | [job](https://github.com/aautel935-a11y/classi/actions/runs/44623714948/job/135911851144) |
+| CodeQL v4, security-extended | PASS, 1 result (false positive, below) | [job](https://github.com/aautel935-a11y/classi/actions/runs/44623714948/job/135911851269) |
+
+New E2E (both phone and desktop):
+- `subscriptions.spec.mjs` — admin: trial 14 days, grace 5 days, launch date; trial extended (+10, audited); exemption
+  granted then revoked; discount 170 → 120 with reason; renewal confirmed. Non-admin: `/admin` refused and
+  `admin_set_setting`, `admin_extend_trial`, `admin_set_exemption`, `admin_upsert_plan` refused at the database with
+  their own session. Owner: "14 days left", warning style and "3 days left" near the end, the reminder in
+  notifications, grace (still public), expiry (public page 404, dashboard and profile kept), renewal (public again).
+- `staff.spec.mjs` — booking → ledger → deposit; staff without permission: nothing visible, refused at the database;
+  owner grants "record": staff records and corrects only their own entry; correcting the owner's entry, adjust, cancel,
+  refund, report, export and self-granting refused; another institute: nothing visible, export 403, cannot write, cannot
+  charge this institute's customer; the customer sees her charge with the notice, an unrelated customer nothing;
+  revoking takes effect at once.
+
+Skipped tests (5, all by design, unchanged): `d08.spec.mjs` ×3 on the phone project (database-state tests, run once on
+desktop) and `forced-dark.spec.mjs` ×2 on the desktop project (they launch their own browsers, run once on the phone
+project). The staging dry run's S1 is skipped because it checks a staging build, not the local build.
+
+Semgrep warnings (10 at the first run): 10 × "action pinned by tag" in `ci.yml`/`security.yml` → **fixed** (pinned
+to commit SHAs). Remaining: 2 of the same in `staging.yml` (left untouched: it is the owner-approved staging workflow)
+and 8 parser notices (shell scripts, one TypeScript `satisfies`), not findings.
+
+CodeQL: `js/user-controlled-bypass` at `app/auth/confirm/route.ts` — **false positive**: the guarded action is the
+token verification itself (done by Supabase); the route now also accepts only Classi's link types and a well-formed
+token. The action was upgraded to v4 (v3 is deprecated in December 2026).
+Dependabot alerts: **disabled** for the repository (GitHub answer); enabling them is a settings change → owner.
+
 ## Files
 
 New: `supabase/migrations/20261120000000_v3_ledger.sql`, `supabase/migrations/20261120010000_v3_business_access.sql`,
@@ -72,8 +109,7 @@ switch is off), `admin_set_setting` (the phase-3 version plus `trial_days`, `gra
 
 ## Not verified here (needs the owner or CI)
 
-- Now verified in GitHub Actions (table above). Still not covered by E2E: the admin access screens and the owner's
-  trial banner (SQL-tested only), and staff-permission toggles in the browser.
+- Now verified in GitHub Actions, including the admin access screens, the owner's trial banner and the staff toggles.
 - CodeQL alerts and Dependabot alerts cannot be listed from this workspace (GitHub blocks those API paths here).
 
 ## PENDING_APPROVAL
@@ -81,10 +117,10 @@ switch is off), `admin_set_setting` (the phase-3 version plus `trial_days`, `gra
 | # | Needs your decision | Why it waits |
 |---|---|---|
 | 1 | ~~Push `v3/dev`~~ done 19/11 with approval; CI green | — |
-| 2 | Apply the two v3 migrations to **Staging** (SQL Editor, guarded files to be generated like D-08's) | Changes a hosted database |
+| 2 | Apply the two v3 migrations to **Staging**: plan in `docs/v3/STAGING_PLAN.md` (backup, guarded files, verify, rollback) | Changes a hosted database |
 | 3 | D-08 Migration B on Staging | Separate approval; the probe marker expires 20/11 19:14 (Jerusalem), so a new probe is needed first |
 | 4 | Prices (proposal in the plan, section 4), trial 30 days, grace 7 days, the launch date, and when to turn on `subscriptions_required` | Business decisions |
-| 5 | GitHub settings: ruleset on `main` (PR + required checks), Dependabot alerts and security updates, CodeQL advanced setup | Security settings |
+| 5 | GitHub settings: ruleset on `main` (PR + required checks), **Dependabot alerts (currently disabled)** and security updates, CodeQL advanced setup, dismissing the CodeQL false positive | Security settings |
 | 6 | Supabase Auth: leaked-password protection (HIBP), TOTP MFA for admin accounts | Security settings |
 | 7 | Encrypted off-site backup job: a read-only database role and its secret in a protected GitHub Environment, created by you | Needs a secret and a new role |
 | 8 | Wording of the customer notice; legal review before any official tax document | Legal |
