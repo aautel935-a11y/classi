@@ -1,6 +1,7 @@
 import { Icon } from "@/components/Icon";
 import { ConfirmPay, PayBadge } from "@/components/Pay";
 import { dayLong, shekel } from "@/lib/format";
+import { chargeForBookingAction } from "@/app/ledger/actions";
 
 export type PayRow = { kind: "booking" | "package"; id: string; offering_id: string; title: string; who: string; amount: number; pay_method: string; pay_status: string; lesson_at: string; reported_at: string | null; installments_total?: number; installments_paid?: number };
 export type MoneySummary = { paid_month: number; open_amount: number; reported: number };
@@ -33,6 +34,13 @@ export function PaymentsOwner({ rows, summary, back, hasBit, flash }: { rows: Pa
             <PayBadge status={r.pay_status} method={r.pay_method} teacherView inst={(r.installments_total ?? 1) > 1 ? [r.installments_paid ?? 0, r.installments_total!] : undefined} />
             <ConfirmPay bookingId={r.kind === "booking" ? r.id : undefined} packageId={r.kind === "package" ? r.id : undefined} status={r.pay_status} back={back} installment={(r.installments_total ?? 1) > 1 ? [(r.installments_paid ?? 0) + 1, r.installments_total!] : undefined} />
           </div>
+          {r.kind === "booking" && (
+            <form action={chargeForBookingAction}>
+              <input type="hidden" name="booking_id" value={r.id} />
+              <input type="hidden" name="back" value="/ledger" />
+              <button className="link small">تسجيل دفعة جزئية أو عربون (سجل المستحقات)</button>
+            </form>
+          )}
         </div>
       ))}
     </section>
