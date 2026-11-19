@@ -131,10 +131,13 @@ select t_err('staff cannot grant themselves a permission', $$select set_staff_pe
 reset role;
 set role authenticated; set request.jwt.claim.sub='71000000-0000-0000-0000-00000000000b';
 select t_ok('owner grants payments.record', $$select set_staff_permission((select inst from ids), (select staff_t from ids), 'payments.record', true)$$);
+select t_is('owner sees the grant', $$select permissions::text from institute_staff_permissions((select inst from ids)) where teacher_id = (select staff_t from ids)$$, '{payments.record}');
+select t_is('owner''s ledger list has the institute as owner', $$select is_owner::text from my_ledger_businesses() where business_id = (select inst from ids)$$, 'true');
 select t_err('owner cannot grant to a non-staff teacher', $$select set_staff_permission((select inst from ids), (select samer from ids), 'payments.record', true)$$);
 reset role;
 set role authenticated; set request.jwt.claim.sub='71000000-0000-0000-0000-00000000000c';
 select t_is('staff with payments.record sees the institute''s charges', $$select count(*)::text from business_charges(null, (select inst from ids))$$, '1');
+select t_is('staff''s ledger list: the institute, record only', $$select is_owner::text || can_record::text || can_correct::text || can_reports::text from my_ledger_businesses() where business_id = (select inst from ids)$$, 'falsetruefalsefalse');
 select t_ok('staff records a payment', $$insert into v select 'p4', record_payment((select id from v where k='c3'), 'payment', 300, 'paybox')$$);
 select t_ok('staff may void own entry within 24h', $$select void_payment((select id from v where k='p4'), 'المبلغ خطأ')$$);
 select t_ok('staff records again', $$insert into v select 'p5', record_payment((select id from v where k='c3'), 'payment', 200, 'paybox')$$);
@@ -156,6 +159,8 @@ select t_ok('owner revokes the permission', $$select set_staff_permission((selec
 reset role;
 set role authenticated; set request.jwt.claim.sub='71000000-0000-0000-0000-00000000000c';
 select t_is('after revoke: staff sees nothing', $$select count(*)::text from business_charges(null, (select inst from ids))$$, '0');
+select t_is('after revoke: the institute leaves the staff''s ledger list', $$select count(*)::text from my_ledger_businesses() where business_id = (select inst from ids)$$, '0');
+select t_is('staff cannot list the institute''s permissions', $$select count(*)::text from institute_staff_permissions((select inst from ids))$$, '0');
 reset role;
 set role authenticated; set request.jwt.claim.sub='71000000-0000-0000-0000-00000000000f';
 select t_is('second institute owner sees none of the first', $$select count(*)::text from business_charges(null, (select inst from ids))$$, '0');

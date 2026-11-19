@@ -7,6 +7,7 @@ import { signedPhotoUrls } from "@/lib/private-photos";
 import { SIGNED_SECONDS } from "@/lib/photos";
 import { WaitlistOwner, type WRow } from "@/components/WaitlistOwner";
 import { PaymentsOwner, type MoneySummary, type PayRow } from "@/components/PaymentsOwner";
+import { AccessBanner } from "@/components/AccessBanner";
 import { SubscriptionBox, type Plan, type SubRequest } from "@/components/SubscriptionBox";
 import { ReviewsList, type ReviewRow } from "@/components/ReviewsList";
 import { requireUser } from "@/lib/session";
@@ -99,11 +100,13 @@ export default async function Manage({ searchParams }: { searchParams: Promise<R
       </div>
 
       <PaymentsOwner rows={(pays ?? []) as PayRow[]} summary={((Array.isArray(money) ? money[0] : money) ?? null) as MoneySummary | null} back="/manage#payments" hasBit={!!bitLocal} flash={sp.ok} />
+      <p className="small" style={{ textAlign: "center" }}><Link className="link" href="/ledger">سجل المستحقات: دفعات جزئية، عربون، متأخرات وتقارير</Link></p>
 
       <WaitlistOwner rows={waitlist} back="/manage" flash={sp.wl} error={errorText(sp.error) ?? undefined} />
 
       <ShareProfile url={`${SITE}/institute/${inst.id}`} name={inst.name} />
 
+      <AccessBanner kind="institute" id={inst.id} />
       <SubscriptionBox required={setting("subscriptions_required") === "true"} paidUntil={paid ? String(paid) : null} plans={(plans ?? []) as Plan[]} request={(subReq ?? null) as SubRequest} platformBit={setting("platform_bit")} back="/manage#subscription" flash={sp.sub} hasAccountOffers={(courses ?? []).length > 0} />
 
       <ReviewsList rows={(myReviews ?? []) as ReviewRow[]} owner back="/manage#reviews" title="تقييمات العائلات للمعهد" />

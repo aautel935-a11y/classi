@@ -2,6 +2,8 @@
 -- permissions ARE DELETED. Only for a rollback before real businesses use it; afterwards export them first.
 -- Run the business-access rollback first if it was applied (it writes to audit_log).
 begin;
+drop function if exists public.institute_staff_permissions(uuid);
+drop function if exists public.my_ledger_businesses();
 drop function if exists public.business_audit(int, uuid, uuid);
 drop function if exists public.ledger_report(date, date, uuid, uuid);
 drop function if exists public.my_charges();

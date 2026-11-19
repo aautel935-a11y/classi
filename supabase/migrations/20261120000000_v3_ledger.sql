@@ -447,6 +447,37 @@ begin
    order by a.at desc, a.id desc limit least(greatest(coalesce(p_limit, 100), 1), 500);
 end $$;
 
+-- The businesses whose ledger the caller may open, with what they may do there.
+create or replace function public.my_ledger_businesses()
+returns table (kind text, business_id uuid, name text, is_owner boolean, can_record boolean, can_correct boolean, can_reports boolean)
+language sql stable security definer set search_path = public, pg_temp as $$
+  select 'teacher', t.id, t.name, true, true, true, true from teachers t where auth.uid() is not null and t.user_id = auth.uid()
+  union all
+  select 'institute', i.id, i.name, true, true, true, true from institutes i where auth.uid() is not null and i.owner_id = auth.uid()
+  union all
+  select 'institute', i.id, i.name, false, ledger_staff_can(i.id, 'payments.record'), ledger_staff_can(i.id, 'payments.correct'),
+         ledger_staff_can(i.id, 'payments.reports')
+    from institutes i
+   where auth.uid() is not null and coalesce(i.owner_id, '00000000-0000-0000-0000-000000000000') <> auth.uid()
+     and exists (select 1 from staff_permissions sp join teachers t on t.id = sp.teacher_id and t.user_id = auth.uid()
+                  join institute_teachers it on it.institute_id = sp.institute_id and it.teacher_id = sp.teacher_id and it.status = 'accepted'
+                  where sp.institute_id = i.id)
+$$;
+
+-- Owner of an institute: its accepted staff and the ledger permissions each holds.
+create or replace function public.institute_staff_permissions(p_institute uuid)
+returns table (teacher_id uuid, name text, permissions text[])
+language sql stable security definer set search_path = public, pg_temp as $$
+  select t.id, t.name, coalesce(array_agg(sp.permission order by sp.permission) filter (where sp.permission is not null), '{}')
+    from institute_teachers it join teachers t on t.id = it.teacher_id
+    left join staff_permissions sp on sp.institute_id = it.institute_id and sp.teacher_id = it.teacher_id
+   where it.institute_id = p_institute and it.status = 'accepted' and ledger_is_owner(null, p_institute)
+   group by t.id, t.name order by t.name
+$$;
+
+revoke all on function public.my_ledger_businesses(), public.institute_staff_permissions(uuid) from public, anon;
+grant execute on function public.my_ledger_businesses(), public.institute_staff_permissions(uuid) to authenticated;
+
 revoke all on function public.create_charge(uuid, uuid, text, text, numeric, date, numeric, uuid), public.charge_for_booking(uuid, date),
   public.record_payment(uuid, text, numeric, text, date, text, boolean), public.void_payment(uuid, text),
   public.adjust_charge(uuid, numeric, date, text), public.cancel_charge(uuid, text),

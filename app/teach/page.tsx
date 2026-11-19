@@ -7,6 +7,7 @@ import { PhotoUpload } from "@/components/PhotoUpload";
 import { signedPhotoUrls } from "@/lib/private-photos";
 import { SIGNED_SECONDS } from "@/lib/photos";
 import { PushToggle } from "@/components/PushToggle";
+import { AccessBanner } from "@/components/AccessBanner";
 import { SubscriptionBox, type Plan, type SubRequest } from "@/components/SubscriptionBox";
 import { ReviewsList, type ReviewRow } from "@/components/ReviewsList";
 import { PaymentsOwner, type MoneySummary, type PayRow } from "@/components/PaymentsOwner";
@@ -283,6 +284,7 @@ export default async function Teach({ searchParams }: { searchParams: Promise<Re
       )}
 
       <PaymentsOwner rows={(pays ?? []) as PayRow[]} summary={((Array.isArray(money) ? money[0] : money) ?? null) as MoneySummary | null} back="/teach#payments" hasBit={!!bitLocal} />
+      <p className="small" style={{ textAlign: "center" }}><Link className="link" href="/ledger">سجل المستحقات: دفعات جزئية، عربون، متأخرات وتقارير</Link></p>
 
       <WaitlistOwner rows={waitlist} back="/teach" flash={sp.wl} />
 
@@ -362,6 +364,7 @@ export default async function Teach({ searchParams }: { searchParams: Promise<Re
         </form>
       </section>
 
+      <AccessBanner kind="teacher" id={t.id} />
       <SubscriptionBox required={subsRequired} paidUntil={paid ? String(paid) : null} plans={(plans ?? []) as Plan[]} request={(subReq ?? null) as SubRequest} platformBit={setting("platform_bit")} back="/teach#subscription" flash={sp.sub} hasAccountOffers={mine.length > 0} />
 
       <ReviewsList rows={(myReviews ?? []) as ReviewRow[]} owner back="/teach#reviews" title="تقييمات العائلات لك" />

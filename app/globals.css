@@ -52,6 +52,7 @@ p{margin:0}
 .small{font-size:13px}
 .stack{display:flex;flex-direction:column;gap:12px}
 .section{display:flex;flex-direction:column;gap:12px;padding-block:18px}
+.col{display:flex;flex-direction:column}
 .row{display:flex;align-items:center;gap:8px}
 .between{justify-content:space-between}
 .num{font-variant-numeric:tabular-nums}

@@ -2,6 +2,8 @@ import { createClient } from "@/lib/supabase/server";
 import { signedPhotoUrls } from "@/lib/private-photos";
 import { SIGNED_SECONDS } from "@/lib/photos";
 import Link from "next/link";
+import { AccessAdmin } from "@/components/AccessAdmin";
+import { adminAccessAction } from "@/app/admin/access-actions";
 import { Avatar } from "@/components/Avatar";
 import { Icon } from "@/components/Icon";
 import { adminCloseReportAction, adminHideAction, adminHideReviewAction, adminReviewAction, adminSubscriptionAction, adminSetStatusAction, adminVerifyAction, resolveReportAction } from "@/app/actions";
@@ -384,6 +386,8 @@ async function SubsTab({ supabase }: { supabase: any }) {
         </form>
       </div>
 
+      <AccessAdmin supabase={supabase} set={set} />
+
       <h2>قواعد الحجز والرسائل</h2>
       <div className="card formstack">
         <p className="small muted">قيم تطبقها قاعدة البيانات نفسها. للعودة إلى الافتراضي اكتب القيمة الافتراضية المذكورة تحت كل حقل.</p>
@@ -426,6 +430,14 @@ async function SubsTab({ supabase }: { supabase: any }) {
           <span className="small muted">{r.kind === "teacher" ? "معلم" : "معهد"} · {r.request_months} {r.request_months === 1 ? "شهر" : "أشهر"} · {r.request_status === "reported" ? "يقول إنه حوّل عبر Bit" : "اختار باقة ولم يحوّل بعد"}{r.requested_at ? ` · ${fmtDate(r.requested_at)}` : ""}</span>
           <div className="row" style={{ gap: 8, flexWrap: "wrap" }}>
             <form action={adminSubscriptionAction}><input type="hidden" name="op" value="activate" /><input type="hidden" name="id" value={r.request_id!} /><button className="btn sm okb">وصل المبلغ، فعّل</button></form>
+            <details><summary className="link small">خصم</summary>
+              <form action={adminAccessAction} className="row" style={{ marginTop: 6, flexWrap: "wrap" }}>
+                <input type="hidden" name="op" value="discount" /><input type="hidden" name="request_id" value={r.request_id!} />
+                <input className="inline-input" name="price" type="number" min={0} max={r.request_price ?? 0} placeholder="السعر بعد الخصم" style={{ width: 120 }} />
+                <input className="inline-input" name="reason" required minLength={3} placeholder="سبب الخصم" style={{ flex: 1, minWidth: 140 }} />
+                <button className="btn sm ghost">حفظ الخصم</button>
+              </form>
+            </details>
             <details><summary className="link small" style={{ color: "var(--bad)" }}>لم يصل</summary>
               <form action={adminSubscriptionAction} className="row" style={{ marginTop: 6, flexWrap: "wrap" }}>
                 <input type="hidden" name="op" value="reject" /><input type="hidden" name="id" value={r.request_id!} />

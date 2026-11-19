@@ -10,6 +10,8 @@ import { safePath } from "@/lib/safe";
 import { KeepForm } from "@/components/KeepForm";
 import { signedPhotoUrls } from "@/lib/private-photos";
 import { SIGNED_SECONDS } from "@/lib/photos";
+import { MyCharges } from "@/components/MyCharges";
+import type { MyChargeRow } from "@/lib/ledger";
 
 export const dynamic = "force-dynamic";
 
@@ -18,9 +20,10 @@ const ROLES: [Role, string][] = [["guardian", "ولي أمر / طالب"], ["tea
 export default async function Account({ searchParams }: { searchParams: Promise<Record<string, string | undefined>> }) {
   const sp = await searchParams;
   const { supabase, user, profile } = await requireUser("/account");
-  const [{ data: kids }, { data: me }] = await Promise.all([
+  const [{ data: kids }, { data: me }, { data: charges }] = await Promise.all([
     supabase.from("children").select("id,name,grade").order("created_at"),
     supabase.from("profiles").select("phone,sms_ok,avatar_path").eq("id", user.id).maybeSingle(),
+    supabase.rpc("my_charges"),
   ]);
   const smsOk = me?.sms_ok !== false;
   // the profile photo is private: a short signed link for its owner (an old public photo from before still shows)
@@ -117,6 +120,7 @@ export default async function Account({ searchParams }: { searchParams: Promise<
           <Link className="link" href="/terms">شروط الاستخدام</Link> · <Link className="link" href="/privacy">سياسة الخصوصية</Link>
         </p>
       </div>
+      <MyCharges rows={(charges ?? []) as MyChargeRow[]} />
     </div>
   );
 }
