@@ -52,8 +52,8 @@ jobs:
       - name: Scan (TypeScript, React, Next.js, secrets, OWASP Top 10)
         run: |
           semgrep scan --metrics=off --config p/typescript --config p/react --config p/nextjs --config p/secrets --config p/owasp-top-ten \
-            --exclude node_modules --exclude .next --exclude 'supabase/tests' --json --output /tmp/semgrep.json || true
-          python3 .github/semgrep-report.py /tmp/semgrep.json
+            --exclude node_modules --exclude .next --exclude 'supabase/tests' --json --output /tmp/semgrep.json 2> /tmp/semgrep.err || true
+          python3 .github/semgrep-report.py /tmp/semgrep.json /tmp/semgrep.err
 
   codeql:
     name: CodeQL (javascript-typescript)

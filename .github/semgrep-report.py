@@ -6,6 +6,12 @@ try:
     data = json.load(open(sys.argv[1]))
 except Exception as e:  # semgrep did not produce a report (install or rule download failed)
     print(f"::error::semgrep produced no report: {e}")
+    if len(sys.argv) > 2:  # its own error output, last lines, one annotation each
+        try:
+            for line in [l.strip() for l in open(sys.argv[2], errors="replace") if l.strip()][-15:]:
+                print(f"::error::semgrep: {line[:300]}")
+        except OSError:
+            pass
     sys.exit(1)
 errors = 0
 for r in data.get("results", []):
