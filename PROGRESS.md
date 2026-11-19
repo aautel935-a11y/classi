@@ -80,6 +80,28 @@ counters of `ledger_report` and two test inputs used the previous day. Fixed: ev
 
 Dependabot alerts: **disabled** for the repository (GitHub answer); enabling them is a settings change → owner.
 
+## Round 3 — guarded staging files (20/11/2026)
+
+Nothing was applied to any hosted database. Read-only check of classi-staging (SELECT only): cluster id and marker match,
+newest migration D-08 A, no v3 object present, `subscriptions_required` off, and all five fingerprints that the apply
+files check are identical to the generated expectations.
+
+- `scripts/staging/gen_v3_files.py` → `supabase/staging/`: `apply_…_v3_ledger.sql`, `apply_…_v3_business_access.sql`,
+  `rollback_…` and `rollback_…_discard_data.sql` for each, `snapshot_v3.sql`, `verify_v3.sql` (V1–V6).
+- `supabase/tests/staging_v3_test.sh`: **64 checks pass** locally — generated files up to date; only the cluster-id line
+  differs in test copies; embedded migrations and rollbacks byte for byte; 10 refusal cases change nothing (wrong
+  cluster, no marker, already recorded, unknown newer migration, before D-08 A, RLS off, switch on, changed
+  `owner_has_access`, existing table, wrong order); apply on D-08 A and on D-08 B; verify: 11 PASS, no FAIL, data /
+  settings / visitor fingerprints equal before and after, verify itself changes nothing; rollbacks refuse while v3
+  tables hold rows, discard variants report what they delete; after both rollbacks schema and every row count are
+  exactly as before v3; re-apply gives the same state. Runs in CI in the database job and on PostgreSQL 17.
+- `scripts/staging/migrate.sh` refuses the v3 migrations (they have guarded files), so the `staging-migrate` workflow
+  cannot bypass the guards (its own test: 16/16).
+- Instructions: `docs/v3/BACKUP_BEFORE_STAGING.md` (backup, restore proof, snapshot, what each rollback loses);
+  `docs/v3/STAGING_PLAN.md` updated.
+- Order with D-08 B: v3 accepts A or B as the newest; D-08's own B file expects A, so applying v3 first means
+  regenerating that file.
+
 ## Files
 
 New: `supabase/migrations/20261120000000_v3_ledger.sql`, `supabase/migrations/20261120010000_v3_business_access.sql`,

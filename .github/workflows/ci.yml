@@ -142,6 +142,9 @@ jobs:
       - name: D-08 staging files (A, B; guards, 24h wake-up guard, apply, rollback; generated and up to date)
         if: always()
         run: sh supabase/tests/staging_d08_test.sh 2>&1 | tee /tmp/d08_staging.log
+      - name: v3 staging files (ledger, business access; guards, apply, verify V1-V6, rollbacks incl. discard variants; generated and up to date)
+        if: always()
+        run: sh supabase/tests/staging_v3_test.sh 2>&1 | tee /tmp/v3_staging.log
       - name: Staging apply files refuse any database but classi-staging
         if: always()
         run: |
@@ -170,7 +173,7 @@ jobs:
           DB=ct_perf node --experimental-strip-types --no-warnings tests/search-equivalence.mjs 2>&1 | tee /tmp/searcheq.log
       - name: Report (annotations)
         if: always()
-        run: sh .github/report.sh "database" /tmp/stgmig.log /tmp/safeupdate.log /tmp/sql.log /tmp/conc.log /tmp/grants.log /tmp/d08_staging.log /tmp/drill_d08b.log /tmp/drill_d08.log /tmp/drill.log /tmp/drill5.log /tmp/drill4.log /tmp/drill3.log /tmp/searcheq.log
+        run: sh .github/report.sh "database" /tmp/stgmig.log /tmp/safeupdate.log /tmp/sql.log /tmp/conc.log /tmp/grants.log /tmp/d08_staging.log /tmp/v3_staging.log /tmp/drill_d08b.log /tmp/drill_d08.log /tmp/drill.log /tmp/drill5.log /tmp/drill4.log /tmp/drill3.log /tmp/searcheq.log
 
   staging-files-pg17:
     # classi-staging runs PostgreSQL 17: the guarded staging files compare the database state as PostgreSQL prints it
@@ -200,9 +203,12 @@ jobs:
       - name: D-08 staging files on PostgreSQL 17
         if: always()
         run: sh supabase/tests/staging_d08_test.sh 2>&1 | tee /tmp/d0817.log
+      - name: v3 staging files on PostgreSQL 17
+        if: always()
+        run: sh supabase/tests/staging_v3_test.sh 2>&1 | tee /tmp/v317.log
       - name: Report (annotations)
         if: always()
-        run: sh .github/report.sh "staging-files-pg17" /tmp/pp17.log /tmp/p0117.log /tmp/d0817.log
+        run: sh .github/report.sh "staging-files-pg17" /tmp/pp17.log /tmp/p0117.log /tmp/d0817.log /tmp/v317.log
 
   e2e:
     # Full browser tests against a local Supabase stack (Docker) and a production build of the app.
