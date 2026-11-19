@@ -11,10 +11,15 @@ The expected states are read from a LOCAL database built from the committed migr
 Usage (local Postgres, as in supabase/tests): python3 scripts/staging/gen_private_photos_files.py
 Then: sh supabase/tests/staging_private_photos_test.sh   (and CI checks that the committed files are up to date).
 """
-import os, subprocess, sys
+import os
+import re, subprocess, sys
 
 REPO = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
 SOCK = os.environ.get("PGSOCK", "/var/tmp/pgc"); PORT = os.environ.get("PGPORT", "54329")
+# Local test server only: the socket must be a plain absolute path and the port a number (they reach psql as list
+# arguments, never through a shell).
+if not re.fullmatch(r"/[A-Za-z0-9_./-]{1,200}", SOCK) or ".." in SOCK or not re.fullmatch(r"\d{2,5}", PORT):
+    sys.exit("PGSOCK must be an absolute socket directory and PGPORT a port number")
 DB = "ct_gen_pp"
 STAGING_ID = "7702070854497379551"
 A, B, PREV = "20261105000000", "20261105010000", "20261104000000"
@@ -35,6 +40,7 @@ LABEL = {"POL": "the policies on storage.objects", "FN": "the photo functions (b
 def psql(*args, db=DB, quiet=True):
     cmd = ["psql", "-h", SOCK, "-p", PORT, "-U", "postgres", "-v", "ON_ERROR_STOP=1", "-At", "-d", db] + list(args)
     env = dict(os.environ, PGOPTIONS="-c client_min_messages=warning")
+    # nosemgrep: python.lang.security.audit.dangerous-subprocess-use-tainted-env-args.dangerous-subprocess-use-tainted-env-args -- list argv, no shell, PGSOCK/PGPORT validated above, local test server only
     r = subprocess.run(cmd, capture_output=True, text=True, env=env)
     if r.returncode != 0:
         sys.exit(f"psql failed: {' '.join(args)[:200]}\n{r.stderr}")

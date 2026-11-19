@@ -13,10 +13,15 @@ Step B also refuses unless the new app code has handled a wake-up with the serve
 Usage (local Postgres, as in supabase/tests): python3 scripts/staging/gen_d08_files.py [--check]
 Then: sh supabase/tests/staging_d08_test.sh   (CI checks that the committed files are up to date).
 """
-import os, subprocess, sys
+import os
+import re, subprocess, sys
 
 REPO = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
 SOCK = os.environ.get("PGSOCK", "/var/tmp/pgc"); PORT = os.environ.get("PGPORT", "54329")
+# Local test server only: the socket must be a plain absolute path and the port a number (they reach psql as list
+# arguments, never through a shell).
+if not re.fullmatch(r"/[A-Za-z0-9_./-]{1,200}", SOCK) or ".." in SOCK or not re.fullmatch(r"\d{2,5}", PORT):
+    sys.exit("PGSOCK must be an absolute socket directory and PGPORT a port number")
 DB = "ct_gen_d08"
 STAGING_ID = "7702070854497379551"
 PREV, A, B = "20261105010000", "20261114000000", "20261114010000"
@@ -37,6 +42,7 @@ LABEL = {"FN": "the dispatch functions (body, search_path, definer, execute righ
 
 def psql(*args, db=DB):
     cmd = ["psql", "-h", SOCK, "-p", PORT, "-U", "postgres", "-v", "ON_ERROR_STOP=1", "-At", "-d", db] + list(args)
+    # nosemgrep: python.lang.security.audit.dangerous-subprocess-use-tainted-env-args.dangerous-subprocess-use-tainted-env-args -- list argv, no shell, PGSOCK/PGPORT validated above, local test server only
     r = subprocess.run(cmd, capture_output=True, text=True, env=dict(os.environ, PGOPTIONS="-c client_min_messages=warning"))
     if r.returncode != 0:
         sys.exit(f"psql failed: {' '.join(args)[:200]}\n{r.stderr}")
