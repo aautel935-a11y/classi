@@ -201,6 +201,16 @@ begin
   if ledger_looks_like_card(p_description) or ledger_looks_like_card(p_customer_label) then
     raise exception 'لا تكتب أرقام بطاقات أو حسابات بنكية في Classi';
   end if;
+  -- A charge shows up in a customer's account only if that customer really dealt with this business (a booking or a
+  -- lesson package on its offers): no business can put a debt in a stranger's account.
+  if p_customer is not null and not exists (
+       select 1 from bookings b join offerings o on o.id = b.offering_id
+        where b.booked_by = p_customer and ((v_t is not null and o.teacher_id = v_t) or (v_i is not null and o.institute_id = v_i))
+       union all
+       select 1 from lesson_packages k join offerings o on o.id = k.offering_id
+        where k.user_id = p_customer and ((v_t is not null and o.teacher_id = v_t) or (v_i is not null and o.institute_id = v_i))) then
+    raise exception 'هذا الزبون غير مرتبط بنشاطك';
+  end if;
   insert into charges (teacher_id, institute_id, customer_id, customer_label, description, amount, deposit_amount, due_on, created_by)
   values (v_t, v_i, p_customer, trim(p_customer_label), trim(p_description), round(p_amount, 2), round(p_deposit, 2), p_due_on, auth.uid())
   returning id into v_id;
@@ -247,6 +257,10 @@ begin
   if not found or not ledger_can(c.teacher_id, c.institute_id, 'payments.record') then raise exception 'المستحق غير موجود'; end if;
   if c.cancelled_at is not null then raise exception 'المستحق ملغى'; end if;
   if coalesce(p_kind, '') not in ('payment','deposit','refund') then raise exception 'نوع غير صالح'; end if;
+  -- money going back out lowers what was received: owner or payments.correct only
+  if p_kind = 'refund' and not ledger_can(c.teacher_id, c.institute_id, 'payments.correct') then
+    raise exception 'الاسترداد لصاحب العمل أو لمن يملك صلاحية التصحيح';
+  end if;
   if coalesce(p_method, '') not in ('cash','bit','paybox','bank_transfer','cheque','other') then raise exception 'طريقة الدفع غير صالحة'; end if;
   if v_amt <= 0 then raise exception 'المبلغ يجب أن يكون أكبر من صفر'; end if;
   if v_on > (now() at time zone 'Asia/Jerusalem')::date + 1 then raise exception 'تاريخ الدفع في المستقبل'; end if;

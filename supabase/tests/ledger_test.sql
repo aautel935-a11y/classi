@@ -27,6 +27,10 @@ create temp table ids as select
   (select id from institutes where owner_id='71000000-0000-0000-0000-00000000000f') inst2,
   (select id from staffer) staff_t;
 grant select on ids to authenticated;
+-- mom is a real customer of Samer (one confirmed booking): only then may Samer link charges to her account
+insert into bookings (offering_id, booked_by, starts_at, status, price)
+select o.id, '71000000-0000-0000-0000-00000000000d', now() + interval '3 days', 'confirmed', 180
+  from offerings o where o.teacher_id = (select samer from ids) limit 1;
 create temp table v (k text primary key, id uuid);
 grant all on v to authenticated;
 \echo '===== preconditions'
@@ -140,6 +144,8 @@ select t_is('staff with payments.record sees the institute''s charges', $$select
 select t_is('staff''s ledger list: the institute, record only', $$select is_owner::text || can_record::text || can_correct::text || can_reports::text from my_ledger_businesses() where business_id = (select inst from ids)$$, 'falsetruefalsefalse');
 select t_ok('staff records a payment', $$insert into v select 'p4', record_payment((select id from v where k='c3'), 'payment', 300, 'paybox')$$);
 select t_ok('staff may void own entry within 24h', $$select void_payment((select id from v where k='p4'), 'المبلغ خطأ')$$);
+select t_err('staff cannot refund (needs payments.correct)', $$select record_payment((select id from v where k='c3'), 'refund', 10, 'cash')$$);
+select t_err('staff cannot put a charge in a stranger''s account', $$select create_charge(null, (select inst from ids), 'غريب', 'دين', 50, null, null, '71000000-0000-0000-0000-00000000000e')$$);
 select t_ok('staff records again', $$insert into v select 'p5', record_payment((select id from v where k='c3'), 'payment', 200, 'paybox')$$);
 select t_err('staff cannot cancel (needs payments.correct)', $$select cancel_charge((select id from v where k='c3'), 'إلغاء')$$);
 select t_err('staff cannot adjust', $$select adjust_charge((select id from v where k='c3'), 10, null, 'خصم')$$);
@@ -172,9 +178,6 @@ select t_is('teacher does not see the institute''s charges', $$select count(*)::
 reset role;
 
 \echo '===== charge from a booking'
-insert into bookings (offering_id, booked_by, starts_at, status, price)
-select o.id, '71000000-0000-0000-0000-00000000000d', now() + interval '3 days', 'confirmed', 180
-  from offerings o where o.teacher_id = (select samer from ids) limit 1;
 set role authenticated; set request.jwt.claim.sub='71000000-0000-0000-0000-00000000000a';
 select t_ok('charge for the booking', $$insert into v select 'c4', charge_for_booking((select b.id from bookings b join offerings o on o.id=b.offering_id where o.teacher_id=(select samer from ids) and b.booked_by='71000000-0000-0000-0000-00000000000d' and b.price=180))$$);
 select t_is('same booking returns the same charge', $$select (charge_for_booking((select b.id from bookings b join offerings o on o.id=b.offering_id where o.teacher_id=(select samer from ids) and b.booked_by='71000000-0000-0000-0000-00000000000d' and b.price=180)) = (select id from v where k='c4'))::text$$, 'true');
@@ -183,6 +186,10 @@ reset role;
 set role authenticated; set request.jwt.claim.sub='71000000-0000-0000-0000-00000000000e';
 select t_err('another teacher cannot charge Samer''s booking', $$select charge_for_booking((select b.id from bookings b join offerings o on o.id=b.offering_id where o.teacher_id=(select samer from ids) and b.price=180))$$);
 reset role;
+set role authenticated; set request.jwt.claim.sub='71000000-0000-0000-0000-00000000000a';
+select t_err('teacher cannot put a charge in the account of someone who never booked', $$select create_charge(null, null, 'x', 'y', 10, null, null, '71000000-0000-0000-0000-00000000000b')$$);
+select t_ok('teacher may link a real customer (she booked)', $$select create_charge(null, null, 'أم يوسف', 'حصة إضافية', 60, null, null, '71000000-0000-0000-0000-00000000000d')$$);
+reset role;
 set role authenticated; set request.jwt.claim.sub='71000000-0000-0000-0000-00000000000d';
-select t_is('customer now sees two charges', $$select count(*)::text from my_charges()$$, '2');
+select t_is('customer now sees three charges', $$select count(*)::text from my_charges()$$, '3');
 reset role;
