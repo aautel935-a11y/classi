@@ -434,13 +434,13 @@ begin
     'from', p_from, 'to', p_to,
     'received_total', coalesce((select sum(total) from received), 0),
     'received_by_method', coalesce((select jsonb_object_agg(method, total) from received), '{}'::jsonb),
-    'charged_in_period', coalesce((select sum(amount) from mine where cancelled_at is null and created_at::date between p_from and p_to), 0),
+    'charged_in_period', coalesce((select sum(amount) from mine where cancelled_at is null and (created_at at time zone 'Asia/Jerusalem')::date between p_from and p_to), 0),
     'open_total', coalesce((select sum(rest) from open_), 0),
     'open_count', (select count(*) from open_),
     'overdue_0_30', coalesce((select sum(rest) from open_ where due_on < v_today and due_on >= v_today - 30), 0),
     'overdue_31_60', coalesce((select sum(rest) from open_ where due_on < v_today - 30 and due_on >= v_today - 60), 0),
     'overdue_over_60', coalesce((select sum(rest) from open_ where due_on < v_today - 60), 0),
-    'corrections', (select count(*) from payments p join mine m on m.id = p.charge_id where p.kind = 'void' and p.recorded_at::date between p_from and p_to),
+    'corrections', (select count(*) from payments p join mine m on m.id = p.charge_id where p.kind = 'void' and (p.recorded_at at time zone 'Asia/Jerusalem')::date between p_from and p_to),
     'notice', 'سجل إداري لما سجّله صاحب العمل. Classi لا يستلم الأموال ولا يؤكد وصولها، وهذا ليس مستنداً ضريبياً.'
   ) into r;
   return r;

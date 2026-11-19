@@ -75,12 +75,15 @@ export function csvRows(rows: unknown[][]): string {
   return rows.map((r) => r.map(csvCell).join(",")).join("\r\n");
 }
 
+/** A timestamp as its Israeli calendar day (YYYY-MM-DD). */
+export const ilDay = (ts: string) => new Date(ts).toLocaleDateString("en-CA", { timeZone: "Asia/Jerusalem" });
+
 /** The business's charges as CSV for the accountant: a UTF-8 BOM (Excel shows Arabic), the notice, then one row per charge. */
 export function chargesCsv(rows: ChargeRow[]): string {
   const head = ["الزبون", "الوصف", "المبلغ", "العربون", "المدفوع", "المتبقي", "الحالة", "تاريخ الاستحقاق", "أُنشئ", "سبب الإلغاء"];
   const body = rows.map((r) => [
     r.customer_label, r.description, r.amount, r.deposit_amount ?? "", r.paid, r.remaining, STATUS_LABEL[r.status] ?? r.status,
-    r.due_on ?? "", r.created_at.slice(0, 10), r.cancel_reason ?? "",
+    r.due_on ?? "", ilDay(r.created_at), r.cancel_reason ?? "",
   ]);
   return "﻿" + csvRows([[LEDGER_NOTICE], head, ...body]) + "\r\n";
 }

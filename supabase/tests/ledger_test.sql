@@ -3,6 +3,8 @@
 \pset pager off
 \pset footer off
 set client_min_messages = notice;
+-- Israeli calendar days, as the app and the ledger functions use (CI's database runs in UTC; at night the days differ)
+set timezone = 'Asia/Jerusalem';
 
 insert into auth.users (id, email, raw_user_meta_data) values
  ('71000000-0000-0000-0000-00000000000a','samer@t','{"full_name":"سامر مصاروة"}'),

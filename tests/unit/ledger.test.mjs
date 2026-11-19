@@ -48,6 +48,11 @@ test("charges CSV starts with a BOM and the notice, one row per charge", () => {
   assert.match(lines[2], /مدفوع جزئياً/);
 });
 
+test("ilDay gives the Israeli calendar day (late evening UTC is already the next day)", () => {
+  assert.equal(L.ilDay("2026-11-19T22:30:00Z"), "2026-11-20");
+  assert.equal(L.ilDay("2026-11-19T10:00:00Z"), "2026-11-19");
+});
+
 test("totals leave cancelled charges out", () => {
   const t = L.totals([
     { amount: 100, paid: 40, remaining: 60, status: "overdue" },
