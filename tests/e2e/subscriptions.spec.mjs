@@ -165,8 +165,11 @@ test("subscriptions: admin settings and actions, owner trial, warning, grace, ex
       expect(await publicStatus()).toBe(404);
       await tp.goto("/teach", { waitUntil: "networkidle" });
       await expect(tp.getByText("لا يوجد اشتراك فعّال")).toBeVisible();
-      await expect(tp.locator("#bio")).toHaveValue(/بياناتي يجب أن تبقى/);
-      expect((await sql("select count(*)::int n from teachers where id = $1 and user_id = $2", [teacher, tUser]))[0].n).toBe(1);
+      await expect(tp.locator("#hours")).toBeVisible();   // the owner's dashboard is all there
+      // the profile (its text may still wait for review in pending_changes) and the verification are kept
+      const kept = (await sql("select coalesce(nullif(bio, ''), pending_changes->>'bio') as bio, verify::text from teachers where id = $1 and user_id = $2", [teacher, tUser]))[0];
+      expect(kept).toEqual({ bio: "أفتح الأقفال وأنسخ المفاتيح، بياناتي يجب أن تبقى.", verify: "verified" });
+      expect((await sql("select count(*)::int n from subscriptions where teacher_id = $1", [teacher]))[0].n).toBe(1);
     });
 
     // ---------- renewal: the admin confirms the transfer ----------
