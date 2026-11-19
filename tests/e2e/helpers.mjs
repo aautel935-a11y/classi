@@ -107,3 +107,31 @@ export async function expectNoSideScroll(page) {
   const overflow = await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth);
   expect(overflow, "page must not scroll sideways").toBeLessThanOrEqual(1);
 }
+
+/**
+ * Call a database function AS the signed-in user of a browser context, straight through the REST API (local stack
+ * only): the access token is read from that context's own Supabase session cookie. Used to prove that the database
+ * refuses what the screens do not offer. Returns { status, body }.
+ */
+export async function rpcAs(context, fn, args = {}) {
+  const base = process.env.NEXT_PUBLIC_SUPABASE_URL, anon = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+  if (!base || !/^http:\/\/(127\.0\.0\.1|localhost)(:\d+)?$/.test(base)) throw new Error("rpcAs runs only against the local stack");
+  const parts = (await context.cookies()).filter((c) => /^sb-.+-auth-token(\.\d+)?$/.test(c.name))
+    .sort((a, b) => Number(a.name.split(".").pop()) - Number(b.name.split(".").pop()) || a.name.localeCompare(b.name));
+  if (!parts.length) throw new Error("no Supabase session cookie in this context");
+  let raw = parts.map((c) => c.value).join("");
+  if (raw.startsWith("base64-")) raw = Buffer.from(raw.slice(7), "base64url").toString("utf8");
+  const s = JSON.parse(decodeURIComponent(raw));
+  const token = Array.isArray(s) ? s[0] : s.access_token;
+  const r = await fetch(`${base}/rest/v1/rpc/${fn}`, {
+    method: "POST",
+    headers: { apikey: anon, authorization: `Bearer ${token}`, "content-type": "application/json" },
+    body: JSON.stringify(args),
+  });
+  const text = await r.text();
+  let body; try { body = JSON.parse(text); } catch { body = text; }
+  return { status: r.status, body };
+}
+
+/** Today in Israel as YYYY-MM-DD, plus n days. */
+export const dayIL = (n = 0) => new Date(Date.now() + n * 864e5).toLocaleDateString("en-CA", { timeZone: "Asia/Jerusalem" });
