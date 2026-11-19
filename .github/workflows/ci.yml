@@ -97,6 +97,12 @@ jobs:
       - name: Rollback drill (D-08 steps B then A down files)
         if: always()
         run: sh supabase/tests/rollback_drill.sh supabase/rollback/20261114010000_d08_enforce.down.sql,supabase/rollback/20261114000000_d08_workers.down.sql rollback_d08_checks flow_test roles_test 2>&1 | tee /tmp/drill_d08.log
+      - name: v3 rollback restores the exact pre-v3 schema (ledger, business access)
+        if: always()
+        run: sh supabase/tests/v3_rollback_test.sh 2>&1 | tee /tmp/v3_rollback.log
+      - name: Rollback drill (v3 business access, then ledger)
+        if: always()
+        run: sh supabase/tests/rollback_drill.sh supabase/rollback/20261120010000_v3_business_access.down.sql,supabase/rollback/20261120000000_v3_ledger.down.sql launch_test phase3_test payments_test security_test flow_test 2>&1 | tee /tmp/drill_v3.log
       - name: Rollback drill (phase 2 down file)
         if: always()
         run: sh supabase/tests/rollback_drill.sh supabase/rollback/20261031010000_functional_fixes.down.sql flow_test roles_test security_test 2>&1 | tee /tmp/drill.log
