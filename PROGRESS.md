@@ -1,6 +1,7 @@
 # Classi v3 — PROGRESS
 
-Branch: `v3/dev` (from `hardening/d08` at `7af7aef`). **Local only: not pushed, not merged, not deployed.**
+Branch: `v3/dev` (from `hardening/d08` at `7af7aef`). **Pushed to GitHub on 19/11 with the owner's approval; not merged, not deployed.**
+Vercel: `vercel.json` turns off deployments for `v3/**`; checked afterwards: no deployment exists for `v3/dev` in either project.
 Nothing was changed in Production, Staging, `main`, their databases, Vercel, GitHub settings or secrets.
 D-08 Migration B was not run. No real customer data was used: every test runs on throw-away local Postgres 16
 databases with synthetic accounts.
@@ -17,6 +18,26 @@ Plan: [Classi v3 — الخطة الموحدة](https://claude.ai/artifact/VnmWq
 | 3 | **Screens** (plus a "record a partial payment" link from each open booking): `/ledger` (owner and permitted staff: totals, 30-day report by method, overdue ageing, filters, new charge, payments, corrections, adjust/cancel, staff permissions, CSV export that cannot inject spreadsheet formulas); customer's read-only "مستحقاتي" on `/account` with the notice; admin trial/grace/launch settings, per-business state, extension, exemption, discount; owner trial/grace banner. | `5ee4896` |
 | 4 | **Free security CI**: Gitleaks over the whole history (binary pinned to the release checksum), Semgrep CE (ERROR fails), CodeQL security-extended, dependency review on PRs, Dependabot config. CI and the scans also run on `v3/**`. `vercel.json` turns off Vercel deployments for `v3/**`, so a later push builds nothing. | `3577816` + this commit |
 | 5 | **Rollback**: down files for both v3 migrations; `v3_rollback_test.sh` proves the schema after rollback is identical (functions, grants, settings, tables, columns) to the schema without v3. Added to CI. | `f0d3436` |
+
+## CI on GitHub (19/11/2026, commit `549998c`)
+
+| Job | Result | Run |
+|---|---|---|
+| quality: npm ci, npm audit, TypeScript, ESLint, unit tests, guards, `next build` | PASS | [job](https://github.com/aautel935-a11y/classi/actions/runs/44613829890/job/135877066377) |
+| database: 34 SQL suites, RPC grants, rollback drills, v3 rollback exactness | PASS | [job](https://github.com/aautel935-a11y/classi/actions/runs/44613829890/job/135877066346) |
+| staging files on PostgreSQL 17 | PASS | [job](https://github.com/aautel935-a11y/classi/actions/runs/44613829890/job/135877066353) |
+| e2e: Playwright on a local Supabase stack (37 passed, 5 skipped as before), incl. the new ledger journey on phone and desktop; backup/restore drill | PASS | [job](https://github.com/aautel935-a11y/classi/actions/runs/44613829890/job/135877065784) |
+| Gitleaks, whole history | PASS | [job](https://github.com/aautel935-a11y/classi/actions/runs/44613829874/job/135877066511) |
+| Semgrep CE (ERROR blocks) | PASS (10 warnings: actions pinned by tag, not SHA) | [job](https://github.com/aautel935-a11y/classi/actions/runs/44613829874/job/135877066101) |
+| CodeQL security-extended | PASS (alerts list not readable from here) | [job](https://github.com/aautel935-a11y/classi/actions/runs/44613829874/job/135877066578) |
+
+Fixed on the way (all in `v3/dev`): ledger E2E locator; Semgrep install (now the pinned official image) and readable
+annotations; two Semgrep ERROR findings in the staging-file generators (input validation); `payments.voids` foreign key
+deferrable (backup drill warning); two permission tightenings (below).
+
+Permission review (after the first push): a charge may be linked to a customer's account only if that customer booked
+or bought a package from the business; refunds need the owner or `payments.correct`. Both covered by `ledger_test`
+(100 checks).
 
 ## Files
 
@@ -51,15 +72,15 @@ switch is off), `admin_set_setting` (the phase-3 version plus `trial_days`, `gra
 
 ## Not verified here (needs the owner or CI)
 
-- **`next build`, full `tsc`, ESLint, Playwright E2E**: this workspace cannot reach the npm registry, so Next.js and
-  its types are not installed. They run in GitHub Actions once the branch is pushed (pending approval, item 1).
-- Semgrep and CodeQL run only in Actions.
+- Now verified in GitHub Actions (table above). Still not covered by E2E: the admin access screens and the owner's
+  trial banner (SQL-tested only), and staff-permission toggles in the browser.
+- CodeQL alerts and Dependabot alerts cannot be listed from this workspace (GitHub blocks those API paths here).
 
 ## PENDING_APPROVAL
 
 | # | Needs your decision | Why it waits |
 |---|---|---|
-| 1 | Push `v3/dev` to GitHub (CI + security scans run; Vercel builds nothing for `v3/**`) | First full build and E2E of the new screens |
+| 1 | ~~Push `v3/dev`~~ done 19/11 with approval; CI green | — |
 | 2 | Apply the two v3 migrations to **Staging** (SQL Editor, guarded files to be generated like D-08's) | Changes a hosted database |
 | 3 | D-08 Migration B on Staging | Separate approval; the probe marker expires 20/11 19:14 (Jerusalem), so a new probe is needed first |
 | 4 | Prices (proposal in the plan, section 4), trial 30 days, grace 7 days, the launch date, and when to turn on `subscriptions_required` | Business decisions |
