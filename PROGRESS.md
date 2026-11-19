@@ -74,6 +74,10 @@ and 8 parser notices (shell scripts, one TypeScript `satisfies`), not findings.
 CodeQL: `js/user-controlled-bypass` at `app/auth/confirm/route.ts` — **false positive**: the guarded action is the
 token verification itself (done by Supabase); the route now also accepts only Classi's link types and a well-formed
 token. The action was upgraded to v4 (v3 is deprecated in December 2026).
+Found by CI after midnight (20/11): the database job runs in UTC, so between 00:00 and 02:00 Israel time two
+counters of `ledger_report` and two test inputs used the previous day. Fixed: every v3 date is the Israeli calendar day
+(report counters, CSV creation day, test dates); all 32 suites pass with the session in UTC as well.
+
 Dependabot alerts: **disabled** for the repository (GitHub answer); enabling them is a settings change → owner.
 
 ## Files
