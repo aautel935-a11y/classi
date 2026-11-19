@@ -7,6 +7,7 @@ import { db, expectNoSideScroll, localSql, phoneFor, signUp } from "./helpers.mj
 test.describe.configure({ mode: "serial" });
 
 test("ledger: charge, deposit, payment, correction, export, isolation", async ({ browser }, info) => {
+  test.setTimeout(150_000); // two sign-ups and nine form posts
   const ctx = await browser.newContext(); const page = await ctx.newPage();
   const phone = await phoneFor(info, 41);
   const user = await signUp(page, { phone, name: "حرفي السجل", role: "teacher" });
@@ -52,7 +53,8 @@ test("ledger: charge, deposit, payment, correction, export, isolation", async ({
   await expect(page.locator(".card").filter({ hasText: "زبون الاختبار" }).first().getByText("مدفوع", { exact: true })).toBeVisible();
 
   // 4. documented correction of the cash entry: the original stays visible, the charge is partial again
-  const cashEntry = page.locator(".card").filter({ hasText: "نقداً" }).filter({ hasText: "250" }).first();
+  // an entry card sits inside the charge card (the 30-day report card also mentions "cash 250")
+  const cashEntry = page.locator(".card .card").filter({ hasText: "نقداً" }).filter({ hasText: "250" }).first();
   await cashEntry.locator("summary", { hasText: "تصحيح هذه الدفعة" }).click();
   await cashEntry.locator('input[name="reason"]').fill("سُجّلت بالخطأ");
   await cashEntry.getByRole("button", { name: /إلغاء هذه الدفعة/ }).click();
