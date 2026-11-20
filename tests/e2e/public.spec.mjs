@@ -79,3 +79,14 @@ test("SEC-26. a crafted ?error= link cannot put its words on the page", async ({
   await expect(page.getByRole("alert")).toHaveText("تعذّر إتمام العملية. حاول مرة أخرى.");
   await expect(page.getByText(lure)).toHaveCount(0);
 });
+
+test("phone: form fields are at least 16px (no zoom on focus in iPhone Safari), chips are easy to tap", async ({ page }) => {
+  await page.goto("/login");
+  const sizes = await page.locator("input:visible, select:visible, textarea:visible").evaluateAll((els) =>
+    els.map((e) => parseFloat(getComputedStyle(e).fontSize)));
+  expect(sizes.length).toBeGreaterThan(0);
+  for (const s of sizes) expect(s).toBeGreaterThanOrEqual(16);
+  await page.goto("/search");
+  const chips = await page.locator(".chip:visible").evaluateAll((els) => els.map((e) => e.getBoundingClientRect().height));
+  for (const h of chips) expect(h).toBeGreaterThanOrEqual(36);
+});

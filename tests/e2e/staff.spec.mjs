@@ -3,7 +3,7 @@
 // the admin's part); every ledger action goes through the browser, and what the screens hide is also tried directly
 // at the database with the user's own session (it must be refused there too).
 import { test, expect } from "@playwright/test";
-import { db, localSql as sql, phoneFor, rpcAs, signUp } from "./helpers.mjs";
+import { db, expectNoSideScroll, localSql as sql, phoneFor, rpcAs, signUp } from "./helpers.mjs";
 
 test.describe.configure({ mode: "serial" });
 
@@ -148,6 +148,7 @@ test("staff permissions and isolation between institutes", async ({ browser }, i
   await test.step("the customer sees her charge with the notice; an unrelated customer sees none", async () => {
     await cp.goto("/account", { waitUntil: "networkidle" });
     const box = cp.locator("#charges");
+    if (info.project.name === "mobile") await expectNoSideScroll(cp);
     await expect(box).toContainText(instName);
     await expect(box).toContainText("Classi لا يستلم الأموال");
     await expect(box).toContainText("مدفوع جزئياً");

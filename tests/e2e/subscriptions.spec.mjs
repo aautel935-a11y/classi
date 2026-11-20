@@ -4,7 +4,7 @@
 // keeps everything, renewal that brings it back.
 // The tests play the clock by moving the trial end in the LOCAL database, and put every setting back at the end.
 import { test, expect } from "@playwright/test";
-import { dayIL, db, localSql as sql, phoneFor, rpcAs, signUp } from "./helpers.mjs";
+import { dayIL, db, expectNoSideScroll, localSql as sql, phoneFor, rpcAs, signUp } from "./helpers.mjs";
 
 test.describe.configure({ mode: "serial" });
 
@@ -69,6 +69,7 @@ test("subscriptions: admin settings and actions, owner trial, warning, grace, ex
     const done = async () => { await expect(ap.locator(".okmsg")).toHaveText("تم."); await expect(ap.locator("p.err")).toHaveCount(0); };
     const setting = async (key, value) => {
       await ap.goto("/admin?tab=subs", { waitUntil: "networkidle" });
+      if (info.project.name === "mobile") await expectNoSideScroll(ap);
       const f = ap.locator("form").filter({ has: ap.locator(`input[name="key"][value="${key}"]`) });
       await f.locator('input[name="value"]').fill(value);
       await f.getByRole("button", { name: "حفظ" }).click();
