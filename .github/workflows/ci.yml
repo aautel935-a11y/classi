@@ -100,6 +100,9 @@ jobs:
       - name: Production fingerprint (main's 25 migrations rebuild the schema production had on 20/11; no hosted database)
         if: always()
         run: sh supabase/tests/production_fingerprint_test.sh 2>&1 | tee /tmp/prodfp.log
+      - name: Production step 0 files (tracking + marker; local production-like copy, never the real one)
+        if: always()
+        run: sh supabase/tests/production_step0_test.sh 2>&1 | tee /tmp/prod0.log
       - name: v3 rollback restores the exact pre-v3 schema (ledger, business access)
         if: always()
         run: sh supabase/tests/v3_rollback_test.sh 2>&1 | tee /tmp/v3_rollback.log
@@ -176,7 +179,7 @@ jobs:
           DB=ct_perf node --experimental-strip-types --no-warnings tests/search-equivalence.mjs 2>&1 | tee /tmp/searcheq.log
       - name: Report (annotations)
         if: always()
-        run: sh .github/report.sh "database" /tmp/stgmig.log /tmp/safeupdate.log /tmp/sql.log /tmp/conc.log /tmp/grants.log /tmp/d08_staging.log /tmp/v3_staging.log /tmp/drill_d08b.log /tmp/drill_d08.log /tmp/drill.log /tmp/drill5.log /tmp/drill4.log /tmp/drill3.log /tmp/searcheq.log /tmp/prodfp.log
+        run: sh .github/report.sh "database" /tmp/stgmig.log /tmp/safeupdate.log /tmp/sql.log /tmp/conc.log /tmp/grants.log /tmp/d08_staging.log /tmp/v3_staging.log /tmp/drill_d08b.log /tmp/drill_d08.log /tmp/drill.log /tmp/drill5.log /tmp/drill4.log /tmp/drill3.log /tmp/searcheq.log /tmp/prodfp.log /tmp/prod0.log
 
   staging-files-pg17:
     # classi-staging runs PostgreSQL 17: the guarded staging files compare the database state as PostgreSQL prints it
@@ -212,6 +215,9 @@ jobs:
       - name: Production fingerprint on PostgreSQL 17 (production's version)
         if: always()
         run: sh supabase/tests/production_fingerprint_test.sh 2>&1 | tee /tmp/prodfp17.log
+      - name: Production step 0 files on PostgreSQL 17
+        if: always()
+        run: sh supabase/tests/production_step0_test.sh 2>&1 | tee /tmp/prod017.log
       - name: Staging backup script on PostgreSQL 17 (synthetic local databases; the runner pg_dump is 17, like classi-staging)
         if: always()
         run: |
@@ -219,7 +225,7 @@ jobs:
           sh supabase/tests/staging_backup_test.sh 2>&1 | tee /tmp/backup_test.log
       - name: Report (annotations)
         if: always()
-        run: sh .github/report.sh "staging-files-pg17" /tmp/pp17.log /tmp/p0117.log /tmp/d0817.log /tmp/v317.log /tmp/backup_test.log /tmp/prodfp17.log
+        run: sh .github/report.sh "staging-files-pg17" /tmp/pp17.log /tmp/p0117.log /tmp/d0817.log /tmp/v317.log /tmp/backup_test.log /tmp/prodfp17.log /tmp/prod017.log
 
   backup-drill:
     # The "Staging backup" workflow's own path (Supabase CLI dump, PostgreSQL 17 on both sides, age, an isolated

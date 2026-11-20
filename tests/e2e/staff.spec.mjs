@@ -151,6 +151,7 @@ test("staff permissions and isolation between institutes", async ({ browser }, i
     await expect(box).toContainText(instName);
     await expect(box).toContainText("Classi لا يستلم الأموال");
     await expect(box).toContainText("مدفوع جزئياً");
+    await expect(box).toContainText("المتبقي عليك حسب ما سجّلته الأنشطة");   // partly paid: something is still owed
     await expect(box.getByRole("button")).toHaveCount(0);   // read only
     await xp.goto("/account", { waitUntil: "networkidle" });
     await expect(xp.locator("#charges")).toHaveCount(0);
