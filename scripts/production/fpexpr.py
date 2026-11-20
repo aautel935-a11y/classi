@@ -4,4 +4,4 @@ import os
 
 _src = open(os.path.join(os.path.dirname(os.path.abspath(__file__)), "fingerprint.sql")).read()
 _body = _src[_src.index("with f as"):_src.rindex("order by 1;")].strip()
-FP = f"(select string_agg(part || '|' || n || '|' || fp, E'\\n' order by part) from ({_body}) s)"
+FP = f"(select string_agg(part || '|' || n || '|' || fp, E'\\n' order by part collate \"C\") from ({_body}) s)"

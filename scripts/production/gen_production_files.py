@@ -89,6 +89,7 @@ def read(path):
         return f.read()
 
 
+TEMPS = []
 TXN = re.compile(r"(?im)^\s*(begin|commit)\s*;\s*$")
 
 
@@ -102,6 +103,7 @@ def rb_body(path):
 
 def rb_body_file(path):
     fd, tmp = tempfile.mkstemp(prefix="gen_prod_", suffix=".sql")
+    TEMPS.append(tmp)
     with os.fdopen(fd, "w", encoding="utf-8") as f:
         f.write("begin;\n" + rb_body(path) + "commit;\n")
     return tmp
@@ -252,5 +254,7 @@ for name, value, what in (("mark_private_photos_app_deployed.sql", "insert into 
         f.write(text)
     written.append(path)
 
+for t in TEMPS:
+    os.remove(t)
 for p in written:
     print("wrote", os.path.relpath(p, REPO))

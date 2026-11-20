@@ -28,7 +28,7 @@ begin
   if exists (select 1 from pg_roles where rolname in ('anon', 'authenticated') and rolbypassrls) then
     raise exception 'refusing (before): anon or authenticated bypasses row level security';
   end if;
-  v_fp := (select string_agg(part || '|' || n || '|' || fp, E'\n' order by part) from (with f as (
+  v_fp := (select string_agg(part || '|' || n || '|' || fp, E'\n' order by part collate "C") from (with f as (
   select p.proname || '(' || pg_get_function_identity_arguments(p.oid) || ')|'
          || md5(regexp_replace(regexp_replace(p.prosrc, '--[^\n]*', '', 'g'), '\s+', '', 'g')) || '|' || p.prosecdef || '|'
          || coalesce(array_to_string(p.proconfig, ','), '-') || '|anon=' || has_function_privilege('anon', p.oid, 'execute')
@@ -36,26 +36,26 @@ begin
   from pg_proc p
   where p.pronamespace = 'public'::regnamespace and p.proname !~ '^(t|test)_'
 )
-select 'functions' part, count(*) n, md5(string_agg(x, E'\n' order by x)) fp from f
+select 'functions' part, count(*) n, md5(string_agg(x, E'\n' order by x collate "C")) fp from f
 union all
-select 'columns', count(*), md5(string_agg(table_name || '.' || column_name || ':' || data_type, E'\n' order by table_name, column_name))
+select 'columns', count(*), md5(string_agg(table_name || '.' || column_name || ':' || data_type, E'\n' order by table_name collate "C", column_name collate "C"))
 from information_schema.columns where table_schema = 'public'
 union all
-select 'policies', count(*), md5(string_agg(tablename || '.' || policyname || ':' || cmd || ':' || array_to_string(roles, ','), E'\n' order by tablename, policyname))
+select 'policies', count(*), md5(string_agg(tablename || '.' || policyname || ':' || cmd || ':' || array_to_string(roles, ','), E'\n' order by tablename collate "C", policyname collate "C"))
 from pg_policies where schemaname = 'public'
 union all
-select 'triggers', count(*), md5(string_agg(tgrelid::regclass || '.' || tgname, E'\n' order by tgrelid::regclass::text, tgname))
+select 'triggers', count(*), md5(string_agg(tgrelid::regclass || '.' || tgname, E'\n' order by tgrelid::regclass::text collate "C", tgname collate "C"))
 from pg_trigger t join pg_class c on c.oid = t.tgrelid where not t.tgisinternal and c.relnamespace = 'public'::regnamespace
 union all
 select 'rls_off', count(*), '-' from pg_class c where c.relnamespace = 'public'::regnamespace and c.relkind = 'r' and not c.relrowsecurity
 union all
 select 'storage', (select count(*) from pg_policies where schemaname = 'storage'),
-  md5(coalesce((select string_agg(tablename || '.' || policyname || ':' || cmd || ':' || array_to_string(roles, ','), E'\n' order by tablename, policyname)
+  md5(coalesce((select string_agg(tablename || '.' || policyname || ':' || cmd || ':' || array_to_string(roles, ','), E'\n' order by tablename collate "C", policyname collate "C")
                 from pg_policies where schemaname = 'storage'), '') || '#'
-      || coalesce((select string_agg(id || ':' || public, ',' order by id) from storage.buckets), ''))
+      || coalesce((select string_agg(id || ':' || public, ',' order by id collate "C") from storage.buckets), ''))
 union all
 select 'app_private', count(*), coalesce(md5(string_agg(p.proname || '(' || pg_get_function_identity_arguments(p.oid) || ')|'
-       || md5(regexp_replace(regexp_replace(p.prosrc, '--[^\n]*', '', 'g'), '\s+', '', 'g')) || '|' || p.prosecdef, E'\n' order by p.proname)), '-')
+       || md5(regexp_replace(regexp_replace(p.prosrc, '--[^\n]*', '', 'g'), '\s+', '', 'g')) || '|' || p.prosecdef, E'\n' order by p.proname collate "C", pg_get_function_identity_arguments(p.oid) collate "C")), '-')
 from pg_proc p join pg_namespace n on n.oid = p.pronamespace where n.nspname = 'app_private') s);
   if v_fp is distinct from $exp$app_private|2|f51d714b36da8337372cb03d037e1890
 columns|315|94e5359c80d8a30f2459676cd060d7fc
@@ -328,7 +328,7 @@ begin
   if exists (select 1 from pg_roles where rolname in ('anon', 'authenticated') and rolbypassrls) then
     raise exception 'refusing (before commit): anon or authenticated bypasses row level security';
   end if;
-  v_fp := (select string_agg(part || '|' || n || '|' || fp, E'\n' order by part) from (with f as (
+  v_fp := (select string_agg(part || '|' || n || '|' || fp, E'\n' order by part collate "C") from (with f as (
   select p.proname || '(' || pg_get_function_identity_arguments(p.oid) || ')|'
          || md5(regexp_replace(regexp_replace(p.prosrc, '--[^\n]*', '', 'g'), '\s+', '', 'g')) || '|' || p.prosecdef || '|'
          || coalesce(array_to_string(p.proconfig, ','), '-') || '|anon=' || has_function_privilege('anon', p.oid, 'execute')
@@ -336,26 +336,26 @@ begin
   from pg_proc p
   where p.pronamespace = 'public'::regnamespace and p.proname !~ '^(t|test)_'
 )
-select 'functions' part, count(*) n, md5(string_agg(x, E'\n' order by x)) fp from f
+select 'functions' part, count(*) n, md5(string_agg(x, E'\n' order by x collate "C")) fp from f
 union all
-select 'columns', count(*), md5(string_agg(table_name || '.' || column_name || ':' || data_type, E'\n' order by table_name, column_name))
+select 'columns', count(*), md5(string_agg(table_name || '.' || column_name || ':' || data_type, E'\n' order by table_name collate "C", column_name collate "C"))
 from information_schema.columns where table_schema = 'public'
 union all
-select 'policies', count(*), md5(string_agg(tablename || '.' || policyname || ':' || cmd || ':' || array_to_string(roles, ','), E'\n' order by tablename, policyname))
+select 'policies', count(*), md5(string_agg(tablename || '.' || policyname || ':' || cmd || ':' || array_to_string(roles, ','), E'\n' order by tablename collate "C", policyname collate "C"))
 from pg_policies where schemaname = 'public'
 union all
-select 'triggers', count(*), md5(string_agg(tgrelid::regclass || '.' || tgname, E'\n' order by tgrelid::regclass::text, tgname))
+select 'triggers', count(*), md5(string_agg(tgrelid::regclass || '.' || tgname, E'\n' order by tgrelid::regclass::text collate "C", tgname collate "C"))
 from pg_trigger t join pg_class c on c.oid = t.tgrelid where not t.tgisinternal and c.relnamespace = 'public'::regnamespace
 union all
 select 'rls_off', count(*), '-' from pg_class c where c.relnamespace = 'public'::regnamespace and c.relkind = 'r' and not c.relrowsecurity
 union all
 select 'storage', (select count(*) from pg_policies where schemaname = 'storage'),
-  md5(coalesce((select string_agg(tablename || '.' || policyname || ':' || cmd || ':' || array_to_string(roles, ','), E'\n' order by tablename, policyname)
+  md5(coalesce((select string_agg(tablename || '.' || policyname || ':' || cmd || ':' || array_to_string(roles, ','), E'\n' order by tablename collate "C", policyname collate "C")
                 from pg_policies where schemaname = 'storage'), '') || '#'
-      || coalesce((select string_agg(id || ':' || public, ',' order by id) from storage.buckets), ''))
+      || coalesce((select string_agg(id || ':' || public, ',' order by id collate "C") from storage.buckets), ''))
 union all
 select 'app_private', count(*), coalesce(md5(string_agg(p.proname || '(' || pg_get_function_identity_arguments(p.oid) || ')|'
-       || md5(regexp_replace(regexp_replace(p.prosrc, '--[^\n]*', '', 'g'), '\s+', '', 'g')) || '|' || p.prosecdef, E'\n' order by p.proname)), '-')
+       || md5(regexp_replace(regexp_replace(p.prosrc, '--[^\n]*', '', 'g'), '\s+', '', 'g')) || '|' || p.prosecdef, E'\n' order by p.proname collate "C", pg_get_function_identity_arguments(p.oid) collate "C")), '-')
 from pg_proc p join pg_namespace n on n.oid = p.pronamespace where n.nspname = 'app_private') s);
   if v_fp is distinct from $exp$app_private|2|f51d714b36da8337372cb03d037e1890
 columns|316|25b2b1e05f9c142f3b68dbf8e4b3ae60
