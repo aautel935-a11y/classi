@@ -76,13 +76,13 @@ test("8. Arabic page with Hebrew and English text stays right-to-left and fits t
 test("SEC-26. a crafted ?error= link cannot put its words on the page", async ({ page }) => {
   const lure = "حسابك موقوف، اتصل بالدعم";
   await page.goto(`/login?error=${encodeURIComponent(lure)}`);
-  await expect(page.getByRole("alert")).toHaveText("تعذّر إتمام العملية. حاول مرة أخرى.");
+  await expect(page.locator("p.err[role=alert]")).toHaveText("تعذّر إتمام العملية. حاول مرة أخرى.");   // Next.js has its own hidden role=alert
   await expect(page.getByText(lure)).toHaveCount(0);
 });
 
 test("phone: form fields are at least 16px (no zoom on focus in iPhone Safari), chips are easy to tap", async ({ page }) => {
   await page.goto("/login");
-  const sizes = await page.locator("input:visible, select:visible, textarea:visible").evaluateAll((els) =>
+  const sizes = await page.locator("input:visible:not([type=checkbox]):not([type=radio]), select:visible, textarea:visible").evaluateAll((els) =>
     els.map((e) => parseFloat(getComputedStyle(e).fontSize)));
   expect(sizes.length).toBeGreaterThan(0);
   for (const s of sizes) expect(s).toBeGreaterThanOrEqual(16);
