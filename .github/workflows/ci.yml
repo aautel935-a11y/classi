@@ -97,6 +97,11 @@ jobs:
       - name: Rollback drill (D-08 steps B then A down files)
         if: always()
         run: sh supabase/tests/rollback_drill.sh supabase/rollback/20261114010000_d08_enforce.down.sql,supabase/rollback/20261114000000_d08_workers.down.sql rollback_d08_checks flow_test roles_test 2>&1 | tee /tmp/drill_d08.log
+      - name: Staging backup script (synthetic local databases; never the real one)
+        if: always()
+        run: |
+          sudo apt-get install -y -qq --no-install-recommends age > /dev/null
+          sh supabase/tests/staging_backup_test.sh 2>&1 | tee /tmp/backup_test.log
       - name: v3 rollback restores the exact pre-v3 schema (ledger, business access)
         if: always()
         run: sh supabase/tests/v3_rollback_test.sh 2>&1 | tee /tmp/v3_rollback.log
@@ -173,7 +178,7 @@ jobs:
           DB=ct_perf node --experimental-strip-types --no-warnings tests/search-equivalence.mjs 2>&1 | tee /tmp/searcheq.log
       - name: Report (annotations)
         if: always()
-        run: sh .github/report.sh "database" /tmp/stgmig.log /tmp/safeupdate.log /tmp/sql.log /tmp/conc.log /tmp/grants.log /tmp/d08_staging.log /tmp/v3_staging.log /tmp/drill_d08b.log /tmp/drill_d08.log /tmp/drill.log /tmp/drill5.log /tmp/drill4.log /tmp/drill3.log /tmp/searcheq.log
+        run: sh .github/report.sh "database" /tmp/stgmig.log /tmp/safeupdate.log /tmp/sql.log /tmp/conc.log /tmp/grants.log /tmp/d08_staging.log /tmp/v3_staging.log /tmp/drill_d08b.log /tmp/drill_d08.log /tmp/drill.log /tmp/drill5.log /tmp/drill4.log /tmp/drill3.log /tmp/searcheq.log /tmp/backup_test.log
 
   staging-files-pg17:
     # classi-staging runs PostgreSQL 17: the guarded staging files compare the database state as PostgreSQL prints it
@@ -209,6 +214,70 @@ jobs:
       - name: Report (annotations)
         if: always()
         run: sh .github/report.sh "staging-files-pg17" /tmp/pp17.log /tmp/p0117.log /tmp/d0817.log /tmp/v317.log
+
+  backup-drill:
+    # The "Staging backup" workflow's own path (Supabase CLI dump, PostgreSQL 17 on both sides, age, an isolated
+    # restore target) against a LOCAL stack with synthetic data only; then the owner's later restore from the stored
+    # file with the owner's key into another empty database. Never a hosted database.
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262   # v4
+        with: { persist-credentials: false }
+      - uses: supabase/setup-cli@1dedf2c611547ede7232d26866dd3c56ab903bbb   # v1.7.3
+        with: { version: 2.120.0 }
+      - name: The workflow file stays manual, read-only and deploy-free
+        run: |
+          python3 - <<'PY' 2>&1 | tee /tmp/bk-wf.log
+          import re, sys, yaml
+          src = open(".github/workflows/staging-backup.yml").read(); w = yaml.safe_load(src)
+          on = w.get(True, w.get("on")); errs = []
+          if list(on) != ["workflow_dispatch"]: errs.append("triggers must be workflow_dispatch only: %s" % list(on))
+          if w["permissions"] != {"contents": "read"}: errs.append("workflow permissions must be contents: read")
+          if w["jobs"]["backup"].get("environment") != "staging-db": errs.append("the backup job must use Environment staging-db")
+          if "environment" in w["jobs"]["stored-copy"]: errs.append("stored-copy must not use an Environment")
+          if set(re.findall(r"secrets\.([A-Z_]+)", src)) != {"STAGING_DB_URL"}: errs.append("only the STAGING_DB_URL secret may be used")
+          for bad in ("git push", "vercel", "supabase db push", "supabase link", "migration up", "psql \"$DB_URL\" -c"):
+              if bad in src.lower(): errs.append("forbidden in the workflow: " + bad)
+          print("\n".join("FAIL: " + e for e in errs) or "PASS: manual only, Environment staging-db, one secret, no push/deploy/migration")
+          sys.exit(1 if errs else 0)
+          PY
+      - name: Tools (age from Ubuntu)
+        run: sudo apt-get install -y -qq --no-install-recommends age > /dev/null && age --version
+      - name: Local "staging" with synthetic data (PostgreSQL 17, every migration, seed, five invented accounts)
+        run: |
+          sed -i 's/^major_version = .*/major_version = 17/' supabase/config.toml
+          supabase start -x studio,imgproxy,edge-runtime,logflare,vector,supavisor,realtime > /tmp/sb-src.log 2>&1 || { tail -5 /tmp/sb-src.log; exit 1; }
+          src="postgresql://postgres:postgres@127.0.0.1:54322/postgres"
+          psql "$src" -q -v ON_ERROR_STOP=1 -c "insert into auth.users (id, email, phone, raw_user_meta_data) select ('9b000000-0000-0000-0000-00000000000' || g)::uuid, 'drill' || g || '@t', '97250999000' || g, '{\"full_name\":\"synthetic\"}' from generate_series(1, 5) g" \
+            -c "insert into public.app_secrets values ('deploy_env', 'staging') on conflict (key) do update set value = excluded.value"
+          echo "SRC_URL=$src" >> "$GITHUB_ENV"
+          echo "SRC_CLUSTER=$(psql "$src" -At -c 'select system_identifier from pg_control_system()')" >> "$GITHUB_ENV"
+      - name: Backup, encryption, restore proof (the workflow's script)
+        run: |
+          {
+            age-keygen -o "$RUNNER_TEMP/owner.key" 2>/dev/null; age-keygen -y "$RUNNER_TEMP/owner.key" > "$RUNNER_TEMP/owner.pub"
+            t=$(sh scripts/db/scratch-db.sh start "$RUNNER_TEMP/target1")
+            mkdir -m 700 "$RUNNER_TEMP/out"
+            DB_URL="$SRC_URL" TARGET_URL="$t" AGE_RECIPIENTS="$RUNNER_TEMP/owner.pub" EXPECT_CLUSTER="$SRC_CLUSTER" sh scripts/db/staging-backup.sh "$RUNNER_TEMP/out"
+            ls "$RUNNER_TEMP/out" | grep -c . | grep -qx 3 || { echo "FAIL: expected exactly 3 output files"; exit 1; }
+            grep -a -q -e synthetic -e drill1@t "$RUNNER_TEMP"/out/*.tar.age && { echo "FAIL: plaintext in the encrypted file"; exit 1; } || echo "PASS: no plaintext in the encrypted file"
+            sh scripts/db/scratch-db.sh stop "$RUNNER_TEMP/target1"
+          } 2>&1 | tee /tmp/bk-drill.log; grep -q '^PASS: encrypted backup' /tmp/bk-drill.log
+      - name: Later restore by the owner from the stored file only (owner key, a new empty database)
+        run: |
+          {
+            f=$(ls "$RUNNER_TEMP"/out/*.tar.age)
+            ( cd "$RUNNER_TEMP/out" && sha256sum -c "$(basename "$f").sha256" )
+            mkdir -m 700 "$RUNNER_TEMP/open"; age -d -i "$RUNNER_TEMP/owner.key" "$f" | tar -C "$RUNNER_TEMP/open" -xf -
+            t=$(sh scripts/db/scratch-db.sh start "$RUNNER_TEMP/target2")
+            TARGET_URL="$t" sh scripts/db/restore-check.sh "$RUNNER_TEMP"/open/classi-backup-*
+            [ "$(psql "$t" -At -c "select count(*) from auth.users where email like 'drill%@t'")" = 5 ] && echo "PASS: the five synthetic accounts are back"
+            sh scripts/db/scratch-db.sh stop "$RUNNER_TEMP/target2"; rm -rf "$RUNNER_TEMP/open" "$RUNNER_TEMP/owner.key"
+          } 2>&1 | tee /tmp/bk-restore.log; grep -q '^PASS: the five synthetic accounts are back' /tmp/bk-restore.log
+      - name: Report (annotations)
+        if: always()
+        run: sh .github/report.sh "backup-drill" /tmp/bk-wf.log /tmp/bk-drill.log /tmp/bk-restore.log
 
   e2e:
     # Full browser tests against a local Supabase stack (Docker) and a production build of the app.

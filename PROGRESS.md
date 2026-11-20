@@ -102,6 +102,14 @@ files check are identical to the generated expectations.
 - Order with D-08 B: v3 accepts A or B as the newest; D-08's own B file expects A, so applying v3 first means
   regenerating that file.
 
+## Round 4 — encrypted staging backup with a restore proof (20/11/2026)
+
+`scripts/db/staging-backup.sh` (reuses `backup.sh` and `restore-check.sh`), `scripts/db/scratch-db.sh` (empty isolated
+PostgreSQL 17 restore target), `.github/workflows/staging-backup.yml` (manual, Environment `staging-db`, one secret,
+encrypted artifact kept 1/3/7 days, a second job re-downloads it and compares the SHA-256), tests
+`supabase/tests/staging_backup_test.sh` (27 checks, local) and CI job `backup-drill` (the workflow's Supabase CLI path
+and the owner's later restore). Owner guide: `docs/v3/STAGING_BACKUP.md`. Not run on Staging.
+
 ## Files
 
 New: `supabase/migrations/20261120000000_v3_ledger.sql`, `supabase/migrations/20261120010000_v3_business_access.sql`,
@@ -144,11 +152,11 @@ switch is off), `admin_set_setting` (the phase-3 version plus `trial_days`, `gra
 |---|---|---|
 | 1 | ~~Push `v3/dev`~~ done 19/11 with approval; CI green | — |
 | 2 | Apply the two v3 migrations to **Staging**: plan in `docs/v3/STAGING_PLAN.md` (backup, guarded files, verify, rollback) | Changes a hosted database |
-| 3 | D-08 Migration B on Staging | Separate approval; the probe marker expires 20/11 19:14 (Jerusalem), so a new probe is needed first |
+| 3 | D-08 Migration B on Staging | Approved 20/11 02:16 with conditions; **stopped**: no backup proven by restore yet (needs item 7). The probe marker expires 20/11 19:14 (Jerusalem); after that a new probe needs approval |
 | 4 | Prices (proposal in the plan, section 4), trial 30 days, grace 7 days, the launch date, and when to turn on `subscriptions_required` | Business decisions |
 | 5 | GitHub settings: ruleset on `main` (PR + required checks), **Dependabot alerts (currently disabled)** and security updates, CodeQL advanced setup, dismissing the CodeQL false positive | Security settings |
 | 6 | Supabase Auth: leaked-password protection (HIBP), TOTP MFA for admin accounts | Security settings |
-| 7 | Encrypted off-site backup job: a read-only database role and its secret in a protected GitHub Environment, created by you | Needs a secret and a new role |
+| 7 | Encrypted staging backup: workflow `staging-backup.yml` ready and tested on synthetic data (round 4). You: an age key pair on your computer, the PUBLIC key as variable `BACKUP_AGE_RECIPIENTS` in Environment `staging-db`, `STAGING_DB_URL` present there, the files on branch `staging-migrate`, then approve one run | GitHub settings, a run on Staging |
 | 8 | Wording of the customer notice; legal review before any official tax document | Legal |
 | 9 | Moving existing `pay_status` history into the ledger (a later, separate migration) and ledger retention when an account is deleted | Data decisions |
 | 10 | Production: everything above, in the same order, after Staging | Production |

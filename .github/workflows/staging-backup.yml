@@ -1,0 +1,126 @@
+# Encrypted backup of classi-staging and a restore proof in the same run (scripts/db/staging-backup.sh, which reuses
+# scripts/db/backup.sh and scripts/db/restore-check.sh). Manual only: Actions -> Staging backup -> Run workflow
+# (branch staging-migrate), and every run waits for the owner's approval in the GitHub Environment "staging-db".
+# It READS classi-staging (pg_dump and read-only checks); it never writes to it, never pushes, never deploys.
+# Needs, in Environment "staging-db" only (docs/v3/STAGING_BACKUP.md):
+#   secret   STAGING_DB_URL         classi-staging -> Connect -> Session pooler (the same one staging-migrate uses)
+#   variable BACKUP_AGE_RECIPIENTS  the owner's age PUBLIC key(s), one per line; never a private key
+# Stored: artifact "classi-staging-backup-<run id>" = the encrypted file (age), its SHA-256 and a summary of totals.
+# The repository is public: artifacts and logs can be seen by any signed-in GitHub user, so the file is encrypted to
+# the owner's key only, kept a few days (input below), and the logs carry no data.
+name: Staging backup
+
+on:
+  workflow_dispatch:
+    inputs:
+      confirm:
+        description: 'Type exactly: backup classi-staging'
+        required: true
+      retention_days:
+        description: 'Days GitHub keeps the encrypted file (download your copy before then)'
+        type: choice
+        options: ['1', '3', '7']
+        default: '3'
+
+permissions:
+  contents: read
+
+defaults:
+  run:
+    shell: bash
+
+concurrency:
+  group: staging-db   # never at the same time as a staging migration
+  cancel-in-progress: false
+
+jobs:
+  backup:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    environment: staging-db   # owner approval; deployment branch staging-migrate only
+    outputs:
+      name: ${{ steps.backup.outputs.name }}
+      sha256: ${{ steps.backup.outputs.sha256 }}
+    steps:
+      - name: Confirmation and branch
+        env: { CONFIRM: "${{ inputs.confirm }}" }
+        run: |
+          [ "$CONFIRM" = "backup classi-staging" ] || { echo "::error::type exactly: backup classi-staging"; exit 1; }
+          [ "$GITHUB_REF" = "refs/heads/staging-migrate" ] || { echo "::error::run it from the staging-migrate branch"; exit 1; }
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262   # v4
+        with: { persist-credentials: false }
+      - name: Check 1 - the link is classi-staging (never production)
+        env: { STAGING_DB_URL: "${{ secrets.STAGING_DB_URL }}" }
+        run: |
+          [ -n "$STAGING_DB_URL" ] || { echo "::error::secret STAGING_DB_URL is not set in Environment staging-db"; exit 1; }
+          u="$(printf %s "$STAGING_DB_URL" | tr -d '[:space:]')"
+          case "$u" in *rfxhqcagdsuhkjzwbawx*) echo "::error::STAGING_DB_URL is the production project"; exit 1;; esac
+          case "$u" in *nfipmylyahhogykikuqo*) echo "target: classi-staging";; *) echo "::error::STAGING_DB_URL is not classi-staging (nfipmylyahhogykikuqo)"; exit 1;; esac
+      - name: Check 2 - the owner's public key(s)
+        env: { RECIPIENTS: "${{ vars.BACKUP_AGE_RECIPIENTS }}" }
+        run: |
+          [ -n "$RECIPIENTS" ] || { echo "::error::variable BACKUP_AGE_RECIPIENTS is not set in Environment staging-db (docs/v3/STAGING_BACKUP.md)"; exit 1; }
+          printf '%s\n' "$RECIPIENTS" | tr -d '\r' | sed 's/^[[:space:]]*//; s/[[:space:]]*$//' | grep -v '^$' > "$RUNNER_TEMP/recipients.txt"
+          echo "owner keys: $(wc -l < "$RUNNER_TEMP/recipients.txt")"   # the script checks they are public keys only
+      - name: TLS to the staging database
+        env: { CA: "${{ vars.SUPABASE_CA_CERT }}" }
+        run: |
+          if [ -n "$CA" ]; then printf '%s\n' "$CA" > "$RUNNER_TEMP/supabase-ca.crt"
+            { echo "PGSSLMODE=verify-full"; echo "PGSSLROOTCERT=$RUNNER_TEMP/supabase-ca.crt"; } >> "$GITHUB_ENV"; echo "TLS: verify-full"
+          else echo "PGSSLMODE=require" >> "$GITHUB_ENV"; echo "::warning::TLS encrypted but not verified: add the SUPABASE_CA_CERT variable"; fi
+      - uses: supabase/setup-cli@1dedf2c611547ede7232d26866dd3c56ab903bbb   # v1.7.3
+        with: { version: 2.120.0 }
+      - name: Tools (age from Ubuntu)
+        run: sudo apt-get install -y -qq --no-install-recommends age > /dev/null && age --version
+      - name: The dump uses PostgreSQL 17 tools, like classi-staging (this runner's copy of the config only)
+        run: sed -i 's/^major_version = .*/major_version = 17/' supabase/config.toml
+      - name: Empty, isolated restore target (local, PostgreSQL 17)
+        run: |
+          url=$(sh scripts/db/scratch-db.sh start "$RUNNER_TEMP/restore-target")
+          echo "RESTORE_URL=$url" >> "$GITHUB_ENV"
+      - name: Backup, encryption, restore proof
+        id: backup
+        env:
+          STAGING_DB_URL: ${{ secrets.STAGING_DB_URL }}
+          EXPECT_CLUSTER: "7702070854497379551"
+          EXPECT_REF: nfipmylyahhogykikuqo
+        run: |
+          export DB_URL="$(printf %s "$STAGING_DB_URL" | tr -d '[:space:]')"; unset STAGING_DB_URL
+          export TARGET_URL="$RESTORE_URL" AGE_RECIPIENTS="$RUNNER_TEMP/recipients.txt"
+          mkdir -m 700 "$RUNNER_TEMP/out"
+          sh scripts/db/staging-backup.sh "$RUNNER_TEMP/out" 2>&1 | tee "$RUNNER_TEMP/backup.log"
+          grep -q '^PASS: encrypted backup' "$RUNNER_TEMP/backup.log" || exit 1
+          f=$(ls "$RUNNER_TEMP"/out/*.tar.age); n=$(basename "$f" .tar.age)
+          echo "name=$n" >> "$GITHUB_OUTPUT"; echo "sha256=$(cut -d' ' -f1 "$f.sha256")" >> "$GITHUB_OUTPUT"
+          { echo "### Staging backup: PASS"; echo '```'; cat "$RUNNER_TEMP/out/$n.summary.txt"; echo '```'; } >> "$GITHUB_STEP_SUMMARY"
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02   # v4
+        with:
+          name: classi-staging-backup-${{ github.run_id }}
+          path: ${{ runner.temp }}/out/
+          retention-days: ${{ inputs.retention_days }}
+          if-no-files-found: error
+      - name: Clean up (restore target, temporary files)
+        if: always()
+        run: |
+          sh scripts/db/scratch-db.sh stop "$RUNNER_TEMP/restore-target" || true
+          rm -rf "$RUNNER_TEMP/out" "$RUNNER_TEMP/restore-target" "$RUNNER_TEMP/recipients.txt"
+
+  stored-copy:
+    # Proves the stored copy is the very file the restore proof opened: fetched back from GitHub, same SHA-256.
+    # No Environment and no secret: it only sees the encrypted file.
+    needs: backup
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions: { contents: read, actions: read }
+    steps:
+      - name: Download the stored artifact and compare
+        env:
+          GH_TOKEN: ${{ github.token }}
+          NAME: ${{ needs.backup.outputs.name }}
+          SHA: ${{ needs.backup.outputs.sha256 }}
+        run: |
+          mkdir stored && gh run download "$GITHUB_RUN_ID" -R "$GITHUB_REPOSITORY" -n "classi-staging-backup-$GITHUB_RUN_ID" -D stored
+          ( cd stored && sha256sum -c "$NAME.tar.age.sha256" )
+          [ "$(sha256sum "stored/$NAME.tar.age" | cut -d' ' -f1)" = "$SHA" ] || { echo "::error::the stored file differs from the one the restore proof opened"; exit 1; }
+          ls stored | grep -v -E '\.(tar\.age|tar\.age\.sha256|summary\.txt)$' && { echo "::error::unexpected files in the artifact"; exit 1; } || true
+          echo "PASS: the stored copy is the restored one (sha256 $SHA)"
