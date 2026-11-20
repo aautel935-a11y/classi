@@ -71,6 +71,10 @@ done
 manual=""
 for f in $pending; do [ -f "$REPO/supabase/staging/apply_${f%.sql}.sql" ] && manual="$manual $f"; done
 [ -z "$manual" ] || { echo "refusing: these pending migrations are applied only with their own guarded staging file (supabase/staging/apply_<name>.sql), one at a time:$manual"; exit 2; }
+# Held: prepared in the repository but not approved for any hosted database yet (owner's decision first).
+held=""
+for f in $pending; do case "$f" in *_trades_*) held="$held $f";; esac; done
+[ -z "$held" ] || { echo "refusing: these pending migrations are held until the owner approves them for staging:$held"; exit 2; }
 if [ -z "$pending" ]; then
   echo "no new migrations: nothing to apply ($applied_before applied)"
 else

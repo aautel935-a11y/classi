@@ -46,7 +46,16 @@ for set in "20261105010000" "20261105000000 20261105010000" "20261104000000"; do
   for v in $set; do n=$(basename "$(ls "$REPO"/supabase/migrations/${v}_*.sql)" .sql); $D -c "insert into supabase_migrations.schema_migrations (version, name) values ('$v', '${n#*_}') on conflict do nothing"; done
 done
 # one migration pending (the latest one WITHOUT a guarded staging file; function bodies only): applied once, counts unchanged
-last=$(for f in "$REPO"/supabase/migrations/*.sql; do [ -f "$REPO/supabase/staging/apply_$(basename "$f" .sql).sql" ] || echo "$f"; done | tail -1); lv=$(basename "$last" | cut -d_ -f1)
+# held migrations (prepared, not approved for a hosted database) are never applied here either
+for hf in "$REPO"/supabase/migrations/*_trades_*.sql; do
+  [ -f "$hf" ] || continue; hv=$(basename "$hf" | cut -d_ -f1)
+  $D -c "delete from supabase_migrations.schema_migrations where version = '$hv'"; b=$($D -Atc "select count(*) from supabase_migrations.schema_migrations")
+  run STAGING_DB_URL="$URL" MIGRATE_TEST=1 CI=true && ko "held migration refused ($(basename "$hf"))" || {
+    grep -q "held until the owner approves" /tmp/stgmig.out && [ "$($D -Atc "select count(*) from supabase_migrations.schema_migrations")" = "$b" ] \
+      && ok "held migration $(basename "$hf" .sql): refused, nothing applied" || ko "held: $(tail -1 /tmp/stgmig.out)"; }
+  $D -c "insert into supabase_migrations.schema_migrations (version, name) values ('$hv', '$(basename "$hf" .sql)') on conflict do nothing"
+done
+last=$(for f in "$REPO"/supabase/migrations/*.sql; do case "$f" in *_trades_*) continue;; esac; [ -f "$REPO/supabase/staging/apply_$(basename "$f" .sql).sql" ] || echo "$f"; done | tail -1); lv=$(basename "$last" | cut -d_ -f1)
 $D -c "delete from supabase_migrations.schema_migrations where version = '$lv'"
 run STAGING_DB_URL="$URL" MIGRATE_TEST=1 CI=true && grep -q "new migrations: $(basename "$last")" /tmp/stgmig.out && grep -q "counts unchanged" /tmp/stgmig.out \
   && [ "$($D -Atc "select count(*) from supabase_migrations.schema_migrations where version = '$lv'")" = 1 ] \

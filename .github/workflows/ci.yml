@@ -109,6 +109,12 @@ jobs:
       - name: v3 rollback restores the exact pre-v3 schema (ledger, business access)
         if: always()
         run: sh supabase/tests/v3_rollback_test.sh 2>&1 | tee /tmp/v3_rollback.log
+      - name: Trades foundation rollback restores the exact pre-trades schema
+        if: always()
+        run: sh supabase/tests/trades_rollback_test.sh 2>&1 | tee /tmp/trades_rollback.log
+      - name: Rollback drill (trades foundation; education and ledger suites after it)
+        if: always()
+        run: sh supabase/tests/rollback_drill.sh supabase/rollback/20261121000000_trades_foundation.down.sql flow_test security_test ledger_test access_test 2>&1 | tee /tmp/drill_trades.log
       - name: Rollback drill (v3 business access, then ledger)
         if: always()
         run: sh supabase/tests/rollback_drill.sh supabase/rollback/20261120010000_v3_business_access.down.sql,supabase/rollback/20261120000000_v3_ledger.down.sql launch_test phase3_test payments_test security_test flow_test 2>&1 | tee /tmp/drill_v3.log
@@ -182,7 +188,7 @@ jobs:
           DB=ct_perf node --experimental-strip-types --no-warnings tests/search-equivalence.mjs 2>&1 | tee /tmp/searcheq.log
       - name: Report (annotations)
         if: always()
-        run: sh .github/report.sh "database" /tmp/stgmig.log /tmp/safeupdate.log /tmp/sql.log /tmp/conc.log /tmp/grants.log /tmp/d08_staging.log /tmp/v3_staging.log /tmp/drill_d08b.log /tmp/drill_d08.log /tmp/drill.log /tmp/drill5.log /tmp/drill4.log /tmp/drill3.log /tmp/searcheq.log /tmp/prodfp.log /tmp/prod0.log /tmp/prodfiles.log
+        run: sh .github/report.sh "database" /tmp/stgmig.log /tmp/safeupdate.log /tmp/sql.log /tmp/conc.log /tmp/grants.log /tmp/d08_staging.log /tmp/v3_staging.log /tmp/drill_d08b.log /tmp/drill_d08.log /tmp/drill.log /tmp/drill5.log /tmp/drill4.log /tmp/drill3.log /tmp/searcheq.log /tmp/prodfp.log /tmp/prod0.log /tmp/prodfiles.log /tmp/trades_rollback.log /tmp/drill_trades.log
 
   staging-files-pg17:
     # classi-staging runs PostgreSQL 17: the guarded staging files compare the database state as PostgreSQL prints it
