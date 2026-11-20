@@ -30,11 +30,22 @@ union all
 select 'triggers', count(*), md5(string_agg(tgrelid::regclass || '.' || tgname, E'\n' order by tgrelid::regclass::text, tgname))
 from pg_trigger t join pg_class c on c.oid = t.tgrelid where not t.tgisinternal and c.relnamespace = 'public'::regnamespace
 union all
-select 'rls_off', count(*), '-' from pg_class c where c.relnamespace = 'public'::regnamespace and c.relkind = 'r' and not c.relrowsecurity) s);
-  if v_fp is distinct from $exp$columns|305|add0102b82fbd466583481d4553fc873
+select 'rls_off', count(*), '-' from pg_class c where c.relnamespace = 'public'::regnamespace and c.relkind = 'r' and not c.relrowsecurity
+union all
+select 'storage', (select count(*) from pg_policies where schemaname = 'storage'),
+  md5(coalesce((select string_agg(tablename || '.' || policyname || ':' || cmd || ':' || array_to_string(roles, ','), E'\n' order by tablename, policyname)
+                from pg_policies where schemaname = 'storage'), '') || '#'
+      || coalesce((select string_agg(id || ':' || public, ',' order by id) from storage.buckets), ''))
+union all
+select 'app_private', count(*), coalesce(md5(string_agg(p.proname || '(' || pg_get_function_identity_arguments(p.oid) || ')|'
+       || md5(regexp_replace(regexp_replace(p.prosrc, '--[^\n]*', '', 'g'), '\s+', '', 'g')) || '|' || p.prosecdef, E'\n' order by p.proname)), '-')
+from pg_proc p join pg_namespace n on n.oid = p.pronamespace where n.nspname = 'app_private') s);
+  if v_fp is distinct from $exp$app_private|0|-
+columns|305|add0102b82fbd466583481d4553fc873
 functions|150|a867539fffcbf3d71a22163f2d2e4d30
 policies|56|d6a5b5c029fe02e50c4e70d2a9e22cc7
 rls_off|0|-
+storage|4|de696942fd4fdbb289e07f586a86f247
 triggers|30|1200be2b4851fe156ba9dab458fc16c3$exp$ then
     raise exception 'refusing (before): the public schema is not the one recorded on 20/11/2026 (production must still be on main''s 25 migrations): %', v_fp;
   end if;
@@ -107,11 +118,22 @@ union all
 select 'triggers', count(*), md5(string_agg(tgrelid::regclass || '.' || tgname, E'\n' order by tgrelid::regclass::text, tgname))
 from pg_trigger t join pg_class c on c.oid = t.tgrelid where not t.tgisinternal and c.relnamespace = 'public'::regnamespace
 union all
-select 'rls_off', count(*), '-' from pg_class c where c.relnamespace = 'public'::regnamespace and c.relkind = 'r' and not c.relrowsecurity) s);
-  if v_fp is distinct from $exp$columns|305|add0102b82fbd466583481d4553fc873
+select 'rls_off', count(*), '-' from pg_class c where c.relnamespace = 'public'::regnamespace and c.relkind = 'r' and not c.relrowsecurity
+union all
+select 'storage', (select count(*) from pg_policies where schemaname = 'storage'),
+  md5(coalesce((select string_agg(tablename || '.' || policyname || ':' || cmd || ':' || array_to_string(roles, ','), E'\n' order by tablename, policyname)
+                from pg_policies where schemaname = 'storage'), '') || '#'
+      || coalesce((select string_agg(id || ':' || public, ',' order by id) from storage.buckets), ''))
+union all
+select 'app_private', count(*), coalesce(md5(string_agg(p.proname || '(' || pg_get_function_identity_arguments(p.oid) || ')|'
+       || md5(regexp_replace(regexp_replace(p.prosrc, '--[^\n]*', '', 'g'), '\s+', '', 'g')) || '|' || p.prosecdef, E'\n' order by p.proname)), '-')
+from pg_proc p join pg_namespace n on n.oid = p.pronamespace where n.nspname = 'app_private') s);
+  if v_fp is distinct from $exp$app_private|0|-
+columns|305|add0102b82fbd466583481d4553fc873
 functions|150|a867539fffcbf3d71a22163f2d2e4d30
 policies|56|d6a5b5c029fe02e50c4e70d2a9e22cc7
 rls_off|0|-
+storage|4|de696942fd4fdbb289e07f586a86f247
 triggers|30|1200be2b4851fe156ba9dab458fc16c3$exp$ then
     raise exception 'refusing (before commit): the public schema is not the one recorded on 20/11/2026 (production must still be on main''s 25 migrations): %', v_fp;
   end if;

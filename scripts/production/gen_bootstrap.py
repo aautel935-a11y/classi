@@ -26,10 +26,8 @@ for f in mig:
     if not re.fullmatch(r"\d{14}_[a-z0-9_]+\.sql", f):
         sys.exit(f"unexpected migration file name: {f}")
 
-# The fingerprint query of scripts/production/fingerprint.sql, as one expression: part|n|fp lines sorted by part.
-src = open(os.path.join(HERE, "fingerprint.sql")).read()
-body = src[src.index("with f as"):src.rindex("order by 1;")].strip()
-FP = f"(select string_agg(part || '|' || n || '|' || fp, E'\\n' order by part) from ({body}) s)"
+sys.path.insert(0, HERE)
+from fpexpr import FP  # noqa: E402  the fingerprint of scripts/production/fingerprint.sql as one SQL expression
 
 def guard(stage: str, tracking: str) -> str:
     return f"""do $guard$
