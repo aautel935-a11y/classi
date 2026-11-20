@@ -72,3 +72,10 @@ test("8. Arabic page with Hebrew and English text stays right-to-left and fits t
   await expectNoSideScroll(page);
 });
 
+
+test("SEC-26. a crafted ?error= link cannot put its words on the page", async ({ page }) => {
+  const lure = "حسابك موقوف، اتصل بالدعم";
+  await page.goto(`/login?error=${encodeURIComponent(lure)}`);
+  await expect(page.getByRole("alert")).toHaveText("تعذّر إتمام العملية. حاول مرة أخرى.");
+  await expect(page.getByText(lure)).toHaveCount(0);
+});
