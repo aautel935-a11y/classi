@@ -1,0 +1,140 @@
+# Encrypted backup of Classi PRODUCTION and a restore proof in the same run (scripts/db/staging-backup.sh with
+# SOURCE=production; it reuses scripts/db/backup.sh and scripts/db/restore-check.sh). Manual only: Actions ->
+# Production backup -> Run workflow (branch production-ops), and every run waits for the owner's approval in the
+# GitHub Environment "production-db". It READS production (pg_dump and read-only checks); it never writes to it,
+# never pushes, never deploys. Prepared 20/11/2026, NOT run.
+# Needs, in Environment "production-db" only (created by the owner; docs/v3/PRODUCTION_BACKUP.md):
+#   secret   PRODUCTION_DB_URL      classi (production) -> Connect -> Session pooler
+#   variable BACKUP_AGE_RECIPIENTS  the owner's age PUBLIC key(s), one per line; never a private key
+# Stored: artifact "classi-production-backup-<run id>" = the encrypted file (age), its SHA-256 and a summary of totals.
+# Real customer data: while the repository is public the run refuses unless the owner explicitly accepts that the
+# ENCRYPTED file is downloadable by signed-in GitHub users for the retention period (default 1 day).
+name: Production backup
+
+on:
+  workflow_dispatch:
+    inputs:
+      confirm:
+        description: 'Type exactly: backup classi production'
+        required: true
+      retention_days:
+        description: 'Days GitHub keeps the encrypted file (download your copy before then)'
+        type: choice
+        options: ['1', '3', '7']
+        default: '1'
+      public_repo_ok:
+        description: 'If the repository is still public: the ENCRYPTED file may be downloaded by signed-in GitHub users until it expires'
+        type: choice
+        options: ['no', 'yes']
+        default: 'no'
+
+permissions:
+  contents: read
+
+defaults:
+  run:
+    shell: bash
+
+concurrency:
+  group: production-db   # never at the same time as a production change
+  cancel-in-progress: false
+
+jobs:
+  backup:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    environment: production-db   # owner approval; deployment branch production-ops only
+    outputs:
+      name: ${{ steps.backup.outputs.name }}
+      sha256: ${{ steps.backup.outputs.sha256 }}
+    steps:
+      - name: Confirmation, branch, repository visibility
+        env:
+          CONFIRM: "${{ inputs.confirm }}"
+          PRIVATE: "${{ github.event.repository.private }}"
+          PUBLIC_OK: "${{ inputs.public_repo_ok }}"
+        run: |
+          [ "$CONFIRM" = "backup classi production" ] || { echo "::error::type exactly: backup classi production"; exit 1; }
+          [ "$GITHUB_REF" = "refs/heads/production-ops" ] || { echo "::error::run it from the production-ops branch"; exit 1; }
+          if [ "$PRIVATE" != "true" ]; then
+            [ "$PUBLIC_OK" = "yes" ] || { echo "::error::the repository is public: make it private, or rerun with public_repo_ok = yes (the stored file is encrypted to your key)"; exit 1; }
+            echo "::warning::public repository: the ENCRYPTED file is downloadable by signed-in GitHub users until it expires"
+          fi
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262   # v4
+        with: { persist-credentials: false }
+      - name: Check 1 - the link is Classi production (rfxhqcagdsuhkjzwbawx)
+        env: { PRODUCTION_DB_URL: "${{ secrets.PRODUCTION_DB_URL }}" }
+        run: |
+          [ -n "$PRODUCTION_DB_URL" ] || { echo "::error::secret PRODUCTION_DB_URL is not set in Environment production-db"; exit 1; }
+          u="$(printf %s "$PRODUCTION_DB_URL" | tr -d '[:space:]')"
+          case "$u" in *nfipmylyahhogykikuqo*) echo "::error::PRODUCTION_DB_URL is classi-staging"; exit 1;; esac
+          case "$u" in *rfxhqcagdsuhkjzwbawx*) echo "source: classi (production), read only";; *) echo "::error::PRODUCTION_DB_URL is not Classi production (rfxhqcagdsuhkjzwbawx)"; exit 1;; esac
+      - name: Check 2 - the owner's public key(s)
+        env: { RECIPIENTS: "${{ vars.BACKUP_AGE_RECIPIENTS }}" }
+        run: |
+          [ -n "$RECIPIENTS" ] || { echo "::error::variable BACKUP_AGE_RECIPIENTS is not set in Environment production-db (docs/v3/STAGING_BACKUP.md)"; exit 1; }
+          printf '%s\n' "$RECIPIENTS" | tr -d '\r' | sed 's/^[[:space:]]*//; s/[[:space:]]*$//' | grep -v '^$' > "$RUNNER_TEMP/recipients.txt"
+          echo "owner keys: $(wc -l < "$RUNNER_TEMP/recipients.txt")"   # the script checks they are public keys only
+      - name: TLS to the production database
+        env: { CA: "${{ vars.SUPABASE_CA_CERT }}" }
+        run: |
+          if [ -n "$CA" ]; then printf '%s\n' "$CA" > "$RUNNER_TEMP/supabase-ca.crt"
+            { echo "PGSSLMODE=verify-full"; echo "PGSSLROOTCERT=$RUNNER_TEMP/supabase-ca.crt"; } >> "$GITHUB_ENV"; echo "TLS: verify-full"
+          else echo "PGSSLMODE=require" >> "$GITHUB_ENV"; echo "::warning::TLS encrypted but not verified: add the SUPABASE_CA_CERT variable"; fi
+      - uses: supabase/setup-cli@1dedf2c611547ede7232d26866dd3c56ab903bbb   # v1.7.3
+        with: { version: 2.120.0 }
+      - name: Tools (age from Ubuntu)
+        run: sudo apt-get install -y -qq --no-install-recommends age > /dev/null && age --version
+      - name: The dump uses PostgreSQL 17 tools, like production (this runner's copy of the config only)
+        run: sed -i 's/^major_version = .*/major_version = 17/' supabase/config.toml
+      - name: Empty, isolated restore target (local, PostgreSQL 17)
+        run: |
+          url=$(sh scripts/db/scratch-db.sh start "$RUNNER_TEMP/restore-target")
+          echo "RESTORE_URL=$url" >> "$GITHUB_ENV"
+      - name: Backup, encryption, restore proof
+        id: backup
+        env:
+          PRODUCTION_DB_URL: ${{ secrets.PRODUCTION_DB_URL }}
+          SOURCE: production
+          EXPECT_CLUSTER: "7692130048193495360"
+          EXPECT_REF: rfxhqcagdsuhkjzwbawx
+        run: |
+          export DB_URL="$(printf %s "$PRODUCTION_DB_URL" | tr -d '[:space:]')"; unset PRODUCTION_DB_URL
+          export TARGET_URL="$RESTORE_URL" AGE_RECIPIENTS="$RUNNER_TEMP/recipients.txt"
+          mkdir -m 700 "$RUNNER_TEMP/out"
+          sh scripts/db/staging-backup.sh "$RUNNER_TEMP/out" 2>&1 | tee "$RUNNER_TEMP/backup.log"
+          grep -q '^PASS: encrypted backup' "$RUNNER_TEMP/backup.log" || exit 1
+          f=$(ls "$RUNNER_TEMP"/out/*.tar.age); n=$(basename "$f" .tar.age)
+          echo "name=$n" >> "$GITHUB_OUTPUT"; echo "sha256=$(cut -d' ' -f1 "$f.sha256")" >> "$GITHUB_OUTPUT"
+          { echo "### Production backup: PASS"; echo '```'; cat "$RUNNER_TEMP/out/$n.summary.txt"; echo '```'; } >> "$GITHUB_STEP_SUMMARY"
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02   # v4
+        with:
+          name: classi-production-backup-${{ github.run_id }}
+          path: ${{ runner.temp }}/out/
+          retention-days: ${{ inputs.retention_days }}
+          if-no-files-found: error
+      - name: Clean up (restore target, temporary files)
+        if: always()
+        run: |
+          sh scripts/db/scratch-db.sh stop "$RUNNER_TEMP/restore-target" || true
+          rm -rf "$RUNNER_TEMP/out" "$RUNNER_TEMP/restore-target" "$RUNNER_TEMP/recipients.txt"
+
+  stored-copy:
+    # Proves the stored copy is the very file the restore proof opened: fetched back from GitHub, same SHA-256.
+    # No Environment and no secret: it only sees the encrypted file.
+    needs: backup
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions: { contents: read, actions: read }
+    steps:
+      - name: Download the stored artifact and compare
+        env:
+          GH_TOKEN: ${{ github.token }}
+          NAME: ${{ needs.backup.outputs.name }}
+          SHA: ${{ needs.backup.outputs.sha256 }}
+        run: |
+          mkdir stored && gh run download "$GITHUB_RUN_ID" -R "$GITHUB_REPOSITORY" -n "classi-production-backup-$GITHUB_RUN_ID" -D stored
+          ( cd stored && sha256sum -c "$NAME.tar.age.sha256" )
+          [ "$(sha256sum "stored/$NAME.tar.age" | cut -d' ' -f1)" = "$SHA" ] || { echo "::error::the stored file differs from the one the restore proof opened"; exit 1; }
+          ls stored | grep -v -E '\.(tar\.age|tar\.age\.sha256|summary\.txt)$' && { echo "::error::unexpected files in the artifact"; exit 1; } || true
+          echo "PASS: the stored copy is the restored one (sha256 $SHA)"

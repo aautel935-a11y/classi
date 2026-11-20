@@ -9,6 +9,8 @@
 #   AGE_RECIPIENTS   a file with the age PUBLIC keys that may open the stored copy (the owner's), one per line
 #   EXPECT_CLUSTER   the source's system identifier (classi-staging: 7702070854497379551)
 #   EXPECT_REF       text the source URL must contain (classi-staging: nfipmylyahhogykikuqo); unset = local source only
+#   SOURCE           staging (default: marker deploy_env = staging, production refused) or production (workflow
+#                    "Production backup" only: EXPECT_REF must be production's ref, marker absent or production)
 # Usage:  ... sh scripts/db/staging-backup.sh <output folder outside the repository>
 # Output: classi-staging-<stamp>.tar.age (encrypted), .tar.age.sha256, .summary.txt (totals only, no data).
 # Plaintext exists only in a private temporary folder deleted on exit. The restore proof opens the encrypted file with
@@ -30,8 +32,14 @@ fail() { echo "FAIL: $*"; exit 1; }
 scrub() { grep -v -E '^(CONTEXT|DETAIL|HINT|LINE|QUERY)|^[[:space:]]' "$1" | sed -E "s/'[^']*'/'…'/g; s/\"[^\"]*\"/\"…\"/g; s/\([^)]*\)=\([^)]*\)/(…)=(…)/g" | tail -8; }
 local_url() { case "$1" in *@127.0.0.1:*|*@localhost:*|*@\[::1\]:*|*@/*\?host=/*|*@/*\&host=/*) return 0;; *) return 1;; esac; }
 
+SOURCE="${SOURCE:-staging}"
 check_url "$DB_URL"; check_url "$TARGET_URL"
-is_prod "$DB_URL" && refuse "DB_URL is the production project"
+case "$SOURCE" in
+  staging) is_prod "$DB_URL" && refuse "DB_URL is the production project" ;;
+  production)
+    if [ -n "${EXPECT_REF:-}" ]; then [ "$EXPECT_REF" = "$PROD_REF" ] || refuse "SOURCE=production needs EXPECT_REF=$PROD_REF"; fi ;;
+  *) refuse "SOURCE must be staging or production" ;;
+esac
 is_prod "$TARGET_URL" && refuse "TARGET_URL is the production project"
 [ "$DB_URL" != "$TARGET_URL" ] || refuse "the restore target is the source"
 local_url "$TARGET_URL" || refuse "TARGET_URL must be a local database (loopback or socket)"
@@ -57,13 +65,18 @@ ro() { psql "$1" -X -q -At -v ON_ERROR_STOP=1 -c 'begin transaction read only' -
 # 1. the source is the expected database; the target is empty
 cluster=$(ro "$DB_URL" "select system_identifier from pg_control_system()") || fail "cannot read the source"
 [ "$cluster" = "$EXPECT_CLUSTER" ] || refuse "the source cluster is not the expected one"
-marker=$(ro "$DB_URL" "select coalesce((select value from public.app_secrets where key = 'deploy_env'), '')") || fail "cannot read the staging marker"
-[ "$marker" = staging ] || refuse "the source has no staging marker"
-newest() { ro "$DB_URL" "select coalesce(max(version), '-') from supabase_migrations.schema_migrations"; }
+marker=$(ro "$DB_URL" "select coalesce((select value from public.app_secrets where key = 'deploy_env'), '')") || fail "cannot read the environment marker"
+case "$SOURCE:$marker" in
+  staging:staging|production:production|production:) ;;
+  staging:*) refuse "the source has no staging marker" ;;
+  *) refuse "the source is marked '$marker', not production" ;;
+esac
+# production before step 0 has no tracking table: then the schema fingerprint stands in for "newest migration"
+newest() { ro "$DB_URL" "select case when to_regclass('supabase_migrations.schema_migrations') is null then 'untracked:' || md5((select string_agg(table_name || '.' || column_name, ',' order by table_name, column_name) from information_schema.columns where table_schema = 'public')) else (xpath('/row/v/text()', query_to_xml('select coalesce(max(version), ''-'') v from supabase_migrations.schema_migrations', false, true, '')))[1]::text end"; }
 m1=$(newest) || fail "cannot read the recorded migrations"
 tables=$(ro "$TARGET_URL" "select count(*) from pg_tables where schemaname = 'public'") || fail "cannot reach the restore target"
 [ "$tables" = 0 ] || refuse "the restore target is not empty ($tables public tables)"
-echo "source: expected cluster, staging marker, newest migration $m1; restore target: empty"
+echo "source ($SOURCE): expected cluster, marker '${marker:-none}', newest migration $m1; restore target: empty"
 
 # 2. the dump (backup.sh: one pg_dump snapshot for all the data)
 if ! sh "$HERE/backup.sh" "$WORK/plain" > "$WORK/backup.log" 2>&1; then scrub "$WORK/backup.log"; fail "the dump did not complete"; fi
@@ -73,7 +86,7 @@ m2=$(newest) || fail "cannot read the recorded migrations"
 [ "$m1" = "$m2" ] || fail "a migration was recorded during the dump ($m1 -> $m2): run again"
 
 # 3. encrypt to the owner's keys and to a one-time key (for the proof only)
-STAMP="$(date -u +%Y%m%dT%H%M%SZ)"; NAME="classi-staging-$STAMP"; F="$OUTABS/$NAME.tar.age"
+STAMP="$(date -u +%Y%m%dT%H%M%SZ)"; NAME="classi-$SOURCE-$STAMP"; F="$OUTABS/$NAME.tar.age"
 age-keygen -o "$WORK/once.key" 2>/dev/null
 once=$(age-keygen -y "$WORK/once.key")
 tar -C "$WORK/plain" -cf "$WORK/backup.tar" "$(basename "$B")"
@@ -98,7 +111,7 @@ ntab=$(wc -l < "$C/counts.txt"); nrow=$(awk -F'|' '{s+=$2} END {print s+0}' "$C/
 sha=$(cut -d' ' -f1 "$F.sha256"); size=$(wc -c < "$F")
 cat > "$OUTABS/$NAME.summary.txt" <<EOF
 backup     $NAME
-source     cluster $cluster (staging marker), newest migration $m1
+source     $SOURCE, cluster $cluster (marker '${marker:-none}'), newest migration $m1
 contents   $ntab tables, $nrow rows (schemas public, app_private and the accounts in auth; photo files are not included)
 file       $NAME.tar.age, $size bytes, sha256 $sha
 encrypted  age, to $keys owner key(s); the one-time key of the restore proof was deleted before the restore

@@ -244,20 +244,26 @@ jobs:
         with: { persist-credentials: false }
       - uses: supabase/setup-cli@1dedf2c611547ede7232d26866dd3c56ab903bbb   # v1.7.3
         with: { version: 2.120.0 }
-      - name: The workflow file stays manual, read-only and deploy-free
+      - name: The backup workflow files stay manual, read-only and deploy-free
         run: |
           python3 - <<'PY' 2>&1 | tee /tmp/bk-wf.log
           import re, sys, yaml
-          src = open(".github/workflows/staging-backup.yml").read(); w = yaml.safe_load(src)
-          on = w.get(True, w.get("on")); errs = []
-          if list(on) != ["workflow_dispatch"]: errs.append("triggers must be workflow_dispatch only: %s" % list(on))
-          if w["permissions"] != {"contents": "read"}: errs.append("workflow permissions must be contents: read")
-          if w["jobs"]["backup"].get("environment") != "staging-db": errs.append("the backup job must use Environment staging-db")
-          if "environment" in w["jobs"]["stored-copy"]: errs.append("stored-copy must not use an Environment")
-          if set(re.findall(r"secrets\.([A-Z_]+)", src)) != {"STAGING_DB_URL"}: errs.append("only the STAGING_DB_URL secret may be used")
-          for bad in ("git push", "vercel", "supabase db push", "supabase link", "migration up", "psql \"$DB_URL\" -c"):
-              if bad in src.lower(): errs.append("forbidden in the workflow: " + bad)
-          print("\n".join("FAIL: " + e for e in errs) or "PASS: manual only, Environment staging-db, one secret, no push/deploy/migration")
+          errs = []
+          for path, env, secret in ((".github/workflows/staging-backup.yml", "staging-db", "STAGING_DB_URL"),
+                                    (".github/workflows/production-backup.yml", "production-db", "PRODUCTION_DB_URL")):
+              src = open(path).read(); w = yaml.safe_load(src); on = w.get(True, w.get("on"))
+              e = lambda m: errs.append(f"{path}: {m}")
+              if list(on) != ["workflow_dispatch"]: e("triggers must be workflow_dispatch only: %s" % list(on))
+              if w["permissions"] != {"contents": "read"}: e("workflow permissions must be contents: read")
+              if w["jobs"]["backup"].get("environment") != env: e(f"the backup job must use Environment {env}")
+              if "environment" in w["jobs"]["stored-copy"]: e("stored-copy must not use an Environment")
+              if set(re.findall(r"secrets\.([A-Z_]+)", src)) != {secret}: e(f"only the {secret} secret may be used")
+              for bad in ("git push", "vercel", "supabase db push", "supabase link", "migration up", "psql \"$db_url\" -c", "age-secret-key"):
+                  if bad in src.lower(): e("forbidden in the workflow: " + bad)
+          prod = open(".github/workflows/production-backup.yml").read()
+          for need in ("SOURCE: production", 'EXPECT_CLUSTER: "7692130048193495360"', "EXPECT_REF: rfxhqcagdsuhkjzwbawx", "github.event.repository.private"):
+              if need not in prod: errs.append("production-backup.yml lacks: " + need)
+          print("\n".join("FAIL: " + x for x in errs) or "PASS: both backup workflows: manual only, own Environment, one secret, no push/deploy/migration")
           sys.exit(1 if errs else 0)
           PY
       - name: Tools (age from Ubuntu)

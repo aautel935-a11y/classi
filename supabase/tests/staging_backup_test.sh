@@ -118,6 +118,18 @@ $P -d "$SRC" -c "delete from public.app_secrets where key = 'deploy_env'" >/dev/
 refused "source without the staging marker" "no staging marker"
 $P -d "$SRC" -c "insert into public.app_secrets values ('deploy_env', 'staging')" >/dev/null
 
+# 5b. SOURCE=production (workflow "Production backup"): today's production has no marker and no tracking table
+$P -d "$SRC" -c "delete from public.app_secrets where key = 'deploy_env'" -c "alter schema supabase_migrations rename to sm_hidden" >/dev/null
+fresh_target "$TGT"
+if env SOURCE=production DB_URL="$(url $SRC)" TARGET_URL="$(url $TGT)" AGE_RECIPIENTS="$W/owner.pub" EXPECT_CLUSTER="$CLUSTER" sh "$S" "$W/op" > "$W/log" 2>&1 \
+   && grep -q "^PASS: encrypted backup classi-production-" "$W/log" && grep -q "newest migration untracked:" "$W/log"; then
+  ok "SOURCE=production: no marker, no tracking table: backup + restore proof PASS (classi-production-*)"; else ko "production source"; tail -3 "$W/log"; fi
+$P -d "$SRC" -c "insert into public.app_secrets values ('deploy_env', 'staging')" >/dev/null
+refused "SOURCE=production on a staging-marked database" "not production" SOURCE=production
+refused "SOURCE=production with another project ref" "needs EXPECT_REF" SOURCE=production EXPECT_REF=nfipmylyahhogykikuqo
+refused "SOURCE=other" "must be staging or production" SOURCE=other
+$P -d "$SRC" -c "alter schema sm_hidden rename to supabase_migrations" >/dev/null
+
 # 6. a restore that fails is reported as FAIL, without data in the output
 fresh_target "$TGT"; $P -d "$TGT" -c "drop table auth.users; create table auth.users (id uuid primary key)" >/dev/null
 if run sh "$S" "$W/o4"; then ko "broken target: it passed"

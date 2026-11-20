@@ -16,7 +16,8 @@
       "hardening/**": false,
       "staging-test": false,
       "staging-migrate": false,
-      "v3/**": false
+      "v3/**": false,
+      "production-ops": false
     }
   }
 }
