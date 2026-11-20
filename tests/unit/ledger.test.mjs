@@ -67,3 +67,34 @@ test("the notice says the status is the business's record, not a bank or tax doc
   assert.match(L.LEDGER_NOTICE, /لا يستلم الأموال/);
   assert.match(L.LEDGER_NOTICE, /ليس مستنداً ضريبياً/);
 });
+
+test("sortCharges: overdue, partial, unpaid by due date, paid, cancelled", () => {
+  const { sortCharges } = L;
+  const rows = [
+    { id: "p", status: "paid", due_on: null, created_at: "2026-11-01" },
+    { id: "u2", status: "unpaid", due_on: "2026-12-10", created_at: "2026-11-02" },
+    { id: "c", status: "cancelled", due_on: null, created_at: "2026-11-03" },
+    { id: "o", status: "overdue", due_on: "2026-11-01", created_at: "2026-10-01" },
+    { id: "u1", status: "unpaid", due_on: "2026-11-30", created_at: "2026-11-04" },
+    { id: "un", status: "unpaid", due_on: null, created_at: "2026-11-05" },
+    { id: "pa", status: "partial", due_on: null, created_at: "2026-11-06" },
+  ];
+  assert.deepEqual(sortCharges(rows).map((r) => r.id), ["o", "pa", "u1", "u2", "un", "p", "c"]);
+  assert.equal(rows[0].id, "p", "the input is not reordered in place");
+});
+
+test("matchCharge folds Arabic letter forms and ignores empty queries", () => {
+  const { matchCharge, foldArabic } = L;
+  const r = { customer_label: "أحمد مصاروة", description: "رزمة حصص إنجليزي" };
+  assert.ok(matchCharge(r, "احمد"));
+  assert.ok(matchCharge(r, "رزمه"));
+  assert.ok(matchCharge(r, "  "));
+  assert.ok(matchCharge(r, null));
+  assert.ok(!matchCharge(r, "قفل"));
+  assert.equal(foldArabic("مُصْطَفَى"), "مصطفي");
+});
+
+test("owedTotal excludes cancelled charges", () => {
+  const { owedTotal } = L;
+  assert.equal(owedTotal([{ remaining: 100, status: "unpaid" }, { remaining: 50.5, status: "partial" }, { remaining: 70, status: "cancelled" }]), 150.5);
+});

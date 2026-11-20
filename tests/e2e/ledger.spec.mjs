@@ -63,6 +63,13 @@ test("ledger: charge, deposit, payment, correction, export, isolation", async ({
   await expect(page.locator(".card").filter({ hasText: "زبون الاختبار" }).first().getByText("مدفوع جزئياً", { exact: true })).toBeVisible();
   if (info.project.name === "mobile") await expectNoSideScroll(page);
 
+  // 4b. search (letter forms folded: "زبون الإختبار" finds "زبون الاختبار"); a miss says so
+  await page.goto(`/ledger?b=t:${teacher}&q=${encodeURIComponent("زبون الإختبار")}`, { waitUntil: "networkidle" });
+  await expect(page.locator(".card").filter({ hasText: "زبون الاختبار" }).first()).toBeVisible();
+  await page.goto(`/ledger?b=t:${teacher}&q=${encodeURIComponent("لا يوجد هكذا زبون")}`, { waitUntil: "networkidle" });
+  await expect(page.getByText(/لا نتائج لـ/)).toBeVisible();
+  await expect(page.locator(".card").filter({ hasText: "زبون الاختبار" })).toHaveCount(0);
+
   // 5. database: two money entries + one void, and no UPDATE/DELETE even for the database owner
   const rows = await localSql(
     "select p.kind, p.amount::text from payments p join charges c on c.id = p.charge_id where c.teacher_id = $1 order by p.recorded_at", [teacher]);

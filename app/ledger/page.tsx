@@ -2,8 +2,9 @@ import Link from "next/link";
 import { requireUser } from "@/lib/session";
 import { ErrorNote } from "@/components/ErrorNote";
 import { Icon } from "@/components/Icon";
+import { KeepForm } from "@/components/KeepForm";
 import {
-  KIND_LABEL, LEDGER_NOTICE, METHOD_LABEL, METHODS, STATUS_LABEL, STATUSES, isStatus, money, totals,
+  KIND_LABEL, LEDGER_NOTICE, METHOD_LABEL, METHODS, STATUS_LABEL, STATUSES, isStatus, matchCharge, money, sortCharges, totals,
   type ChargeRow, type EntryRow,
 } from "@/lib/ledger";
 import {
@@ -45,7 +46,9 @@ export default async function Ledger({ searchParams }: { searchParams: Promise<R
   const owner = { p_teacher: biz.kind === "teacher" ? biz.business_id : null, p_institute: biz.kind === "institute" ? biz.business_id : null };
   const status = isStatus(sp.s) ? sp.s : null;
   const openId = sp.open && /^[0-9a-f-]{36}$/i.test(sp.open) ? sp.open : null;
-  const self = (extra = "") => `/ledger?${bq}${status ? `&s=${status}` : ""}${extra}`;
+  const q = String(sp.q ?? "").trim().slice(0, 80);
+  const qq = q ? `&q=${encodeURIComponent(q)}` : "";
+  const self = (extra = "") => `/ledger?${bq}${status ? `&s=${status}` : ""}${qq}${extra}`;
 
   const [{ data: rowsData }, { data: entriesData }, { data: reportData }, { data: staffData }] = await Promise.all([
     supabase.rpc("business_charges", { ...owner, p_status: null }),
@@ -58,7 +61,7 @@ export default async function Ledger({ searchParams }: { searchParams: Promise<R
       : Promise.resolve({ data: [] }),
   ]);
   const rows = (rowsData ?? []) as ChargeRow[];
-  const shown = status ? rows.filter((r) => r.status === status) : rows;
+  const shown = sortCharges(rows.filter((r) => (!status || r.status === status) && matchCharge(r, q)));
   const t = totals(rows);
   const report = reportData as Report | null;
   const entries = (entriesData ?? []) as EntryRow[];
@@ -99,18 +102,32 @@ export default async function Ledger({ searchParams }: { searchParams: Promise<R
         )}
 
         <nav className="row" style={{ gap: 6, flexWrap: "wrap" }} aria-label="تصفية">
-          <Link className="chip" aria-current={!status ? "page" : undefined} href={`/ledger?${bq}`}>الكل ({rows.length})</Link>
+          <Link className="chip" aria-current={!status ? "page" : undefined} href={`/ledger?${bq}${qq}`}>الكل ({rows.length})</Link>
           {STATUSES.map((s) => (
-            <Link key={s} className="chip" aria-current={status === s ? "page" : undefined} href={`/ledger?${bq}&s=${s}`}>
+            <Link key={s} className="chip" aria-current={status === s ? "page" : undefined} href={`/ledger?${bq}&s=${s}${qq}`}>
               {STATUS_LABEL[s]} ({rows.filter((r) => r.status === s).length})
             </Link>
           ))}
         </nav>
 
+        {rows.length > 5 && (
+          <form method="get" action="/ledger" className="row" role="search" style={{ gap: 8 }}>
+            <input type="hidden" name="b" value={`${biz.kind[0]}:${biz.business_id}`} />
+            {status && <input type="hidden" name="s" value={status} />}
+            <label className="field" style={{ flex: 1 }}>
+              <span className="sr-only">بحث في السجل</span>
+              <input name="q" type="search" defaultValue={q} maxLength={80} placeholder="ابحث باسم الزبون أو الوصف" />
+            </label>
+            <button className="btn sm ghost">بحث</button>
+            {q && <Link className="small" href={`/ledger?${bq}${status ? `&s=${status}` : ""}`}>مسح</Link>}
+          </form>
+        )}
+
         {biz.can_record && (
           <details className="card" open={rows.length === 0}>
             <summary><b>مستحق جديد</b></summary>
-            <form action={createChargeAction} className="col" style={{ gap: 8 }}>
+            <KeepForm formId={`kf-newCharge-${biz.business_id}`} />
+            <form id={`kf-newCharge-${biz.business_id}`} action={createChargeAction} className="col" style={{ gap: 8 }}>
               <input type="hidden" name="back" value={self()} />
               <input type="hidden" name={biz.kind === "teacher" ? "teacher_id" : "institute_id"} value={biz.business_id} />
               <label className="field">الزبون<input name="customer" required maxLength={80} placeholder="الاسم كما تعرفه" /></label>
@@ -125,7 +142,11 @@ export default async function Ledger({ searchParams }: { searchParams: Promise<R
           </details>
         )}
 
-        {shown.length === 0 && <div className="empty">{status ? "لا مستحقات بهذه الحالة." : "لا مستحقات بعد."}</div>}
+        {shown.length === 0 && (
+          <div className="empty">
+            {q ? `لا نتائج لـ «${q}».` : status ? "لا مستحقات بهذه الحالة." : "لا مستحقات بعد. أضف أول مستحق من «مستحق جديد»، أو من «تسجيل دفعة جزئية أو عربون» في أي حجز."}
+          </div>
+        )}
         {shown.map((r) => (
           <div key={r.id} className="card" id={`c-${r.id}`}>
             <div className="row between"><b>{r.customer_label}</b><b className="num">{money(r.amount)}</b></div>
@@ -206,7 +227,9 @@ function ChargeDetail({ r, entries, biz, back, close }: { r: ChargeRow; entries:
       })}
 
       {r.status !== "cancelled" && biz.can_record && (
-        <form action={recordPaymentAction} className="col" style={{ gap: 8 }}>
+        <>
+        <KeepForm formId={`kf-pay-${r.id}`} />
+        <form id={`kf-pay-${r.id}`} action={recordPaymentAction} className="col" style={{ gap: 8 }}>
           <input type="hidden" name="back" value={back} />
           <input type="hidden" name="charge_id" value={r.id} />
           <b>تسجيل دفعة</b>
@@ -228,6 +251,7 @@ function ChargeDetail({ r, entries, biz, back, close }: { r: ChargeRow; entries:
           <label className="small row" style={{ gap: 6 }}><input type="checkbox" name="allow_over" value="1" /> المبلغ أكبر من المتبقي (يلزم توضيح في الملاحظة)</label>
           <button className="btn sm okb">تسجيل</button>
         </form>
+        </>
       )}
 
       {r.status !== "cancelled" && biz.can_correct && (

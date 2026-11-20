@@ -100,3 +100,37 @@ export function totals(rows: Pick<ChargeRow, "amount" | "paid" | "remaining" | "
     open: live.filter((r) => r.remaining > 0).length,
   };
 }
+
+const STATUS_ORDER: Record<ChargeStatus, number> = { overdue: 0, partial: 1, unpaid: 2, paid: 3, cancelled: 4 };
+
+/** The list order an owner works through: overdue first, then partly paid, unpaid (earliest due date first, then
+ *  newest), paid, cancelled. Stable for equal keys. */
+export function sortCharges<T extends Pick<ChargeRow, "status" | "due_on" | "created_at">>(rows: T[]): T[] {
+  return rows
+    .map((r, i) => ({ r, i }))
+    .sort((a, b) =>
+      (STATUS_ORDER[a.r.status] ?? 9) - (STATUS_ORDER[b.r.status] ?? 9)
+      || (a.r.due_on ?? "9999").localeCompare(b.r.due_on ?? "9999")
+      || b.r.created_at.localeCompare(a.r.created_at)
+      || a.i - b.i)
+    .map((x) => x.r);
+}
+
+/** Arabic-insensitive text match for the ledger search box (customer or description): alef forms, ta marbuta,
+ *  alef maqsura, diacritics and tatweel are folded; case is ignored. */
+export function foldArabic(s: string): string {
+  return s.toLowerCase()
+    .replace(/[ً-ْٰـ]/g, "")
+    .replace(/[أإآٱ]/g, "ا").replace(/ة/g, "ه").replace(/ى/g, "ي")
+    .replace(/\s+/g, " ").trim();
+}
+export function matchCharge(r: Pick<ChargeRow, "customer_label" | "description">, q: string | null | undefined): boolean {
+  const n = foldArabic(String(q ?? "")).slice(0, 80);
+  if (!n) return true;
+  return foldArabic(`${r.customer_label} ${r.description}`).includes(n);
+}
+
+/** Customer: what is still owed across businesses (cancelled excluded). */
+export function owedTotal(rows: Pick<MyChargeRow, "remaining" | "status">[]): number {
+  return Math.round(rows.filter((r) => r.status !== "cancelled").reduce((a, r) => a + Number(r.remaining), 0) * 100) / 100;
+}
