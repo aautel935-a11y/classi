@@ -22,9 +22,10 @@ applies() {
   ko "$2: $(grep -m1 ERROR "$W/out")"
   if [ ! -s "$DIFF" ]; then   # first failure only: what the file expected vs what this server has (no data, structure only)
     { echo "first failure: $1"; echo "-- expected (first guard of the file):"
-      awk '/\$exp\$/{f=1} f{print} /\$exp\$ then/{exit}' "$W/f/$1" | sed 's/.*\$exp\$//; s/\$exp\$.*//' | grep '|'
+      awk '/\$exp\$/{f=1} f{print} /\$exp\$ then/{exit}' "$W/f/$1" | sed 's/.*\$exp\$//; s/\$exp\$ then.*//' | grep '|'
       echo "-- this server:"; $P -d "$DB" -At -f "$REPO/scripts/production/fingerprint.sql" | grep '|'
-      echo "-- server: $($P -Atc 'show server_version')"; } > "$DIFF"
+      echo "-- server: $($P -Atc 'show server_version')"
+      echo "-- psql output of the failing file:"; grep -v "^NOTICE\|^psql:.*NOTICE" "$W/out" | cut -c1-200 | tail -25; } > "$DIFF"
   fi
 }
 refused() { # $1 file, $2 expected text, $3 label
