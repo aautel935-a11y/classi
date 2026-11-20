@@ -54,3 +54,19 @@ test("SEC-29 ICS: long Arabic lines are folded at 75 octets without splitting ch
   assert.equal(folded.split("\r\n").map((p, i) => (i ? p.slice(1) : p)).join(""), line);
 });
 test("I-2 escapeHtml", () => assert.equal(escapeHtml(`<b onclick="x">&'`), "&lt;b onclick=&quot;x&quot;&gt;&amp;&#39;"));
+
+test("SEC-25 a visitor's server action cannot empty the catalogue cache before the sign-in check", async () => {
+  const { readFileSync } = await import("node:fs");
+  const { fileURLToPath } = await import("node:url");
+  const src = readFileSync(fileURLToPath(new URL("../../app/actions.ts", import.meta.url)), "utf8");
+  // revalidateTag("catalog") is either inside client() behind `user`, or after a write that needed a session
+  const fns = src.split(/\nexport async function /).slice(1);
+  for (const fn of fns) {
+    const name = fn.slice(0, fn.indexOf("("));
+    const tag = fn.indexOf('revalidateTag("catalog")');
+    if (tag < 0) continue;
+    const auth = fn.search(/await client\(/);
+    assert.ok(auth >= 0 && auth < tag, `${name}: revalidateTag("catalog") runs before the session is read`);
+  }
+  assert.match(src, /if \(opts\?\.catalog && user\) revalidateTag\("catalog"\)/);
+});

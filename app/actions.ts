@@ -16,9 +16,12 @@ import {
 
 type Result = { error?: string; ok?: boolean; count?: number; created?: number; skipped?: string[] };
 
-async function client() {
+/** `catalog: true` marks the public catalogue cache stale BEFORE the write (a redirect after the write would skip a
+ *  later call), but only for a signed-in user: a visitor's request cannot empty the cache (SEC-25 / PERF-07). */
+async function client(opts?: { catalog?: boolean }) {
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
+  if (opts?.catalog && user) revalidateTag("catalog");
   return { supabase, user };
 }
 const str = (f: FormData, k: string) => String(f.get(k) ?? "").trim();
@@ -35,8 +38,7 @@ export async function bookAction(input: {
   mode?: Place | null;
   trial?: boolean;
 }): Promise<Result> {
-  revalidateTag("catalog");
-  const { supabase, user } = await client();
+  const { supabase, user } = await client({ catalog: true });
   if (!user) return { error: "سجّل الدخول أولاً لإتمام الحجز." };
   if (input.trial && !input.weekly) {
     const { error } = await supabase.rpc("create_trial_booking", {
@@ -75,8 +77,7 @@ export async function bookAction(input: {
 }
 
 export async function cancelBookingAction(form: FormData) {
-  revalidateTag("catalog");
-  const { supabase } = await client();
+  const { supabase } = await client({ catalog: true });
   const { error } = await supabase.rpc("cancel_booking", { p_booking: str(form, "id") });
   revalidatePath("/schedule");
   if (error) redirect(`/schedule?error=${encodeURIComponent(friendlyError(error))}`);
@@ -182,8 +183,7 @@ export async function removeChildAction(form: FormData) {
 
 // ---------- teacher ----------
 export async function teacherSetupAction(form: FormData) {
-  revalidateTag("catalog");
-  const { supabase, user } = await client();
+  const { supabase, user } = await client({ catalog: true });
   if (!user) redirect("/login?next=/teach");
   const { error } = await supabase.from("teachers").insert({
     user_id: user.id,
@@ -219,8 +219,7 @@ function offerExtras(form: FormData, type: string): Record<string, unknown> {
 }
 
 export async function newOfferingAction(form: FormData) {
-  revalidateTag("catalog");
-  const { supabase, user } = await client();
+  const { supabase, user } = await client({ catalog: true });
   if (!user) redirect("/login?next=/teach/new");
   const { data: t } = await supabase.from("teachers").select("id").eq("user_id", user.id).maybeSingle();
   if (!t) redirect("/teach");
@@ -278,8 +277,7 @@ export async function newOfferingAction(form: FormData) {
 }
 
 export async function deleteOfferingAction(form: FormData) {
-  revalidateTag("catalog");
-  const { supabase } = await client();
+  const { supabase } = await client({ catalog: true });
   const id = str(form, "id");
   const back = safePath(str(form, "path"), "/teach");
   const { count } = await supabase.from("bookings").select("id", { count: "exact", head: true }).eq("offering_id", id);
@@ -292,8 +290,7 @@ export async function deleteOfferingAction(form: FormData) {
 }
 
 export async function toggleOfferingAction(form: FormData) {
-  revalidateTag("catalog");
-  const { supabase } = await client();
+  const { supabase } = await client({ catalog: true });
   const back = safePath(str(form, "path"), "/teach");
   const active = str(form, "active") === "1";
   const { error } = await supabase.from("offerings").update({ active }).eq("id", str(form, "id"));
@@ -303,8 +300,7 @@ export async function toggleOfferingAction(form: FormData) {
 
 // ---------- institute ----------
 export async function instituteSetupAction(form: FormData) {
-  revalidateTag("catalog");
-  const { supabase, user } = await client();
+  const { supabase, user } = await client({ catalog: true });
   if (!user) redirect("/login?next=/manage");
   const { data: inst, error } = await supabase
     .from("institutes")
@@ -319,8 +315,7 @@ export async function instituteSetupAction(form: FormData) {
 }
 
 export async function newCourseAction(form: FormData) {
-  revalidateTag("catalog");
-  const { supabase, user } = await client();
+  const { supabase, user } = await client({ catalog: true });
   if (!user) redirect("/login?next=/manage/new-course");
   const { data: inst } = await supabase.from("institutes").select("id").eq("owner_id", user.id).maybeSingle();
   if (!inst) redirect("/manage");
@@ -488,8 +483,7 @@ const isKind = (k: unknown): k is PhotoKind => PHOTO_KINDS.includes(k as PhotoKi
  * waits for the admin, privately: the approved photo keeps showing until the admin publishes the new one. A profile
  * photo is private and applies at once. Returns nothing about other users. */
 export async function submitPhotoAction(kind: PhotoKind, path: string): Promise<Result> {
-  revalidateTag("catalog");
-  const { supabase, user } = await client();
+  const { supabase, user } = await client({ catalog: true });
   if (!user) return { error: "سجّل الدخول أولاً." };
   if (!isKind(kind)) return { error: "طلب غير صالح." };
   if (!validPrivatePath(path, { owner: user.id, kind })) return { error: "تعذّر حفظ الصورة: الملف لا يطابق حسابك." };
@@ -512,8 +506,7 @@ export async function submitPhotoAction(kind: PhotoKind, path: string): Promise<
 /** Removes the account's own photo. A profile photo goes at once (link and file). For a teacher or institute the
  * removal of the live photo waits for admin review like any profile change, so the approved photo stays meanwhile. */
 export async function removePhotoAction(kind: PhotoKind): Promise<Result> {
-  revalidateTag("catalog");
-  const { supabase, user } = await client();
+  const { supabase, user } = await client({ catalog: true });
   if (!user) return { error: "سجّل الدخول أولاً." };
   if (!isKind(kind)) return { error: "طلب غير صالح." };
   const before = (await photosInUse(supabase, user.id, kind)) ?? [];
@@ -576,8 +569,7 @@ async function waitingPhotoOf(supabase: PhotoDb, kind: string, id: string): Prom
 }
 
 export async function updateTeacherAction(form: FormData) {
-  revalidateTag("catalog");
-  const { supabase, user } = await client();
+  const { supabase, user } = await client({ catalog: true });
   if (!user) redirect("/login?next=/teach");
   // Check everything first; nothing is written when a field is wrong (BUG-10: a bad video link used to erase the saved one).
   const video = str(form, "intro_video");
@@ -607,8 +599,7 @@ export async function updateTeacherAction(form: FormData) {
 }
 
 export async function updateInstituteAction(form: FormData) {
-  revalidateTag("catalog");
-  const { supabase, user } = await client();
+  const { supabase, user } = await client({ catalog: true });
   if (!user) redirect("/login?next=/manage");
   await supabase.from("institutes").update({ name: str(form, "name"), town: str(form, "town"), bio: str(form, "bio") }).eq("owner_id", user.id);
   if (form.has("whatsapp")) {
@@ -626,8 +617,7 @@ export async function updateInstituteAction(form: FormData) {
 
 // ---------- admin ----------
 export async function adminVerifyAction(form: FormData) {
-  revalidateTag("catalog");
-  const { supabase } = await client();
+  const { supabase } = await client({ catalog: true });
   const { error } = await supabase.rpc("admin_verify", {
     p_kind: str(form, "kind"),
     p_id: str(form, "id"),
@@ -678,8 +668,7 @@ export async function saveAvailabilityAction(form: FormData) {
 
 // ---------- editing an offer ----------
 export async function updateOfferingAction(form: FormData) {
-  revalidateTag("catalog");
-  const { supabase, user } = await client();
+  const { supabase, user } = await client({ catalog: true });
   if (!user) redirect("/login");
   const id = str(form, "id");
   const path = `/manage/course/${id}`;
@@ -777,8 +766,7 @@ export async function submitReportAction(form: FormData) {
 }
 
 export async function adminSetStatusAction(form: FormData) {
-  revalidateTag("catalog");
-  const { supabase } = await client();
+  const { supabase } = await client({ catalog: true });
   const back = safePath(str(form, "back"), "/admin");
   const { error } = await supabase.rpc("admin_set_user_status", {
     p_user: str(form, "user_id"),
@@ -791,8 +779,7 @@ export async function adminSetStatusAction(form: FormData) {
 }
 
 export async function adminHideAction(form: FormData) {
-  revalidateTag("catalog");
-  const { supabase } = await client();
+  const { supabase } = await client({ catalog: true });
   const back = safePath(str(form, "back"), "/admin");
   const { error } = await supabase.rpc("admin_hide", {
     p_kind: str(form, "kind"),
@@ -816,8 +803,7 @@ export async function adminCloseReportAction(form: FormData) {
 }
 
 export async function cancelSeriesAction(form: FormData) {
-  revalidateTag("catalog");
-  const { supabase } = await client();
+  const { supabase } = await client({ catalog: true });
   const back = safePath(str(form, "back"), "/schedule");
   const { data, error } = await supabase.rpc("cancel_series", { p_series: str(form, "id") });
   revalidatePath(back);
@@ -1055,8 +1041,7 @@ export async function confirmPaymentAction(form: FormData) {
 
 // ---------- admin content review ----------
 export async function adminReviewAction(form: FormData) {
-  revalidateTag("catalog");
-  const { supabase } = await client();
+  const { supabase } = await client({ catalog: true });
   const kind = str(form, "kind"), id = str(form, "id"), approve = str(form, "approve") === "1";
   // a teacher's/institute's new photo waits in the private bucket: on approval it is published (copied to the public
   // bucket) only after the other changes are approved; on rejection its private file is deleted at once
@@ -1093,8 +1078,7 @@ export async function reportSubscriptionAction(form: FormData) {
 }
 
 export async function adminSubscriptionAction(form: FormData) {
-  revalidateTag("catalog");
-  const { supabase } = await client();
+  const { supabase } = await client({ catalog: true });
   const op = str(form, "op");
   let error: { message: string } | null = null;
   if (op === "activate" || op === "reject") {
@@ -1119,8 +1103,7 @@ export async function adminSubscriptionAction(form: FormData) {
 
 // ---------- ratings ----------
 export async function leaveReviewAction(form: FormData) {
-  revalidateTag("catalog");
-  const { supabase, user } = await client();
+  const { supabase, user } = await client({ catalog: true });
   const booking = str(form, "booking_id");
   if (!user) redirect(`/login?next=/review?booking=${booking}`);
   const { error } = await supabase.rpc("leave_review", { p_booking: booking, p_stars: num(form, "stars"), p_body: str(form, "body") || null });
@@ -1129,8 +1112,7 @@ export async function leaveReviewAction(form: FormData) {
 }
 
 export async function replyReviewAction(form: FormData) {
-  revalidateTag("catalog");
-  const { supabase, user } = await client();
+  const { supabase, user } = await client({ catalog: true });
   if (!user) redirect("/login");
   const back = backTo(form, "/teach#reviews");
   const { error } = await supabase.rpc("reply_review", { p_review: str(form, "id"), p_reply: str(form, "reply") });
@@ -1139,8 +1121,7 @@ export async function replyReviewAction(form: FormData) {
 }
 
 export async function adminHideReviewAction(form: FormData) {
-  revalidateTag("catalog");
-  const { supabase } = await client();
+  const { supabase } = await client({ catalog: true });
   const { error } = await supabase.rpc("admin_hide_review", { p_review: str(form, "id"), p_hidden: str(form, "hidden") === "1" });
   const back = backTo(form, "/admin");
   redirect(withQ(back, error ? `error=${encodeURIComponent(friendlyError(error))}` : "done=1"));
@@ -1148,8 +1129,7 @@ export async function adminHideReviewAction(form: FormData) {
 
 // ---------- delete my account ----------
 export async function deleteAccountAction(form: FormData) {
-  revalidateTag("catalog");
-  const { supabase, user } = await client();
+  const { supabase, user } = await client({ catalog: true });
   if (!user) redirect("/login");
   const { error } = await supabase.rpc("delete_my_account", { p_confirm: str(form, "confirm") });
   if (error) redirect(`/account?error=${encodeURIComponent(friendlyError(error))}#delete`);
@@ -1169,8 +1149,7 @@ export async function cancelSessionAction(form: FormData) {
 }
 
 export async function enrollWalkInAction(form: FormData) {
-  revalidateTag("catalog");
-  const { supabase, user } = await client();
+  const { supabase, user } = await client({ catalog: true });
   if (!user) redirect("/login");
   const back = backTo(form, "/manage");
   const { data, error } = await supabase.rpc("institute_enroll", {
@@ -1212,8 +1191,7 @@ export async function teacherVacationAction(form: FormData) {
 
 // ---------- admin operations ----------
 export async function adminCancelBookingAction(form: FormData) {
-  revalidateTag("catalog");
-  const { supabase } = await client();
+  const { supabase } = await client({ catalog: true });
   const back = safePath(str(form, "back"), "/admin?tab=ops");
   const { error } = await supabase.rpc("admin_cancel_booking", { p_booking: str(form, "booking_id"), p_reason: str(form, "reason") });
   revalidatePath("/admin");
@@ -1236,8 +1214,7 @@ export async function adminMessageAction(form: FormData) {
 }
 
 export async function adminEditOfferAction(form: FormData) {
-  revalidateTag("catalog");
-  const { supabase } = await client();
+  const { supabase } = await client({ catalog: true });
   const back = safePath(str(form, "back"), "/admin");
   const { error } = await supabase.rpc("admin_edit_offer", { p_offering: str(form, "id"), p_title: str(form, "title"), p_reason: str(form, "reason") || null });
   revalidatePath(back.split("?")[0]);
