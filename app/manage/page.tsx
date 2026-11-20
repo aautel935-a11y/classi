@@ -16,7 +16,7 @@ import { ShareProfile } from "@/components/ShareProfile";
 import { SITE } from "@/lib/site";
 import { dayLong, time } from "@/lib/format";
 import { ErrorNote } from "@/components/ErrorNote";
-import { errorText } from "@/lib/safe";
+import { flashText } from "@/lib/flash";
 import { KeepForm } from "@/components/KeepForm";
 
 export const dynamic = "force-dynamic";
@@ -102,7 +102,7 @@ export default async function Manage({ searchParams }: { searchParams: Promise<R
       <PaymentsOwner rows={(pays ?? []) as PayRow[]} summary={((Array.isArray(money) ? money[0] : money) ?? null) as MoneySummary | null} back="/manage#payments" hasBit={!!bitLocal} flash={sp.ok} />
       <p className="small" style={{ textAlign: "center" }}><Link className="link" href="/ledger">سجل المستحقات: دفعات جزئية، عربون، متأخرات وتقارير</Link></p>
 
-      <WaitlistOwner rows={waitlist} back="/manage" flash={sp.wl} error={errorText(sp.error) ?? undefined} />
+      <WaitlistOwner rows={waitlist} back="/manage" flash={sp.wl} error={flashText(sp.error) ?? undefined} />
 
       <ShareProfile url={`${SITE}/institute/${inst.id}`} name={inst.name} />
 

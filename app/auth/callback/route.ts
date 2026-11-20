@@ -1,6 +1,7 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { safePath } from "@/lib/safe";
+import { errParam } from "@/lib/flash";
 
 // Email confirmation link lands here: open the session, apply the chosen role.
 export async function GET(request: NextRequest) {
@@ -20,7 +21,7 @@ export async function GET(request: NextRequest) {
         const msg = safeNext === "/account/password"
           ? "افتح رابط إعادة التعيين في نفس المتصفح الذي طلبته منه (مثلاً Chrome)، أو اطلب رابطاً جديداً."
           : "تم تأكيد بريدك. سجّل الدخول الآن بكلمة المرور.";
-        return NextResponse.redirect(new URL(`/login?error=${encodeURIComponent(msg)}&next=${encodeURIComponent(safeNext)}`, url.origin));
+        return NextResponse.redirect(new URL(`/login?${errParam(msg)}&next=${encodeURIComponent(safeNext)}`, url.origin));
       }
     }
     if (data?.user && role && ["guardian", "student", "teacher", "institute"].includes(role)) {

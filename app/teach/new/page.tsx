@@ -2,7 +2,7 @@ import { loadReference } from "@/lib/catalog";
 import Link from "next/link";
 import { requireUser } from "@/lib/session";
 import { NewOfferForm } from "./NewOfferForm";
-import { errorText } from "@/lib/safe";
+import { flashText } from "@/lib/flash";
 
 export const dynamic = "force-dynamic";
 
@@ -28,7 +28,7 @@ export default async function NewOffer({ searchParams }: { searchParams: Promise
   }
   return (
     <div className="wrap">
-      <NewOfferForm subjects={subjects ?? []} levels={levels ?? []} error={errorText(sp.error) ?? undefined} />
+      <NewOfferForm subjects={subjects ?? []} levels={levels ?? []} error={flashText(sp.error) ?? undefined} />
     </div>
   );
 }

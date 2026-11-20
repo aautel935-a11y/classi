@@ -7,6 +7,7 @@ import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { friendlyError } from "@/lib/errors";
 import { parseDay } from "@/lib/ledger";
+import { errParam } from "@/lib/flash";
 
 const str = (f: FormData, k: string) => String(f.get(k) ?? "").trim();
 const uuid = (s: string) => (/^[0-9a-f-]{36}$/i.test(s) ? s : null);
@@ -14,7 +15,7 @@ const BACK = "/admin?tab=subs";
 
 function done(error: { message?: string; code?: string } | null, ok: string): never {
   revalidatePath("/admin");
-  redirect(`${BACK}&${error ? `error=${encodeURIComponent(friendlyError(error))}` : `done=${ok}`}#access`);
+  redirect(`${BACK}&${error ? `${errParam(friendlyError(error))}` : `done=${ok}`}#access`);
 }
 function owner(form: FormData) {
   const kind = str(form, "kind"), id = uuid(str(form, "business_id"));

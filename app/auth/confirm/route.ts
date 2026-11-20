@@ -1,6 +1,7 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { safePath } from "@/lib/safe";
+import { errParam } from "@/lib/flash";
 
 // Links in Classi's emails (sign-up confirmation, password reset) land here.
 // They carry a one-time token instead of relying on a cookie, so they work even
@@ -20,7 +21,7 @@ export async function GET(request: NextRequest) {
     const supabase = await createClient();
     const { error } = await supabase.auth.verifyOtp({ type, token_hash });
     if (!error) return NextResponse.redirect(new URL(type === "recovery" ? "/account/password" : safeNext, url.origin));
-    return NextResponse.redirect(new URL(`/login?error=${encodeURIComponent("الرابط منتهي أو استُعمل من قبل. اطلب رابطاً جديداً.")}`, url.origin));
+    return NextResponse.redirect(new URL(`/login?${errParam("الرابط منتهي أو استُعمل من قبل. اطلب رابطاً جديداً.")}`, url.origin));
   }
   return NextResponse.redirect(new URL("/login", url.origin));
 }

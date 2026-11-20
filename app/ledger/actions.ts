@@ -8,6 +8,7 @@ import { createClient } from "@/lib/supabase/server";
 import { friendlyError } from "@/lib/errors";
 import { safePath } from "@/lib/safe";
 import { isMethod, parseAmount, parseDay } from "@/lib/ledger";
+import { errParam } from "@/lib/flash";
 
 const str = (f: FormData, k: string) => String(f.get(k) ?? "").trim();
 const uuid = (s: string) => (/^[0-9a-f-]{36}$/i.test(s) ? s : null);
@@ -27,7 +28,7 @@ async function signedIn() {
 }
 function done(to: string, error: { message?: string; code?: string } | null, ok: string): never {
   revalidatePath("/ledger");
-  go(to, error ? `error=${encodeURIComponent(friendlyError(error))}` : `ok=${ok}`);
+  go(to, error ? `${errParam(friendlyError(error))}` : `ok=${ok}`);
 }
 
 export async function createChargeAction(form: FormData) {
@@ -35,8 +36,8 @@ export async function createChargeAction(form: FormData) {
   const to = back(form);
   const amount = parseAmount(str(form, "amount"));
   const deposit = str(form, "deposit") ? parseAmount(str(form, "deposit")) : null;
-  if (amount === null) go(to, `error=${encodeURIComponent("اكتب مبلغاً صحيحاً أكبر من صفر.")}`);
-  if (str(form, "deposit") && deposit === null) go(to, `error=${encodeURIComponent("العربون غير صالح.")}`);
+  if (amount === null) go(to, `${errParam("اكتب مبلغاً صحيحاً أكبر من صفر.")}`);
+  if (str(form, "deposit") && deposit === null) go(to, `${errParam("العربون غير صالح.")}`);
   const { error } = await supabase.rpc("create_charge", {
     p_teacher: uuid(str(form, "teacher_id")), p_institute: uuid(str(form, "institute_id")),
     p_customer_label: str(form, "customer").slice(0, 80), p_description: str(form, "description").slice(0, 200),
@@ -58,8 +59,8 @@ export async function recordPaymentAction(form: FormData) {
   const amount = parseAmount(str(form, "amount"));
   const kind = str(form, "kind");
   const method = str(form, "method");
-  if (amount === null) go(to, `error=${encodeURIComponent("اكتب مبلغاً صحيحاً أكبر من صفر.")}`);
-  if (!["payment", "deposit", "refund"].includes(kind) || !isMethod(method)) go(to, `error=${encodeURIComponent("اختر النوع والطريقة.")}`);
+  if (amount === null) go(to, `${errParam("اكتب مبلغاً صحيحاً أكبر من صفر.")}`);
+  if (!["payment", "deposit", "refund"].includes(kind) || !isMethod(method)) go(to, `${errParam("اختر النوع والطريقة.")}`);
   const { error } = await supabase.rpc("record_payment", {
     p_charge: uuid(str(form, "charge_id")), p_kind: kind, p_amount: amount, p_method: method,
     p_paid_on: parseDay(str(form, "paid_on")), p_note: str(form, "note").slice(0, 300) || null, p_allow_over: str(form, "allow_over") === "1",
@@ -77,7 +78,7 @@ export async function adjustChargeAction(form: FormData) {
   const supabase = await signedIn();
   const to = back(form);
   const amount = parseAmount(str(form, "amount"));
-  if (amount === null) go(to, `error=${encodeURIComponent("اكتب مبلغاً صحيحاً أكبر من صفر.")}`);
+  if (amount === null) go(to, `${errParam("اكتب مبلغاً صحيحاً أكبر من صفر.")}`);
   const { error } = await supabase.rpc("adjust_charge", {
     p_charge: uuid(str(form, "charge_id")), p_amount: amount, p_due_on: parseDay(str(form, "due_on")), p_reason: str(form, "reason").slice(0, 300),
   });
