@@ -48,6 +48,7 @@ other=$(grep -v -e '^[[:space:]]*$' -e '^#' -e '^age1[0-9a-z]\{58\}$' "$AGE_RECI
 REPO="$(cd "$HERE/../.." && pwd -P)"
 mkdir -p "$OUT"; OUTABS="$(cd "$OUT" && pwd -P)"
 case "$OUTABS/" in "$REPO"/*) refuse "the output folder must be outside the repository";; esac
+[ -z "$(ls -A "$OUTABS")" ] || refuse "the output folder must be empty"
 
 umask 077
 WORK="$(mktemp -d)"; trap 'rm -rf "$WORK"' EXIT INT TERM
@@ -104,4 +105,7 @@ encrypted  age, to $keys owner key(s); the one-time key of the restore proof was
 restore    PASS: restored into an isolated empty database, every row count matches
 EOF
 cat "$OUTABS/$NAME.summary.txt"
+# last guard before anything is stored: exactly the three files, and no private key among them
+[ "$(ls -A "$OUTABS" | grep -c "^$NAME\.")" = 3 ] && [ "$(ls -A "$OUTABS" | wc -l)" = 3 ] || fail "unexpected files in the output folder"
+grep -rqs 'AGE-SECRET-KEY' "$OUTABS" && fail "a private key is in the output folder: nothing may be stored"
 echo "PASS: encrypted backup $NAME.tar.age, restore proven"

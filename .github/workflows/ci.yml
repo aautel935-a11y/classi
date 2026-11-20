@@ -271,22 +271,24 @@ jobs:
             age-keygen -o "$RUNNER_TEMP/owner.key" 2>/dev/null; age-keygen -y "$RUNNER_TEMP/owner.key" > "$RUNNER_TEMP/owner.pub"
             t=$(sh scripts/db/scratch-db.sh start "$RUNNER_TEMP/target1")
             mkdir -m 700 "$RUNNER_TEMP/out"
+            fp() { psql "$SRC_URL" -At -f scripts/production/fingerprint.sql | grep '|'; psql "$SRC_URL" -At -c "select string_agg(table_name || '=' || (xpath('/row/c/text()', query_to_xml(format('select count(*) c from public.%I', table_name), false, true, '')))[1]::text, ',' order by table_name) from information_schema.tables where table_schema = 'public' and table_type = 'BASE TABLE'"; psql "$SRC_URL" -At -c "select md5(string_agg(t::text, ',' order by t::text)) from (select id, phone, email, updated_at from auth.users) t"; }
+            before=$(fp)
             DB_URL="$SRC_URL" TARGET_URL="$t" AGE_RECIPIENTS="$RUNNER_TEMP/owner.pub" EXPECT_CLUSTER="$SRC_CLUSTER" sh scripts/db/staging-backup.sh "$RUNNER_TEMP/out"
+            [ "$(fp)" = "$before" ] && echo "PASS: the source database is unchanged (schema, rows per table, accounts)" || { echo "FAIL: the source changed during the backup"; exit 1; }
             ls "$RUNNER_TEMP/out" | grep -c . | grep -qx 3 || { echo "FAIL: expected exactly 3 output files"; exit 1; }
             grep -a -q -e synthetic -e drill1@t "$RUNNER_TEMP"/out/*.tar.age && { echo "FAIL: plaintext in the encrypted file"; exit 1; } || echo "PASS: no plaintext in the encrypted file"
             sh scripts/db/scratch-db.sh stop "$RUNNER_TEMP/target1"
           } 2>&1 | tee /tmp/bk-drill.log; grep -q '^PASS: encrypted backup' /tmp/bk-drill.log
-      - name: Later restore by the owner from the stored file only (owner key, a new empty database)
+      - name: Later restore by the owner from the stored file only (open-backup.sh, owner key, a new empty database)
         run: |
           {
+            sh scripts/db/check-backup-key.sh "$RUNNER_TEMP/owner.key" "$(cat "$RUNNER_TEMP/owner.pub")"
             f=$(ls "$RUNNER_TEMP"/out/*.tar.age)
-            ( cd "$RUNNER_TEMP/out" && sha256sum -c "$(basename "$f").sha256" )
-            mkdir -m 700 "$RUNNER_TEMP/open"; age -d -i "$RUNNER_TEMP/owner.key" "$f" | tar -C "$RUNNER_TEMP/open" -xf -
             t=$(sh scripts/db/scratch-db.sh start "$RUNNER_TEMP/target2")
-            TARGET_URL="$t" sh scripts/db/restore-check.sh "$RUNNER_TEMP"/open/classi-backup-*
+            TARGET_URL="$t" sh scripts/db/open-backup.sh "$f" "$RUNNER_TEMP/owner.key" "$RUNNER_TEMP/open"
             [ "$(psql "$t" -At -c "select count(*) from auth.users where email like 'drill%@t'")" = 5 ] && echo "PASS: the five synthetic accounts are back"
             sh scripts/db/scratch-db.sh stop "$RUNNER_TEMP/target2"; rm -rf "$RUNNER_TEMP/open" "$RUNNER_TEMP/owner.key"
-          } 2>&1 | tee /tmp/bk-restore.log; grep -q '^PASS: the five synthetic accounts are back' /tmp/bk-restore.log
+          } 2>&1 | tee /tmp/bk-restore.log; grep -q '^PASS: the five synthetic accounts are back' /tmp/bk-restore.log && grep -q '^MATCH' /tmp/bk-restore.log
       - name: Report (annotations)
         if: always()
         run: sh .github/report.sh "backup-drill" /tmp/bk-wf.log /tmp/bk-drill.log /tmp/bk-restore.log

@@ -65,10 +65,25 @@ if age -d -i "$W/owner.key" "$F" | tar -C "$W/open" -xf - && [ -s "$W/open"/clas
 age -d -i "$W/other.key" "$F" > /dev/null 2>&1 && ko "another key opened it" || ok "another key cannot open it"
 [ -z "$(ls -A "$W/tmp")" ] && ! grep -rqs 'AGE-SECRET-KEY' "$OUT" && ok "no temporary file and no private key left behind" || ko "temporary files or a private key left on disk"
 
-# 3. the owner's later restore, from the stored file alone, into another empty database
+# 3. the owner's later restore with open-backup.sh, from the stored file alone, into another empty database
 fresh_target "$TGT2"
-B=$(ls -d "$W/open"/classi-backup-* | head -1)
-if TARGET_URL="$(url $TGT2)" sh "$REPO/scripts/db/restore-check.sh" "$B" > "$W/log2" 2>&1 && grep -q '^PASS' "$W/log2"; then ok "later restore by the owner from the stored file: PASS"; else ko "later restore"; cat "$W/log2"; fi
+OB="$REPO/scripts/db/open-backup.sh"
+if TARGET_URL="$(url $TGT2)" sh "$OB" "$F" "$W/owner.key" "$W/later" > "$W/log2" 2>&1 && grep -q '^ok: SHA-256 matches' "$W/log2" && grep -q '^ok: opened, every file matches' "$W/log2" && grep -q '^PASS' "$W/log2"; then
+  ok "later restore by the owner (open-backup.sh: SHA-256, decrypt, inner checksums, restore): PASS"; else ko "later restore"; cat "$W/log2"; fi
+grep -q -e synthetic -e '+97250999' "$W/log2" && ko "open-backup printed data" || ok "open-backup prints totals only"
+cat "$W/owner.key" | sh "$OB" "$F" - "$W/later2" > "$W/log3" 2>&1 && grep -q '^ok: opened' "$W/log3" && ! grep -rqs 'AGE-SECRET-KEY' "$W/later2" \
+  && ok "a key given on stdin (passphrase-protected key file) works and is not left on disk" || { ko "stdin key"; cat "$W/log3"; }
+sh "$OB" "$F" "$W/other.key" "$W/later3" > "$W/log4" 2>&1 && ko "open-backup with another key: it opened" || { grep -q '^FAIL: this key does not open the file' "$W/log4" && [ ! -e "$W/later3/backup.tar" ] && ok "open-backup with another key: FAIL, nothing written" || ko "other key: $(tail -1 "$W/log4")"; }
+sh "$OB" "$F" "$W/owner.key" "$W/later" > "$W/log5" 2>&1 && ko "open-backup into an existing folder: it ran" || ok "open-backup refuses an existing folder"
+cp "$F" "$W/copy.tar.age"; sed "s/$(basename "$F")/copy.tar.age/" "$F.sha256" > "$W/copy.tar.age.sha256"; printf 'x' | dd of="$W/copy.tar.age" bs=1 seek=300 conv=notrunc 2>/dev/null
+sh "$OB" "$W/copy.tar.age" "$W/owner.key" "$W/later4" > "$W/log6" 2>&1 && ko "open-backup of a damaged file: it opened" || { grep -q 'does not match its SHA-256' "$W/log6" && ok "open-backup of a damaged file: FAIL at the SHA-256" || ko "damaged: $(tail -1 "$W/log6")"; }
+
+# 3b. the key check the owner runs once (check-backup-key.sh)
+CK="$REPO/scripts/db/check-backup-key.sh"
+sh "$CK" "$W/owner.key" "$(cat "$W/owner.pub")" | grep -q '^MATCH' && ok "key check: the right public key gives MATCH" || ko "key check match"
+sh "$CK" "$W/owner.key" "$(age-keygen -y "$W/other.key")" > "$W/ck" 2>&1 && ko "key check: a wrong public key passed" || { grep -q '^NO MATCH' "$W/ck" && ok "key check: a wrong public key gives NO MATCH" || ko "key check mismatch"; }
+sh "$CK" "$W/owner.key" "$(grep AGE-SECRET-KEY "$W/owner.key")" > "$W/ck" 2>&1 && ko "key check accepted a private key as the public one" || { grep -q '^STOP' "$W/ck" && ! grep -q 'AGE-SECRET-KEY-1' "$W/ck" && ok "key check: a private key pasted as the public one is stopped and not echoed" || ko "key check private"; }
+cat "$W/owner.key" | sh "$CK" - "$(cat "$W/owner.pub")" | grep -q '^MATCH' && ok "key check from stdin" || ko "key check stdin"
 
 # 4. damage is detected
 cp "$F" "$W/bad.tar.age"; printf 'x' | dd of="$W/bad.tar.age" bs=1 seek=200 conv=notrunc 2>/dev/null
@@ -91,6 +106,9 @@ refused "remote restore target" "must be a local database" TARGET_URL="postgresq
 refused "target = source" "is the source" TARGET_URL="$(url $SRC)"
 cp "$W/owner.key" "$W/priv.txt"; refused "private key given as recipient" "PRIVATE key" AGE_RECIPIENTS="$W/priv.txt"
 printf 'not-a-key\n' > "$W/junk.txt"; refused "recipient that is not a key" "one age public key" AGE_RECIPIENTS="$W/junk.txt"
+mkdir -p "$W/full"; : > "$W/full/old-file"
+fresh_target "$TGT"
+if env DB_URL="$(url $SRC)" TARGET_URL="$(url $TGT)" AGE_RECIPIENTS="$W/owner.pub" EXPECT_CLUSTER="$CLUSTER" sh "$S" "$W/full" > "$W/log" 2>&1; then ko "non-empty output folder: it ran"; else grep -q "must be empty" "$W/log" && [ "$(ls -A "$W/full")" = old-file ] && ok "non-empty output folder: refused" || ko "non-empty output: $(tail -1 "$W/log")"; fi
 fresh_target "$TGT"
 if env DB_URL="$(url $SRC)" TARGET_URL="$(url $TGT)" AGE_RECIPIENTS="$W/owner.pub" EXPECT_CLUSTER="$CLUSTER" sh "$S" "$REPO/tmp-backup-out" > "$W/log" 2>&1; then ko "output in repo: it ran"; else grep -q "outside the repository" "$W/log" && ok "output folder inside the repository: refused" || ko "output in repo: $(tail -1 "$W/log")"; fi
 rm -rf "$REPO/tmp-backup-out"
