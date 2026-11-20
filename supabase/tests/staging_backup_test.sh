@@ -130,6 +130,11 @@ refused "SOURCE=production with another project ref" "needs EXPECT_REF" SOURCE=p
 refused "SOURCE=other" "must be staging or production" SOURCE=other
 $P -d "$SRC" -c "alter schema sm_hidden rename to supabase_migrations" >/dev/null
 
+# 5c. a connection error never prints the password of the link
+fresh_target "$TGT"
+env DB_URL="postgresql://postgres:Sup3rSecretPw@127.0.0.1:1/postgres" TARGET_URL="$(url $TGT)" AGE_RECIPIENTS="$W/owner.pub" EXPECT_CLUSTER="$CLUSTER" sh "$S" "$W/o6" > "$W/log" 2>&1
+grep -q "FAIL: cannot read the source" "$W/log" && ! grep -q "Sup3rSecretPw" "$W/log" && ok "an unreachable source: FAIL, and the password is not printed" || { ko "password in the output or wrong failure"; tail -3 "$W/log"; }
+
 # 6. a restore that fails is reported as FAIL, without data in the output
 fresh_target "$TGT"; $P -d "$TGT" -c "drop table auth.users; create table auth.users (id uuid primary key)" >/dev/null
 if run sh "$S" "$W/o4"; then ko "broken target: it passed"

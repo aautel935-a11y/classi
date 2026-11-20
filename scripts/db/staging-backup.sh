@@ -26,10 +26,11 @@ OUT="${1:?usage: sh scripts/db/staging-backup.sh <output folder outside the repo
 : "${AGE_RECIPIENTS:?set AGE_RECIPIENTS (a file of age public keys)}"
 : "${EXPECT_CLUSTER:?set EXPECT_CLUSTER}"
 need psql; need age; need age-keygen; need tar; need sha256sum
+export PGCONNECT_TIMEOUT="${PGCONNECT_TIMEOUT:-15}"   # an unreachable database fails fast instead of hanging
 refuse() { echo "refusing: $*"; exit 2; }
 fail() { echo "FAIL: $*"; exit 1; }
 # database messages without values: no quoted text, no CONTEXT/DETAIL/HINT/LINE lines (they can quote rows)
-scrub() { grep -v -E '^(CONTEXT|DETAIL|HINT|LINE|QUERY)|^[[:space:]]' "$1" | sed -E "s/'[^']*'/'…'/g; s/\"[^\"]*\"/\"…\"/g; s/\([^)]*\)=\([^)]*\)/(…)=(…)/g" | tail -8; }
+scrub() { grep -v -E '^(CONTEXT|DETAIL|HINT|LINE|QUERY)|^[[:space:]]' "$1" | sed -E "s#://[^/@[:space:]]*@#://…@#g; s/'[^']*'/'…'/g; s/\"[^\"]*\"/\"…\"/g; s/\([^)]*\)=\([^)]*\)/(…)=(…)/g" | tail -8; }
 local_url() { case "$1" in *@127.0.0.1:*|*@localhost:*|*@\[::1\]:*|*@/*\?host=/*|*@/*\&host=/*) return 0;; *) return 1;; esac; }
 
 SOURCE="${SOURCE:-staging}"

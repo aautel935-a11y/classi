@@ -11,6 +11,10 @@
 name: Staging backup
 
 on:
+  # A push to staging-migrate whose commit message STARTS with "[staging-backup] backup classi-staging" also starts it (GitHub offers
+  # "Run workflow" only for workflows on the default branch, and main has none). Any other push: the job is skipped.
+  push:
+    branches: [staging-migrate]
   workflow_dispatch:
     inputs:
       confirm:
@@ -37,13 +41,14 @@ jobs:
   backup:
     runs-on: ubuntu-latest
     timeout-minutes: 30
+    if: github.event_name == 'workflow_dispatch' || startsWith(github.event.head_commit.message, '[staging-backup] backup classi-staging')
     environment: staging-db   # owner approval; deployment branch staging-migrate only
     outputs:
       name: ${{ steps.backup.outputs.name }}
       sha256: ${{ steps.backup.outputs.sha256 }}
     steps:
       - name: Confirmation and branch
-        env: { CONFIRM: "${{ inputs.confirm }}" }
+        env: { CONFIRM: "${{ inputs.confirm || (startsWith(github.event.head_commit.message, '[staging-backup] backup classi-staging') && 'backup classi-staging') || '' }}" }
         run: |
           [ "$CONFIRM" = "backup classi-staging" ] || { echo "::error::type exactly: backup classi-staging"; exit 1; }
           [ "$GITHUB_REF" = "refs/heads/staging-migrate" ] || { echo "::error::run it from the staging-migrate branch"; exit 1; }
@@ -54,6 +59,8 @@ jobs:
         run: |
           [ -n "$STAGING_DB_URL" ] || { echo "::error::secret STAGING_DB_URL is not set in Environment staging-db"; exit 1; }
           u="$(printf %s "$STAGING_DB_URL" | tr -d '[:space:]')"
+          # mask the password part on its own too (GitHub masks the whole secret; a tool could print the password alone)
+          pw=$(printf %s "$u" | sed -nE 's#^[a-z]+://[^:/@]*:([^@]*)@.*#\1#p'); [ -n "$pw" ] && echo "::add-mask::$pw"; unset pw
           case "$u" in *rfxhqcagdsuhkjzwbawx*) echo "::error::STAGING_DB_URL is the production project"; exit 1;; esac
           case "$u" in *nfipmylyahhogykikuqo*) echo "target: classi-staging";; *) echo "::error::STAGING_DB_URL is not classi-staging (nfipmylyahhogykikuqo)"; exit 1;; esac
       - name: Check 2 - the owner's public key(s)
@@ -97,7 +104,7 @@ jobs:
         with:
           name: classi-staging-backup-${{ github.run_id }}
           path: ${{ runner.temp }}/out/
-          retention-days: ${{ inputs.retention_days }}
+          retention-days: ${{ inputs.retention_days || '3' }}
           if-no-files-found: error
       - name: Clean up (restore target, temporary files)
         if: always()

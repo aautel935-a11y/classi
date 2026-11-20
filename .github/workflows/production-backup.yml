@@ -12,6 +12,10 @@
 name: Production backup
 
 on:
+  # A push to production-ops whose commit message STARTS with "[production-backup] backup classi production" also starts it (GitHub offers
+  # "Run workflow" only for workflows on the default branch, and main has none). Any other push: the job is skipped.
+  push:
+    branches: [production-ops]
   workflow_dispatch:
     inputs:
       confirm:
@@ -43,6 +47,7 @@ jobs:
   backup:
     runs-on: ubuntu-latest
     timeout-minutes: 30
+    if: github.event_name == 'workflow_dispatch' || startsWith(github.event.head_commit.message, '[production-backup] backup classi production')
     environment: production-db   # owner approval; deployment branch production-ops only
     outputs:
       name: ${{ steps.backup.outputs.name }}
@@ -50,7 +55,7 @@ jobs:
     steps:
       - name: Confirmation, branch, repository visibility
         env:
-          CONFIRM: "${{ inputs.confirm }}"
+          CONFIRM: "${{ inputs.confirm || (startsWith(github.event.head_commit.message, '[production-backup] backup classi production') && 'backup classi production') || '' }}"
           PRIVATE: "${{ github.event.repository.private }}"
           PUBLIC_OK: "${{ inputs.public_repo_ok }}"
         run: |
@@ -67,6 +72,8 @@ jobs:
         run: |
           [ -n "$PRODUCTION_DB_URL" ] || { echo "::error::secret PRODUCTION_DB_URL is not set in Environment production-db"; exit 1; }
           u="$(printf %s "$PRODUCTION_DB_URL" | tr -d '[:space:]')"
+          # mask the password part on its own too (GitHub masks the whole secret; a tool could print the password alone)
+          pw=$(printf %s "$u" | sed -nE 's#^[a-z]+://[^:/@]*:([^@]*)@.*#\1#p'); [ -n "$pw" ] && echo "::add-mask::$pw"; unset pw
           case "$u" in *nfipmylyahhogykikuqo*) echo "::error::PRODUCTION_DB_URL is classi-staging"; exit 1;; esac
           case "$u" in *rfxhqcagdsuhkjzwbawx*) echo "source: classi (production), read only";; *) echo "::error::PRODUCTION_DB_URL is not Classi production (rfxhqcagdsuhkjzwbawx)"; exit 1;; esac
       - name: Check 2 - the owner's public key(s)
@@ -111,7 +118,7 @@ jobs:
         with:
           name: classi-production-backup-${{ github.run_id }}
           path: ${{ runner.temp }}/out/
-          retention-days: ${{ inputs.retention_days }}
+          retention-days: ${{ inputs.retention_days || '1' }}
           if-no-files-found: error
       - name: Clean up (restore target, temporary files)
         if: always()

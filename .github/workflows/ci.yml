@@ -255,11 +255,15 @@ jobs:
           python3 - <<'PY' 2>&1 | tee /tmp/bk-wf.log
           import re, sys, yaml
           errs = []
-          for path, env, secret in ((".github/workflows/staging-backup.yml", "staging-db", "STAGING_DB_URL"),
-                                    (".github/workflows/production-backup.yml", "production-db", "PRODUCTION_DB_URL")):
+          for path, env, secret, branch, phrase in (
+                  (".github/workflows/staging-backup.yml", "staging-db", "STAGING_DB_URL", "staging-migrate", "[staging-backup] backup classi-staging"),
+                  (".github/workflows/production-backup.yml", "production-db", "PRODUCTION_DB_URL", "production-ops", "[production-backup] backup classi production")):
               src = open(path).read(); w = yaml.safe_load(src); on = w.get(True, w.get("on"))
               e = lambda m: errs.append(f"{path}: {m}")
-              if list(on) != ["workflow_dispatch"]: e("triggers must be workflow_dispatch only: %s" % list(on))
+              if sorted(on) != ["push", "workflow_dispatch"]: e("triggers must be workflow_dispatch and the tagged push only: %s" % list(on))
+              if on.get("push") != {"branches": [branch]}: e(f"push must be limited to the {branch} branch: {on.get('push')}")
+              cond = w["jobs"]["backup"].get("if", "")
+              if cond != f"github.event_name == 'workflow_dispatch' || startsWith(github.event.head_commit.message, '{phrase}')": e("the backup job must run only on dispatch or the exact phrase: " + cond)
               if w["permissions"] != {"contents": "read"}: e("workflow permissions must be contents: read")
               if w["jobs"]["backup"].get("environment") != env: e(f"the backup job must use Environment {env}")
               if "environment" in w["jobs"]["stored-copy"]: e("stored-copy must not use an Environment")
@@ -269,7 +273,7 @@ jobs:
           prod = open(".github/workflows/production-backup.yml").read()
           for need in ("SOURCE: production", 'EXPECT_CLUSTER: "7692130048193495360"', "EXPECT_REF: rfxhqcagdsuhkjzwbawx", "github.event.repository.private"):
               if need not in prod: errs.append("production-backup.yml lacks: " + need)
-          print("\n".join("FAIL: " + x for x in errs) or "PASS: both backup workflows: manual only, own Environment, one secret, no push/deploy/migration")
+          print("\n".join("FAIL: " + x for x in errs) or "PASS: both backup workflows: dispatch or tagged push on their own branch only, own Environment, one secret, no push/deploy/migration")
           sys.exit(1 if errs else 0)
           PY
       - name: Tools (age from Ubuntu)
