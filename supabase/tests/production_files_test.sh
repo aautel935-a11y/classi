@@ -16,7 +16,17 @@ ko() { echo "FAIL: $1"; fail=$((fail + 1)); }
 q() { $P -d "$DB" -Atc "$1" 2>/dev/null; }
 state() { echo "$(q "select count(*) || ':' || max(version) from supabase_migrations.schema_migrations")#$(q "select coalesce(string_agg(key || '=' || left(value, 12), ',' order by key), '') from public.app_secrets")#$($P -d "$DB" -At -f "$REPO/scripts/production/fingerprint.sql" | grep '|' | tr '\n' ';')"; }
 run() { $P -d "$DB" -v ON_ERROR_STOP=1 -f "$W/f/$1" > "$W/out" 2>&1; }
-applies() { if run "$1"; then ok "$2"; else ko "$2: $(grep -m1 ERROR "$W/out")"; fi; }
+DIFF="${PRODFILES_DIFF:-/tmp/prodfiles_diff.log}"; : > "$DIFF"
+applies() {
+  if run "$1"; then ok "$2"; return; fi
+  ko "$2: $(grep -m1 ERROR "$W/out")"
+  if [ ! -s "$DIFF" ]; then   # first failure only: what the file expected vs what this server has (no data, structure only)
+    { echo "first failure: $1"; echo "-- expected (first guard of the file):"
+      awk '/\$exp\$/{f=1} f{print} /\$exp\$ then/{exit}' "$W/f/$1" | sed 's/.*\$exp\$//; s/\$exp\$.*//' | grep '|'
+      echo "-- this server:"; $P -d "$DB" -At -f "$REPO/scripts/production/fingerprint.sql" | grep '|'
+      echo "-- server: $($P -Atc 'show server_version')"; } > "$DIFF"
+  fi
+}
 refused() { # $1 file, $2 expected text, $3 label
   b0=$(state)
   if run "$1"; then ko "$3: it ran"
