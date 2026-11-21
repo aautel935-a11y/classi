@@ -1,6 +1,6 @@
 # النسخ الاحتياطي المشفّر لـ classi-staging (workflow: "Staging backup")
 
-**الحالة 20/11/2026:** جاهز ومختبر على بيانات وهمية فقط (42 فحصًا محليًا + `backup-drill` في CI). لم يُشغَّل على Staging.
+**الحالة 21/11/2026:** جاهز ومختبر على بيانات وهمية (44 فحصًا محليًا + `backup-drill` في CI). محاولتان على Staging فشلتا قبل أي نسخ (سر فارغ، ثم كلمة مرور خاطئة): القسم 9.
 
 ## ما يفعله تشغيل واحد
 
@@ -131,3 +131,18 @@ age -d classi-backup.key.age | TARGET_URL='postgresql://…قاعدة فارغة
 ```
 
 `open-backup.sh` يرفض المجلد الموجود، والمفتاح الخطأ، والملف التالف. و`restore-check.sh` يرفض الإنتاج هدفًا.
+
+## 9. عندما يفشل بـ `FAIL: cannot read the source`
+
+منذ 21/11 يطبع التشغيل تحت هذا السطر سبب الفشل بلا قيم، وسطر `hint:` يقول ما يجب إصلاحه:
+
+| السبب في السجل | الإصلاح (أنت، في `staging-db` → Environment secrets → `STAGING_DB_URL`) |
+|---|---|
+| `password authentication failed` | كلمة مرور قاعدة classi-staging في الرابط خاطئة، أو بقي `[YOUR-PASSWORD]`، أو فيها `@ # / ? : %` غير مرمّزة |
+| `Tenant or user not found` | المستخدم في الرابط يجب أن يكون `postgres.nfipmylyahhogykikuqo` (رابط Session pooler) |
+| `could not translate host` / `Network is unreachable` / `timeout` | استعملت الرابط المباشر `db.…supabase.co`. استعمل **Session pooler** (`…pooler.supabase.com:5432`) |
+| `SSL` / `certificate` | المتغير `SUPABASE_CA_CERT` خاطئ: صحّحه أو احذفه (يعود إلى `sslmode=require`) |
+
+**المحاولة الثانية 20/11 (التشغيل 44837602207، المحاولة 2):** سجل Supavisor في classi-staging عند 23:57:06 UTC:
+`password authentication failed for user "postgres"`. وصل الاتصال إلى الـ pooler الصحيح للمشروع الصحيح عبر TLS، لكن
+كلمة المرور في السر خاطئة. ولم يظهر السبب في سجل GitHub لأن رسالة الخطأ كانت تُبتلع داخل `$(...)` (أُصلح، مع اختبار).

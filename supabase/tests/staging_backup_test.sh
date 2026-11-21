@@ -134,6 +134,21 @@ $P -d "$SRC" -c "alter schema sm_hidden rename to supabase_migrations" >/dev/nul
 fresh_target "$TGT"
 env DB_URL="postgresql://postgres:Sup3rSecretPw@127.0.0.1:1/postgres" TARGET_URL="$(url $TGT)" AGE_RECIPIENTS="$W/owner.pub" EXPECT_CLUSTER="$CLUSTER" sh "$S" "$W/o6" > "$W/log" 2>&1
 grep -q "FAIL: cannot read the source" "$W/log" && ! grep -q "Sup3rSecretPw" "$W/log" && ok "an unreachable source: FAIL, and the password is not printed" || { ko "password in the output or wrong failure"; tail -3 "$W/log"; }
+grep -q -i "connection to server" "$W/log" && grep -q "^hint: the host cannot be reached" "$W/log" && ok "an unreachable source: the reason and the fix are shown (not swallowed)" || { ko "the reason of the failure is not shown"; cat "$W/log"; }
+
+# 5d. a wrong password (20/11: the staging run failed with no reason shown): the reason is shown, the password is not
+$P -c "drop role if exists ct_bk_pw" -c "create role ct_bk_pw login password 'Right-Pw-123'" -c "grant connect on database $SRC to ct_bk_pw" >/dev/null
+case "$SOCK" in
+  /*) badurl="postgresql://ct_bk_pw:Wr0ngSecretPw@/$SRC?host=$SOCK&port=$PORT" ;;
+  *)  badurl="postgresql://ct_bk_pw:Wr0ngSecretPw@$SOCK:$PORT/$SRC" ;;
+esac
+if psql "$badurl" -X -At -c 'select 1' >/dev/null 2>&1; then echo "SKIP: this server does not check passwords (trust): wrong-password case not tested"
+else
+  env DB_URL="$badurl" TARGET_URL="$(url $TGT)" AGE_RECIPIENTS="$W/owner.pub" EXPECT_CLUSTER="$CLUSTER" sh "$S" "$W/o7" > "$W/log" 2>&1
+  grep -q "FAIL: cannot read the source" "$W/log" && grep -q -i "password authentication failed" "$W/log" && grep -q "^hint: the password in the link is wrong" "$W/log" \
+    && ! grep -q -e "Wr0ngSecretPw" -e "Right-Pw-123" "$W/log" && ok "a wrong password: FAIL with the reason and the fix, no password printed" || { ko "wrong password"; cat "$W/log"; }
+fi
+$P -c "drop owned by ct_bk_pw" -c "drop role ct_bk_pw" >/dev/null 2>&1 || true
 
 # 6. a restore that fails is reported as FAIL, without data in the output
 fresh_target "$TGT"; $P -d "$TGT" -c "drop table auth.users; create table auth.users (id uuid primary key)" >/dev/null

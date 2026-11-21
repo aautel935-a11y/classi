@@ -61,7 +61,16 @@ case "$OUTABS/" in "$REPO"/*) refuse "the output folder must be outside the repo
 
 umask 077
 WORK="$(mktemp -d)"; trap 'rm -rf "$WORK"' EXIT INT TERM
-ro() { psql "$1" -X -q -At -v ON_ERROR_STOP=1 -c 'begin transaction read only' -c "$2" -c 'commit' 2>"$WORK/ro.err" || { scrub "$WORK/ro.err"; return 1; }; }
+# ro is called inside $(...): its error text goes to stderr, or it would vanish into the variable (as on 20/11)
+ro() { psql "$1" -X -q -At -v ON_ERROR_STOP=1 -c 'begin transaction read only' -c "$2" -c 'commit' 2>"$WORK/ro.err" || { scrub "$WORK/ro.err" >&2; hint "$WORK/ro.err" >&2; return 1; }; }
+# what to fix, for the usual connection errors (the reason only: no value of the link is printed)
+hint() {
+  if grep -qi 'password authentication failed' "$1"; then echo "hint: the password in the link is wrong (or still [YOUR-PASSWORD], or has @ # / ? : not URL-encoded)"
+  elif grep -qi -e 'tenant or user not found' -e 'no such tenant' "$1"; then echo "hint: the user part of the link must be postgres.<project ref> (Session pooler link)"
+  elif grep -qi -e 'could not translate host' -e 'network is unreachable' -e 'timeout expired' -e 'connection refused' "$1"; then echo "hint: the host cannot be reached: use the Session pooler link (…pooler.supabase.com, port 5432), not the direct db.… one"
+  elif grep -qi -e 'ssl' -e 'certificate' "$1"; then echo "hint: TLS failed: check the SUPABASE_CA_CERT variable, or remove it to use sslmode=require"
+  elif grep -qi 'permission denied' "$1"; then echo "hint: the role in the link cannot read this: use the postgres role"
+  fi; }
 
 # 1. the source is the expected database; the target is empty
 cluster=$(ro "$DB_URL" "select system_identifier from pg_control_system()") || fail "cannot read the source"
